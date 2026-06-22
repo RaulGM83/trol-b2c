@@ -4,13 +4,16 @@ import { NextResponse, type NextRequest } from 'next/server';
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 // Refresca la sesión de Supabase en cada request (patrón @supabase/ssr para App Router).
+// Defensivo: si algo falla (env ausente, runtime Edge), NO tumba el sitio —
+// el refresh de sesión es best-effort; los Server Components usan su propio cliente.
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  try {
+    let response = NextResponse.next({ request });
+    const supabase = createServerClient(url, key, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -21,11 +24,12 @@ export async function middleware(request: NextRequest) {
           list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
       },
-    },
-  );
-
-  await supabase.auth.getUser();
-  return response;
+    });
+    await supabase.auth.getUser();
+    return response;
+  } catch {
+    return NextResponse.next({ request });
+  }
 }
 
 export const config = {
