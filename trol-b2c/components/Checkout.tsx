@@ -6,6 +6,7 @@ import type { DiagnosticoVM } from '@/lib/diagnostico';
 import type { Producto } from '@/lib/productos';
 import { cashbackPuntos } from '@/lib/productos';
 import { createClient } from '@/lib/supabase/client';
+import { WA, BOOKING_URL } from '@/lib/whatsapp';
 import { CasoResumen } from './CasoResumen';
 import { CardBrick } from './CardBrick';
 import { Stepper } from './Stepper';
@@ -130,7 +131,7 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
           Esperando tu transferencia… se confirma sola
         </div>
         <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">
-          La transferencia SPEI tarda unos minutos. Puedes cerrar esta pantalla; te avisamos por WhatsApp al activarse y tu calculadora queda lista.
+          La transferencia SPEI tarda unos minutos. Puedes cerrar esta pantalla; te avisamos por WhatsApp al activarse y tu acceso queda listo.
         </p>
       </main>
     );
@@ -157,10 +158,47 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
             </div>
           )}
         </div>
+
+        {/* Siguiente paso según el producto (§16) */}
         <div className="mt-4 flex flex-col gap-2">
-          <Link href="/calculadora" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
-            Abrir {producto.nombre}
-          </Link>
+          {producto.tipo === 'herramienta' && (
+            <Link href="/calculadora" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
+              Abrir {producto.nombre}
+            </Link>
+          )}
+
+          {producto.tipo === 'asesoria' && producto.incluyeSesion && (
+            <>
+              <p className="mb-1 text-center text-sm text-muted">
+                Agenda tu videollamada 1:1 con un asesor:
+              </p>
+              {BOOKING_URL && (
+                <a
+                  href={BOOKING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink"
+                >
+                  Elegir horario en el calendario
+                </a>
+              )}
+              <a
+                href={WA.agendarSesion()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-xl bg-[#25D366] px-4 py-3 text-center text-sm font-bold text-white"
+              >
+                Agendar por WhatsApp
+              </a>
+            </>
+          )}
+
+          {producto.tipo === 'asesoria' && !producto.incluyeSesion && (
+            <div className="rounded-xl bg-cream px-4 py-3 text-center text-sm text-ink/80">
+              Estamos preparando tu <b>diagnóstico avanzado</b>. Te lo enviamos por WhatsApp en cuanto esté listo.
+            </div>
+          )}
+
           <Link href="/diagnostico" className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
             Volver a mi diagnóstico
           </Link>

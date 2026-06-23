@@ -155,8 +155,21 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         </table>
       </section>
 
+      {/* Upsell a asesorías de pago (§6) */}
+      <section className="mt-6 rounded-2xl bg-ink p-5 text-white">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-lime">Lleva tu plan más lejos</div>
+        <div className="mt-1 text-lg font-extrabold">¿Quieres tu plan pensional completo?</div>
+        <p className="mt-1 text-sm text-white/70">
+          Un asesor certificado arma tu estrategia paso a paso: gestorías, Modalidad 40, Infonavit y ahorro.
+          Con opción de videollamada 1:1.
+        </p>
+        <a href="/asesoria" className="mt-3 block rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
+          Ver asesorías
+        </a>
+      </section>
+
       {/* CTAs a WhatsApp: dudas + agendar asesoría */}
-      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+      <section className="mt-4 rounded-2xl border border-line bg-white p-5">
         <div className="text-sm font-bold text-ink">¿Dudas o quieres que un asesor lo vea contigo?</div>
         <p className="mt-1 text-sm text-muted">Escríbenos por WhatsApp; te ayudamos a elegir la mejor estrategia para tu pensión.</p>
         <div className="mt-3 flex flex-col gap-2">

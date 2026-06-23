@@ -10,4 +10,11 @@ export const WA = {
   agendar: () => waLink('Hola, quiero agendar una asesoría de pensión con El Trol.'),
   hoja: () =>
     waLink('Hola, no pudieron traer mi historial del IMSS. Les envío mi Reporte de Semanas Cotizadas para mi diagnóstico de pensión.'),
+  // Tras pagar la sesión 1:1: el cliente nos pide el horario por WhatsApp.
+  agendarSesion: () =>
+    waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
 };
+
+// Calendario externo (Calendly/booking) para auto-agendar la sesión pagada.
+// Configurable en .env.local; si no está, solo mostramos la opción de WhatsApp.
+export const BOOKING_URL = process.env.NEXT_PUBLIC_BOOKING_URL || '';

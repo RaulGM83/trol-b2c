@@ -4,11 +4,15 @@
 // Economía de puntos: ancla 1 punto = 1 peso de valor de desbloqueo.
 // ============================================================================
 
+export type TipoProducto = 'herramienta' | 'asesoria';
+
 export interface Producto {
   code: string;
   nombre: string;
   precioMXN: number;
   etapa: number; // etapa del modelo de progreso del cliente
+  tipo: TipoProducto;
+  incluyeSesion?: boolean; // asesoría con videollamada 1:1
   descripcion: string;
   entrega: string;
 }
@@ -19,6 +23,7 @@ export const PRODUCTOS: Record<string, Producto> = {
     nombre: 'Calculadora pro',
     precioMXN: 100,
     etapa: 4,
+    tipo: 'herramienta',
     descripcion:
       'Mueve las palancas (edad, semanas, Modalidad 40, UMAs) y ve tu pensión exacta en cada escenario. Incluye actualizar tu información con el IMSS si tiene más de un mes.',
     entrega: 'Acceso inmediato; si tus datos tienen más de un mes, los actualizamos al momento.',
@@ -28,6 +33,7 @@ export const PRODUCTOS: Record<string, Producto> = {
     nombre: 'Diagnóstico avanzado',
     precioMXN: 500,
     etapa: 5,
+    tipo: 'asesoria',
     descripcion: 'Tu plan pensional completo: estrategia, costos, gestorías, Infonavit y ahorro, explicado paso a paso.',
     entrega: 'Documento personalizado en minutos.',
   },
@@ -36,10 +42,15 @@ export const PRODUCTOS: Record<string, Producto> = {
     nombre: 'Diagnóstico avanzado + sesión',
     precioMXN: 800,
     etapa: 5,
+    tipo: 'asesoria',
+    incluyeSesion: true,
     descripcion: 'El diagnóstico avanzado más una videollamada 1:1 con un asesor para resolver tu caso.',
     entrega: 'Documento + sesión agendada.',
   },
 };
+
+/** Productos de asesoría, en orden de oferta. */
+export const ASESORIAS: Producto[] = [PRODUCTOS.DIAGNOSTICO_AVANZADO, PRODUCTOS.DIAGNOSTICO_AVANZADO_SESION];
 
 export function getProducto(code: string | undefined): Producto {
   return (code && PRODUCTOS[code]) || PRODUCTOS.CALCULADORA_ADDON;
