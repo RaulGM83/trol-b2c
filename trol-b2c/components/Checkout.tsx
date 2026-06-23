@@ -7,6 +7,7 @@ import type { Producto } from '@/lib/productos';
 import { cashbackPuntos } from '@/lib/productos';
 import { createClient } from '@/lib/supabase/client';
 import { CasoResumen } from './CasoResumen';
+import { CardBrick } from './CardBrick';
 import { Stepper } from './Stepper';
 
 type Via = 'pago' | 'puntos';
@@ -222,7 +223,7 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
             <div className="mt-3 rounded-xl bg-cream p-3 text-sm text-ink/80">
               {metodo === 'spei'
                 ? 'Te damos una CLABE para transferir desde tu banco. Confirmamos automáticamente al recibir el pago.'
-                : 'Pago con tarjeta de débito o crédito vía checkout seguro.'}
+                : 'Paga con tarjeta de débito o crédito aquí mismo, de forma segura.'}
             </div>
           </section>
 
@@ -258,19 +259,28 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
         )}
       </section>
 
-      <button
-        type="button"
-        onClick={confirmar}
-        disabled={cargando}
-        className="w-full rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
-      >
-        {cargando ? 'Procesando…' : esPuntos ? `Usar ${producto.precioMXN} pts` : `Pagar $${producto.precioMXN}`}
-      </button>
+      {!esPuntos && metodo === 'tarjeta' ? (
+        // Tarjeta in-page: el Brick de MP trae su propio botón de pago.
+        <CardBrick
+          amount={producto.precioMXN}
+          productCode={producto.code}
+          onApproved={() => setPagado(true)}
+          onError={(e) => setError(e)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={cargando}
+          className="w-full rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+        >
+          {cargando ? 'Procesando…' : esPuntos ? `Usar ${producto.precioMXN} pts` : `Pagar $${producto.precioMXN}`}
+        </button>
+      )}
       {error && <p className="mt-2 text-center text-sm text-red-600">{error}</p>}
 
       <p className="mt-4 text-center text-[11px] leading-relaxed text-muted">
         Pago seguro dentro de El Trol. No pedimos anticipos en efectivo ni montos garantizados.
-        <br />Demo: el botón simula el pago (sin cargo real).
       </p>
     </main>
   );

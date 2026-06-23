@@ -5,6 +5,7 @@ import { computeLey73, computeLey97 } from '@trol/pension-core';
 import { UMA } from '@trol/pension-core/tablas';
 import type { SemillaV2 } from '@trol/pension-core/semilla';
 import type { EntradaCalculo, Palancas, ResultadoLey73, ResultadoLey97 } from '@trol/pension-core/types';
+import { WA } from '@/lib/whatsapp';
 import { Stepper } from './Stepper';
 
 const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
@@ -152,6 +153,22 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
             ))}
           </tbody>
         </table>
+      </section>
+
+      {/* CTAs a WhatsApp: dudas + agendar asesoría */}
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <div className="text-sm font-bold text-ink">¿Dudas o quieres que un asesor lo vea contigo?</div>
+        <p className="mt-1 text-sm text-muted">Escríbenos por WhatsApp; te ayudamos a elegir la mejor estrategia para tu pensión.</p>
+        <div className="mt-3 flex flex-col gap-2">
+          <a href={WA.agendar()} target="_blank" rel="noopener noreferrer"
+            className="rounded-xl bg-[#25D366] px-4 py-3 text-center text-sm font-bold text-white">
+            Agendar mi asesoría
+          </a>
+          <a href={WA.dudas()} target="_blank" rel="noopener noreferrer"
+            className="rounded-xl border border-ink px-4 py-3 text-center text-sm font-bold text-ink">
+            Tengo una duda
+          </a>
+        </div>
       </section>
 
       <p className="mt-4 text-center text-[11px] leading-relaxed text-muted">
