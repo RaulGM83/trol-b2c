@@ -195,7 +195,7 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
 
           {producto.tipo === 'asesoria' && !producto.incluyeSesion && (
             <div className="rounded-xl bg-cream px-4 py-3 text-center text-sm text-ink/80">
-              Estamos preparando tu <b>diagnóstico avanzado</b>. Te lo enviamos por WhatsApp en cuanto esté listo.
+              Estamos preparando tu <b>diagnóstico avanzado</b>. Te lo enviamos por WhatsApp en un máximo de 2 días hábiles.
             </div>
           )}
 

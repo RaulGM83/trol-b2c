@@ -171,7 +171,7 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
       costoProyecto: null,
       efectivoCliente: null,
       seAutofinancia: false,
-      nota: 'Aportar al tope hasta el retiro y/o un PPR sube tu pensión proyectada.',
+      nota: 'Asegúrate de estar en una de las mejores AFOREs y complementa tu pensión con ahorro (PPR).',
     },
   };
 }

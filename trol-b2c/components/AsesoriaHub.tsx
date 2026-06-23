@@ -19,7 +19,7 @@ export function AsesoriaHub({ items, saldoPuntos }: { items: Item[]; saldoPuntos
 
       <h1 className="mb-1 text-2xl font-extrabold tracking-tight">Lleva tu plan más lejos</h1>
       <p className="mb-5 text-sm text-muted">
-        Pasa de la estimación a un plan accionable, con un asesor certificado de tu lado.
+        Pasa de la estimación a un plan accionable, con un experto en pensiones de tu lado.
       </p>
 
       <div className="flex flex-col gap-4">
@@ -76,7 +76,7 @@ export function AsesoriaHub({ items, saldoPuntos }: { items: Item[]; saldoPuntos
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-muted">
         El trámite ante el IMSS es gratis. Cobramos nuestras asesorías y herramientas; nunca pedimos anticipos en efectivo
-        ni garantizamos montos. Temas de AFORE y PPR los atiende un asesor certificado y autorizado.
+        ni garantizamos montos. Temas de AFORE y PPR los atiende un experto en pensiones autorizado.
       </p>
     </main>
   );

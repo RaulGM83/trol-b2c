@@ -35,7 +35,7 @@ export const PRODUCTOS: Record<string, Producto> = {
     etapa: 5,
     tipo: 'asesoria',
     descripcion: 'Tu plan pensional completo: estrategia, costos, gestorías, Infonavit y ahorro, explicado paso a paso.',
-    entrega: 'Documento personalizado en minutos.',
+    entrega: 'Documento personalizado en 2 días hábiles.',
   },
   DIAGNOSTICO_AVANZADO_SESION: {
     code: 'DIAGNOSTICO_AVANZADO_SESION',
@@ -44,8 +44,8 @@ export const PRODUCTOS: Record<string, Producto> = {
     etapa: 5,
     tipo: 'asesoria',
     incluyeSesion: true,
-    descripcion: 'El diagnóstico avanzado más una videollamada 1:1 con un asesor para resolver tu caso.',
-    entrega: 'Documento + sesión agendada.',
+    descripcion: 'El diagnóstico avanzado más una videollamada 1:1 con un experto en pensiones para resolver tu caso.',
+    entrega: 'Documento en 2 días hábiles + sesión agendada.',
   },
 };
 

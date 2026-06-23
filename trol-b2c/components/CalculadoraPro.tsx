@@ -16,17 +16,37 @@ const HOY = new Date();
 export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
   const { perfil, saldos, salario_60m } = semilla;
   const esLey73 = perfil.ley === 'Ley73';
+  const esLey97 = !esLey73;
   const edadActual = (HOY.getTime() - new Date(perfil.fecha_nacimiento).getTime()) / 86_400_000 / 365.25;
-  const minEdad = Math.max(60, Math.round(edadActual * 2) / 2);
   const recuperables = Math.max(0, perfil.semanas.descontadas - perfil.semanas.recuperadas);
 
-  const [edadRetiro, setEdadRetiro] = useState(65);
+  // Ley 73 permite medios años (el factor por edad da saltos) hasta los 65.
+  // Ley 97 va en años completos: piso = max(edad actual, 60) y +5 años más.
+  const stepEdad = esLey73 ? 0.5 : 1;
+  const pisoLey97 = Math.max(60, Math.floor(edadActual));
+  const minEdad = esLey73 ? Math.min(65, Math.max(60, Math.round(edadActual * 2) / 2)) : pisoLey97;
+  const maxEdad = esLey73 ? 65 : pisoLey97 + 5;
+
+  const [edadRetiro, setEdadRetiro] = useState(esLey73 ? 65 : pisoLey97);
   const [pct, setPct] = useState<Palancas['pctTiempoCotizando']>(perfil.status_empleo === 'empleado' ? 1 : 0);
   const [umas, setUmas] = useState(25);
   const [recuperar, setRecuperar] = useState(false);
   const [mod40retro, setMod40retro] = useState(!!perfil.aplica_mod40);
 
+  // Ley 97: corregir saldos con el dato real del cliente + incluir o no Infonavit (default: no).
+  const [rcv97In, setRcv97In] = useState('');
+  const [infonavitIn, setInfonavitIn] = useState('');
+  const [incluirInfonavit, setIncluirInfonavit] = useState(false);
+
   const salarioDiario = umas * UMA_2026;
+
+  const overrides = useMemo(() => {
+    if (!esLey97) return undefined;
+    const o: { rcv97?: number; infonavit?: number } = {};
+    if (rcv97In.trim() !== '' && Number.isFinite(+rcv97In)) o.rcv97 = +rcv97In;
+    if (infonavitIn.trim() !== '' && Number.isFinite(+infonavitIn)) o.infonavit = +infonavitIn;
+    return Object.keys(o).length ? o : undefined;
+  }, [esLey97, rcv97In, infonavitIn]);
 
   const mk = (edad: number): EntradaCalculo => ({
     perfil, saldos, salario_60m, hoy: HOY,
@@ -34,29 +54,31 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
       edadRetiro: edad, pctTiempoCotizando: pct, salarioMod40: salarioDiario,
       recuperarSemanasDescontadas: recuperar, recuperarSemanasMod40Retro: mod40retro,
       salarioCotizacionRetro: 'MAXIMO', usaCreditoInfonavit: false, ahorroVoluntarioMensual: 0,
+      overrides,
     },
   });
+  const pension97 = (r: ResultadoLey97) => (incluirInfonavit ? r.pensionAforeInfonavit : r.pensionAfore);
   const pensionDe = (edad: number): number | null => {
     if (esLey73) return computeLey73(mk(edad)).pensionMensual;
-    return computeLey97(mk(edad)).pensionAfore;
+    return pension97(computeLey97(mk(edad)));
   };
 
   const edades = useMemo(() => {
     const out: number[] = [];
-    for (let e = minEdad; e <= 65 + 1e-9; e += 0.5) out.push(Math.round(e * 10) / 10);
+    for (let e = minEdad; e <= maxEdad + 1e-9; e += stepEdad) out.push(Math.round(e * 10) / 10);
     return out;
-  }, [minEdad]);
+  }, [minEdad, maxEdad, stepEdad]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const res = useMemo(() => (esLey73 ? computeLey73(mk(edadRetiro)) : computeLey97(mk(edadRetiro))), [edadRetiro, pct, umas, recuperar, mod40retro]);
+  const res = useMemo(() => (esLey73 ? computeLey73(mk(edadRetiro)) : computeLey97(mk(edadRetiro))), [edadRetiro, pct, umas, recuperar, mod40retro, overrides, incluirInfonavit]);
   const r73 = esLey73 ? (res as ResultadoLey73) : null;
   const r97 = !esLey73 ? (res as ResultadoLey97) : null;
-  const pension = r73 ? r73.pensionMensual : r97!.pensionAfore;
+  const pension = r73 ? r73.pensionMensual : pension97(r97!);
   const costo = r73 ? r73.costoTotal : 0;
   const d = r73?.detalle ?? null;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const barrido = useMemo(() => edades.map((e) => ({ edad: e, pension: pensionDe(e) })), [edades, pct, umas, recuperar, mod40retro]);
+  const barrido = useMemo(() => edades.map((e) => ({ edad: e, pension: pensionDe(e) })), [edades, pct, umas, recuperar, mod40retro, overrides, incluirInfonavit]);
 
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
@@ -73,12 +95,20 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
 
       {/* Resultado */}
       <section className="rounded-2xl bg-ink p-5 text-white">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-lime">Pensión mensual</div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-lime">
+          {esLey97 ? (incluirInfonavit ? 'Pensión mensual (AFORE + Infonavit)' : 'Pensión mensual (AFORE)') : 'Pensión mensual'}
+        </div>
         <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(pension)}</div>
         <div className="mt-1 text-sm text-white/70">al retirarte a los {edadRetiro} años</div>
         {esLey73 && costo > 0 && (
           <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
             Costo de la estrategia: <b className="text-white">{money(costo)}</b>
+          </div>
+        )}
+        {esLey97 && r97 && !r97.negativa && edadRetiro >= 65 && (
+          <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
+            A partir de los 65 años podrías sumar la <b className="text-white">Pensión para el Bienestar</b> de las
+            Personas Adultas Mayores (complemento del Bienestar), adicional a esta pensión.
           </div>
         )}
       </section>
@@ -90,9 +120,11 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
             <span className="font-semibold">Edad de retiro</span>
             <span className="font-bold text-ink">{edadRetiro} años</span>
           </div>
-          <input type="range" min={minEdad} max={65} step={0.5} value={edadRetiro}
+          <input type="range" min={minEdad} max={maxEdad} step={stepEdad} value={edadRetiro}
             onChange={(e) => setEdadRetiro(+e.target.value)} className="w-full accent-[#65a30d]" />
-          <div className="mt-1 text-[11px] text-muted">Los medios años importan: el factor por edad da saltos.</div>
+          <div className="mt-1 text-[11px] text-muted">
+            {esLey73 ? 'Los medios años importan: el factor por edad da saltos.' : `Desde los ${minEdad} hasta los ${maxEdad} años, en años completos.`}
+          </div>
         </div>
 
         <div>
@@ -110,7 +142,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         {(pct > 0 || mod40retro) && (
           <div>
             <div className="mb-1 flex justify-between text-sm">
-              <span className="font-semibold">Salario de cotización (Mod 40)</span>
+              <span className="font-semibold">{esLey73 ? 'Salario de cotización (Mod 40)' : 'Salario de cotización futuro'}</span>
               <span className="font-bold text-ink">{umas} UMA · {money(salarioDiario)}/día</span>
             </div>
             <input type="range" min={1} max={25} step={1} value={umas}
@@ -123,7 +155,53 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         {perfil.aplica_mod40 && <Toggle label="Modalidad 40 retroactiva" checked={mod40retro} onChange={setMod40retro} />}
       </section>
 
-      {/* Cómo se calcula (factores) */}
+      {/* Ley 97: AFORE + Infonavit, hoy y proyectado (con dato real opcional) */}
+      {esLey97 && r97 && (
+        <section className="mt-5 rounded-2xl border border-line bg-white p-5">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-wide text-muted">Tus saldos AFORE e Infonavit</div>
+
+          <div className="grid grid-cols-3 items-center gap-2 text-sm">
+            <div className="text-ink/70">Subcuenta</div>
+            <div className="text-center text-[11px] font-bold uppercase tracking-wide text-muted">Hoy</div>
+            <div className="text-center text-[11px] font-bold uppercase tracking-wide text-muted">Al retiro</div>
+
+            <div className="font-semibold">AFORE (RCV)</div>
+            <input
+              type="number" inputMode="decimal" value={rcv97In} onChange={(e) => setRcv97In(e.target.value)}
+              placeholder={Math.round(saldos.rcv97).toString()}
+              className="w-full rounded-lg border border-line px-2 py-1.5 text-right text-sm"
+            />
+            <div className="text-right font-bold">{money(r97.detalle.saldoAforeProyectado)}</div>
+
+            <div className="font-semibold">Infonavit</div>
+            <input
+              type="number" inputMode="decimal" value={infonavitIn} onChange={(e) => setInfonavitIn(e.target.value)}
+              placeholder={Math.round(saldos.infonavit).toString()}
+              className="w-full rounded-lg border border-line px-2 py-1.5 text-right text-sm"
+            />
+            <div className="text-right font-bold">{money(r97.detalle.saldoInfonavitProyectado)}</div>
+          </div>
+
+          <p className="mt-2 text-[11px] text-muted">
+            El saldo hoy es nuestra estimación; si tienes el dato real de tu estado de cuenta, escríbelo y recalculamos.
+            El saldo al retiro es el proyectado con el que se calcula tu pensión.
+          </p>
+
+          <div className="mt-4 border-t border-line pt-4">
+            <Toggle
+              label="Incluir saldo Infonavit en la pensión"
+              checked={incluirInfonavit}
+              onChange={setIncluirInfonavit}
+            />
+            <p className="mt-1 text-[11px] text-muted">
+              Por defecto no se incluye. El saldo de Infonavit puede usarse para tu vivienda; inclúyelo solo si lo
+              destinarás a tu pensión.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Cómo se calcula (factores) — Ley 73 */}
       {d && !r73!.negativa && (
         <section className="mt-5 rounded-2xl border border-line bg-white p-5">
           <div className="mb-3 text-[11px] font-bold uppercase tracking-wide text-muted">Cómo se calcula tu pensión</div>
@@ -140,7 +218,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         </section>
       )}
 
-      {/* Barrido por edad (medios años) */}
+      {/* Barrido por edad */}
       <section className="mt-5 overflow-hidden rounded-xl border border-line">
         <div className="bg-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-muted">Pensión por edad de retiro</div>
         <table className="w-full text-sm">
@@ -160,7 +238,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         <div className="text-[11px] font-bold uppercase tracking-wide text-lime">Lleva tu plan más lejos</div>
         <div className="mt-1 text-lg font-extrabold">¿Quieres tu plan pensional completo?</div>
         <p className="mt-1 text-sm text-white/70">
-          Un asesor certificado arma tu estrategia paso a paso: gestorías, Modalidad 40, Infonavit y ahorro.
+          Un experto en pensiones arma tu estrategia paso a paso: gestorías, Modalidad 40, Infonavit y ahorro.
           Con opción de videollamada 1:1.
         </p>
         <a href="/asesoria" className="mt-3 block rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
