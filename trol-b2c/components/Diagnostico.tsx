@@ -114,6 +114,16 @@ export function Diagnostico({ vm, demo = false }: { vm: DiagnosticoVM; demo?: bo
         Quiero mi plan completo con un asesor
       </Link>
 
+      {/* Invitar y ganar puntos */}
+      {!demo && (
+        <Link
+          href="/referidos"
+          className="mt-2 block rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink"
+        >
+          Invita a un amigo y gana 100 pts
+        </Link>
+      )}
+
       <p className="mt-6 text-center text-[11px] leading-relaxed text-muted">
         El trámite ante el IMSS es gratis. El Trol no pide anticipos en efectivo ni garantiza montos.
         <br />Cálculo con el motor oficial de Trol (Ley 73/97 · Modalidad 40).

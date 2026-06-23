@@ -104,7 +104,14 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
                 <span className="font-bold">+{g.puntos}</span>
               </li>
             ))}
+            <li className="flex justify-between gap-3">
+              <span className="text-ink/80">Invita a un amigo (llega a diagnóstico)</span>
+              <span className="font-bold">+100</span>
+            </li>
           </ul>
+          <Link href="/referidos" className="mt-3 block rounded-lg bg-ink px-3 py-2 text-center text-xs font-bold text-white">
+            Invita y gana puntos
+          </Link>
         </div>
         </>
         )}

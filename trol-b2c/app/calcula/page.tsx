@@ -13,5 +13,5 @@ export default async function CalculaPublica({ searchParams }: { searchParams: {
   } catch {
     // Atribución best-effort.
   }
-  return <CalculadoraEspera publica />;
+  return <CalculadoraEspera publica campania={campania} />;
 }

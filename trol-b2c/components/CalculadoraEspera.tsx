@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { estimarDireccional, type InputManual } from '@/lib/estimacion';
+import { LeadForm } from './LeadForm';
 
 const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
 
@@ -17,7 +18,7 @@ const IMSS_URL = 'https://serviciosdigitales.imss.gob.mx/semanascotizadas-web/us
 // Pantalla de espera útil: mientras llega el SISEC, el usuario estima su
 // pensión a mano con el mismo motor (Plan Maestro §16, estado sin-CURP).
 // `publica`: versión para leads fríos (link de Tako) sin sesión ni CURP.
-export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
+export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publica?: boolean; campania?: string }) {
   const [inp, setInp] = useState<InputManual>({
     anioNacimiento: 1965,
     anioPrimeraCotizacion: 1990,
@@ -25,6 +26,9 @@ export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
     semanas: 1200,
     salarioMensual: 15000,
     sigueCotizando: true,
+    saldoAfore: 0,
+    saldoInfonavit: 0,
+    incluirInfonavit: false,
   });
   const set = <K extends keyof InputManual>(k: K, v: InputManual[K]) => setInp((p) => ({ ...p, [k]: v }));
 
@@ -104,14 +108,59 @@ export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
         Sigo cotizando hoy
       </label>
 
-      {/* Conservación de derechos (Art. 150) */}
-      <div className={`mt-4 rounded-xl border p-4 ${est.conservacion.vigente ? 'border-lime/50 bg-lime/10' : 'border-amber-300 bg-amber-50'}`}>
-        <div className="flex items-center gap-2">
-          <span className={`inline-block h-2.5 w-2.5 rounded-full ${est.conservacion.vigente ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
-          <span className="text-sm font-bold text-ink">{est.conservacion.titulo}</span>
+      {/* Ley 97: saldos del estado de cuenta para poder estimar */}
+      {est.ley === 'Ley97' && (
+        <div className="mt-4 rounded-xl border border-line bg-white p-4">
+          <div className="text-sm font-bold text-ink">Eres Ley 97 (cuenta AFORE)</div>
+          <p className="mt-1 text-xs text-muted">
+            Tu pensión depende de tus saldos. Escríbelos (los ves en tu estado de cuenta de la AFORE) para estimar.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Field label="Saldo AFORE (RCV)">
+              <div className="flex items-center rounded-lg border border-line focus-within:border-ink">
+                <span className="px-2 text-sm text-muted">$</span>
+                <input
+                  type="number" step={10000} value={inp.saldoAfore ?? 0}
+                  onChange={(e) => set('saldoAfore', +e.target.value)}
+                  className="w-full rounded-r-lg py-2 pr-2 text-sm outline-none"
+                />
+              </div>
+            </Field>
+            <Field label="Saldo Infonavit">
+              <div className="flex items-center rounded-lg border border-line focus-within:border-ink">
+                <span className="px-2 text-sm text-muted">$</span>
+                <input
+                  type="number" step={10000} value={inp.saldoInfonavit ?? 0}
+                  onChange={(e) => set('saldoInfonavit', +e.target.value)}
+                  className="w-full rounded-r-lg py-2 pr-2 text-sm outline-none"
+                />
+              </div>
+            </Field>
+          </div>
+          <label className="mt-3 flex cursor-pointer items-center justify-between text-sm">
+            <span className="font-semibold">Incluir saldo Infonavit en la pensión</span>
+            <input
+              type="checkbox" checked={!!inp.incluirInfonavit}
+              onChange={(e) => set('incluirInfonavit', e.target.checked)}
+              className="h-4 w-4 accent-lime"
+            />
+          </label>
+          <p className="mt-1 text-[11px] text-muted">
+            Por defecto no se incluye: el Infonavit puede destinarse a vivienda.
+          </p>
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-ink/70">{est.conservacion.detalle}</p>
-      </div>
+      )}
+
+      {/* Conservación de derechos (Art. 150) — solo aplica a Ley 73 */}
+      {est.ley === 'Ley73' && (
+        <div className={`mt-4 rounded-xl border p-4 ${est.conservacion.vigente ? 'border-lime/50 bg-lime/10' : 'border-amber-300 bg-amber-50'}`}>
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2.5 w-2.5 rounded-full ${est.conservacion.vigente ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
+            <span className="text-sm font-bold text-ink">{est.conservacion.titulo}</span>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-ink/70">{est.conservacion.detalle}</p>
+        </div>
+      )}
 
       {/* Resultado */}
       <section className="mt-6">
@@ -120,20 +169,24 @@ export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
             <div className="rounded-2xl bg-ink p-5 text-white">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-lime">Tu pensión estimada</span>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/80">aprox · Ley 73</span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/80">
+                  aprox · {est.ley === 'Ley73' ? 'Ley 73' : 'Ley 97'}
+                </span>
               </div>
               <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(mejor?.pension ?? null)}<span className="text-base font-bold text-white/50"> /mes</span></div>
               <div className="mt-1 text-sm text-white/70">si te retiras a los {mejor?.edad ?? 65} años</div>
             </div>
 
-            <div className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${est.cumpleSemanas ? 'bg-cream text-ink/80' : 'bg-amber-50 text-amber-800'}`}>
-              <span className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${est.cumpleSemanas ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
-              <span>
-                {est.cumpleSemanas
-                  ? `Ya cumples el mínimo de ${est.semanasMinimas} semanas para pensionarte por Ley 73.`
-                  : `Aún no llegas a las ${est.semanasMinimas} semanas que pide la Ley 73 (llevas ${inp.semanas.toLocaleString('es-MX')}). Te decimos cómo completarlas.`}
-              </span>
-            </div>
+            {est.ley === 'Ley73' && (
+              <div className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${est.cumpleSemanas ? 'bg-cream text-ink/80' : 'bg-amber-50 text-amber-800'}`}>
+                <span className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${est.cumpleSemanas ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
+                <span>
+                  {est.cumpleSemanas
+                    ? `Ya cumples el mínimo de ${est.semanasMinimas} semanas para pensionarte por Ley 73.`
+                    : `Aún no llegas a las ${est.semanasMinimas} semanas que pide la Ley 73 (llevas ${inp.semanas.toLocaleString('es-MX')}). Te decimos cómo completarlas.`}
+                </span>
+              </div>
+            )}
 
             <div className="mt-4 overflow-hidden rounded-xl border border-line">
               <div className="bg-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-muted">Según tu edad de retiro</div>
@@ -150,9 +203,8 @@ export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-line bg-cream p-5">
-            <div className="text-sm font-bold text-ink">Eres Ley 97 (cuenta AFORE)</div>
-            <p className="mt-1 text-sm text-ink/70">{est.nota}</p>
+          <div className="rounded-2xl border border-dashed border-line bg-cream p-5">
+            <p className="text-sm text-ink/70">{est.nota}</p>
           </div>
         )}
 
@@ -162,10 +214,17 @@ export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
         </p>
       </section>
 
-      {/* Camino al cálculo exacto: enviar la hoja de semanas cotizadas */}
-      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+      {/* CTA primario (leads nuevos): crear cuenta + cálculo exacto */}
+      {publica && (
+        <section className="mt-6">
+          <LeadForm campania={campania} origen="calcula" />
+        </section>
+      )}
+
+      {/* Camino secundario: solo si hubo error de datos o falta el historial */}
+      <section className="mt-4 rounded-2xl border border-line bg-white p-5">
         <div className="text-sm font-bold text-ink">
-          {publica ? '¿Quieres tu cálculo exacto?' : '¿Tarda o no encontramos tu historial?'}
+          {publica ? '¿Tuviste un error o no encontramos tu historial?' : '¿Tarda o no encontramos tu historial?'}
         </div>
         <p className="mt-1 text-sm text-muted">
           Mándanos tu <b className="text-ink">Reporte de Semanas Cotizadas</b> del IMSS y armamos tu cálculo oficial nosotros.

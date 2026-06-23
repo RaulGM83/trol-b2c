@@ -87,6 +87,52 @@ where l.evento = 'apertura'
 - El link **no** autentica solo: siempre se pide el código SMS (OTP). Si alguien reenvía el link, no puede entrar sin el código que llega al celular real.
 - La tabla `links_campania` y la vista solo las lee el server (service role); no se exponen al cliente.
 
+## CTA de captura (leads nuevos) → HubSpot vía n8n
+
+En `/calcula`, el CTA principal es un formulario que pide **CURP, correo y celular** (con consentimiento de T&C/Aviso). Al enviarse, la app llama a `POST /api/lead`, que reenvía a tu webhook de n8n para **crear el contacto en HubSpot y arrancar Cálculos** (reusa tu integración actual; la app no toca HubSpot directo).
+
+- La hoja de Semanas Cotizadas dejó de ser el CTA principal: ahora es el **camino secundario**, solo para quienes tuvieron error de datos o falta su historial.
+- **Falta:** dar de alta el webhook en n8n y ponerlo en Vercel como `LEAD_WEBHOOK_URL`.
+
+Reusamos el webhook que ya usa Tako: **"Nuevo cliente Booster Asesoria"**
+`https://eltrolfinanciero.app.n8n.cloud/webhook/ea70bf36-46dc-4e04-96bc-3f969a427f0d` (POST).
+
+`/api/lead` envía el payload con el **mismo contrato** que ese webhook espera:
+```json
+{ "curp": "ABCD800101HDFXYZ09", "correo": "x@y.com", "mobil": "5512345678",
+  "nombre": "", "apellido": "", "entry_channel": "calculadora_web",
+  "conversationId": "web-tako", "status": "nuevo", "referrer": "<cliente_id>", "origen": "calcula", "ts": "…Z" }
+```
+
+**Lo único que falta en n8n (abrirle su camino):** en el nodo **Switch** del workflow, agrega una rama para `entry_channel = "calculadora_web"` (junto a `asesoria_wa` / `infonavit_wa`) que mande a un "Create or update a contact" con `proceso_actual = "Calculadora B2C"` (o el proceso que quieras) y, si aplica, dispare `Calculos`. La validación de formato (CURP 18, correo, tel 10) ya se hace en la app.
+
+Notas:
+- El valor de `entry_channel` es configurable con la env `LEAD_ENTRY_CHANNEL` (default `calculadora_web`).
+- `referrer` (cliente_id del que invitó) viaja por si quieres guardarlo como propiedad en HubSpot.
+- No capturamos nombre/apellido (solo CURP, correo, tel, como pediste); el contacto se crea igual.
+
+## Referidos ("trae referencias")
+
+Cada cliente tiene su link personal: `https://app.trol.mx/r/<su cliente_id>`.
+
+- El amigo entra por ese link → cae en `/calcula` (con cookie de atribución) → se registra.
+- **Recompensa (configurable en el RPC `registrar_referido`):** cuando el referido **llega a su diagnóstico** (tiene semilla), aunque no pague:
+  - quien refiere gana **+100 pts**,
+  - el referido gana **+50 pts** de bienvenida.
+- Se otorga al entrar el referido autenticado a `/diagnostico` (componente `ReferralClaim` → RPC idempotente). Un solo referidor por referido; sin auto-referido.
+- Página del cliente para compartir + ver sus stats: **`/referidos`** (link personal, botón de WhatsApp, invitados/confirmados/puntos). Accesos desde el diagnóstico y la pantalla de mejor jugada.
+- `/api/lead` también pasa `referrer` (cookie) al webhook, por si quieres atribuir el referido en HubSpot desde la creación del contacto.
+
+Ajustar montos: editar `c_referrer_pts` / `c_referido_pts` en el RPC `registrar_referido`.
+
+## Variables de entorno (Vercel)
+
+| Var | Valor / para qué |
+|---|---|
+| `LEAD_WEBHOOK_URL` | `https://eltrolfinanciero.app.n8n.cloud/webhook/ea70bf36-46dc-4e04-96bc-3f969a427f0d` (webhook "Nuevo cliente Booster Asesoria"). |
+| `LEAD_ENTRY_CHANNEL` | Opcional. Rama del Switch para la herramienta web. Default `calculadora_web`. |
+| `NEXT_PUBLIC_BOOKING_URL` | Link de HubSpot Meetings para agendar la +sesión. |
+
 ## Deploy
 
-Las rutas (`/e/[token]`, `/calcula`) entran con el próximo push del repo `trol-b2c`. La tabla y la vista ya están en producción.
+Las rutas (`/e/[token]`, `/calcula`), el CTA de captura y los ajustes de la calculadora sin CURP entran con el próximo push del repo `trol-b2c`. La tabla y la vista ya están en producción.

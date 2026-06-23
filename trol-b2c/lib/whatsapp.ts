@@ -18,3 +18,11 @@ export const WA = {
 // Calendario externo (Calendly/booking) para auto-agendar la sesión pagada.
 // Configurable en .env.local; si no está, solo mostramos la opción de WhatsApp.
 export const BOOKING_URL = process.env.NEXT_PUBLIC_BOOKING_URL || '';
+
+// Mensaje para que el cliente comparta su link de referido por WhatsApp.
+export function waCompartirReferido(url: string): string {
+  const msg =
+    `Te comparto El Trol para calcular tu pensión del IMSS 🧮 Yo ya vi la mía. ` +
+    `Entra con mi invitación y los dos ganamos puntos: ${url}`;
+  return `https://wa.me/?text=${encodeURIComponent(msg)}`;
+}

@@ -6,7 +6,7 @@
 // el cálculo oficial usará el SISEC real.
 // ============================================================================
 
-import { computeLey73 } from '@trol/pension-core';
+import { computeLey73, computeLey97 } from '@trol/pension-core';
 import { UMA, SALARIO_MINIMO } from '@trol/pension-core/tablas';
 import type { EntradaCalculo, Palancas } from '@trol/pension-core/types';
 
@@ -17,6 +17,11 @@ export interface InputManual {
   semanas: number;
   salarioMensual: number;
   sigueCotizando: boolean;
+  /** Ley 97: saldos del estado de cuenta (opcionales; sin ellos no se estima). */
+  saldoAfore?: number;
+  saldoInfonavit?: number;
+  /** Ley 97: incluir Infonavit en la pensión (default: no). */
+  incluirInfonavit?: boolean;
 }
 
 export interface ConservacionVM {
@@ -94,26 +99,13 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
   const conservacion = calcularConservacion(inp, 2026);
   const semanasMinimas = 500; // Ley 73
 
-  if (ley === 'Ley97') {
-    return {
-      ley,
-      computable: false,
-      edadActual,
-      escenarios: [],
-      semanasMinimas,
-      cumpleSemanas: inp.semanas >= semanasMinimas,
-      conservacion,
-      nota: 'Para Ley 97 tu pensión depende del saldo de tu AFORE, que traemos de tu historial. En cuanto llegue, verás tu estimación aquí.',
-    };
-  }
-
   const perfil = {
     nombre: '',
     curp: '',
     nss: '',
-    sexo: 'H' as const, // no afecta el cálculo Ley 73
+    sexo: 'H' as const, // no afecta el cálculo Ley 73; Ley 97 usa URV por sexo (aprox H)
     fecha_nacimiento: `${inp.anioNacimiento}-06-15`,
-    ley: 'Ley73' as const,
+    ley,
     status_empleo: inp.sigueCotizando ? ('empleado' as const) : ('desempleado' as const),
     salario_diario_registrado: salarioDiario,
     salario_promedio_250: salarioDiario,
@@ -130,7 +122,13 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     aplica_mod40: false,
     gap_meses: 0,
   };
-  const saldos = { rcv97: 0, sar92: 0, infonavit: 0, ahorro_voluntario: 0, credito_infonavit_vigente: false };
+  const saldos = {
+    rcv97: Math.max(0, inp.saldoAfore ?? 0),
+    sar92: 0,
+    infonavit: Math.max(0, inp.saldoInfonavit ?? 0),
+    ahorro_voluntario: 0,
+    credito_infonavit_vigente: false,
+  };
   const salario_60m = Array.from({ length: 60 }, (_, i) => ({
     mes: i + 1,
     salario_diario: salarioDiario,
@@ -147,6 +145,38 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     usaCreditoInfonavit: false,
     ahorroVoluntarioMensual: 0,
   });
+
+  // ---- Ley 97: estima con el saldo AFORE (e Infonavit opcional) ----
+  if (ley === 'Ley97') {
+    if (!inp.saldoAfore || inp.saldoAfore <= 0) {
+      return {
+        ley,
+        computable: false,
+        edadActual,
+        escenarios: [],
+        semanasMinimas,
+        cumpleSemanas: inp.semanas >= semanasMinimas,
+        conservacion,
+        nota: 'Eres Ley 97: tu pensión depende del saldo de tu AFORE. Escribe tu saldo de AFORE (y de Infonavit si quieres incluirlo) para ver una estimación.',
+      };
+    }
+    const edades97 = [60, 61, 62, 63, 64, 65].filter((e) => e >= Math.min(60, Math.floor(edadActual)));
+    const escenarios97 = edades97.map((edad) => {
+      const r = computeLey97({ perfil, saldos, salario_60m, palancas: palancas(edad), hoy: HOY } as EntradaCalculo);
+      const pension = inp.incluirInfonavit ? r.pensionAforeInfonavit : r.pensionAfore;
+      return { edad, pension };
+    });
+    return {
+      ley,
+      computable: true,
+      edadActual,
+      escenarios: escenarios97,
+      semanasMinimas,
+      cumpleSemanas: inp.semanas >= semanasMinimas,
+      conservacion,
+      nota: 'Estimación con tu saldo de AFORE. El cálculo oficial usará tu historial real del IMSS (saldo, aportaciones y semanas exactas).',
+    };
+  }
 
   const edades = [60, 61, 62, 63, 64, 65].filter((e) => e >= Math.min(60, Math.floor(edadActual)));
   const escenarios = edades.map((edad) => {
