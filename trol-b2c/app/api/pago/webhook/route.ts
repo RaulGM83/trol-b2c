@@ -70,15 +70,39 @@ export async function POST(req: Request) {
       p_payment_ref: String(pago.id),
     });
 
-    // Disparo a n8n para refresh con Jordan (si semilla +1 mes) + generación de
-    // documento. Fire-and-forget; n8n hace el trabajo pesado. Opcional por env.
+    // Refresh con Jordan (workflow "Refrescar SISEC") si la semilla tiene +1 mes.
+    // Su webhook espera { curp, cliente_id }; mandamos también un flag para que el
+    // flujo NO mande mensajes de "usuario nuevo" al cliente.
     const n8nUrl = process.env.N8N_FULFILLMENT_URL;
     if (n8nUrl) {
-      fetch(n8nUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orden_id: pago.external_reference, payment_ref: String(pago.id) }),
-      }).catch(() => {});
+      const { data: orden } = await admin
+        .from('ordenes_b2c')
+        .select('cliente_id')
+        .eq('id', pago.external_reference)
+        .maybeSingle();
+      if (orden?.cliente_id) {
+        const { data: cli } = await admin
+          .from('clientes')
+          .select('curp, calculo_pensional_at')
+          .eq('id', orden.cliente_id)
+          .maybeSingle();
+        const vieja =
+          !cli?.calculo_pensional_at ||
+          Date.now() - new Date(cli.calculo_pensional_at).getTime() > 30 * 86_400_000;
+        if (cli?.curp && vieja) {
+          fetch(n8nUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              curp: cli.curp,
+              cliente_id: orden.cliente_id,
+              orden_id: pago.external_reference,
+              origen: 'b2c_pago',
+              notificar_usuario: false,
+            }),
+          }).catch(() => {});
+        }
+      }
     }
   }
 
