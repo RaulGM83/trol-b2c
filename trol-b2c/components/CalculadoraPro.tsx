@@ -77,6 +77,19 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
   const costo = r73 ? r73.costoTotal : 0;
   const d = r73?.detalle ?? null;
 
+  // Ley 97: saldos hoy (con dato real si lo capturó) y al retiro.
+  // El saldo AFORE/Infonavit solo se acumula hasta el retiro: nunca debe verse
+  // por debajo del saldo actual. En el primer escenario (retiro a la edad actual)
+  // el motor descuenta ~1 día por un artefacto del Excel; lo neutralizamos con max().
+  const rcv97Hoy = overrides?.rcv97 ?? saldos.rcv97;
+  const infonavitHoy = overrides?.infonavit ?? saldos.infonavit;
+  const aforeAlRetiro = r97 ? Math.max(r97.detalle.saldoAforeProyectado, rcv97Hoy) : 0;
+  const infAlRetiro = r97
+    ? saldos.credito_infonavit_vigente
+      ? r97.detalle.saldoInfonavitProyectado // crédito vigente consume el saldo
+      : Math.max(r97.detalle.saldoInfonavitProyectado, infonavitHoy)
+    : 0;
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const barrido = useMemo(() => edades.map((e) => ({ edad: e, pension: pensionDe(e) })), [edades, pct, umas, recuperar, mod40retro, overrides, incluirInfonavit]);
 
@@ -107,8 +120,9 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         )}
         {esLey97 && r97 && !r97.negativa && edadRetiro >= 65 && (
           <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
-            A partir de los 65 años podrías sumar la <b className="text-white">Pensión para el Bienestar</b> de las
-            Personas Adultas Mayores (complemento del Bienestar), adicional a esta pensión.
+            Como te pensionas por <b className="text-white">Ley 97</b> a los 65 años o más, puede aplicar el{' '}
+            <b className="text-white">Complemento del Fondo de Pensiones para el Bienestar</b>: el gobierno iguala tu
+            pensión a tu último salario, hasta un tope de $17,885 al mes.
           </div>
         )}
       </section>
@@ -171,7 +185,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
               placeholder={Math.round(saldos.rcv97).toString()}
               className="w-full rounded-lg border border-line px-2 py-1.5 text-right text-sm"
             />
-            <div className="text-right font-bold">{money(r97.detalle.saldoAforeProyectado)}</div>
+            <div className="text-right font-bold">{money(aforeAlRetiro)}</div>
 
             <div className="font-semibold">Infonavit</div>
             <input
@@ -179,7 +193,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
               placeholder={Math.round(saldos.infonavit).toString()}
               className="w-full rounded-lg border border-line px-2 py-1.5 text-right text-sm"
             />
-            <div className="text-right font-bold">{money(r97.detalle.saldoInfonavitProyectado)}</div>
+            <div className="text-right font-bold">{money(infAlRetiro)}</div>
           </div>
 
           <p className="mt-2 text-[11px] text-muted">
