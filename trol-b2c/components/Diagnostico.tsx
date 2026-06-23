@@ -114,6 +114,14 @@ export function Diagnostico({ vm, demo = false }: { vm: DiagnosticoVM; demo?: bo
         Quiero mi plan completo con un asesor
       </Link>
 
+      {/* Comparador de AFOREs (público) */}
+      <Link
+        href="/comparador"
+        className="mt-2 block rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink"
+      >
+        Comparar AFOREs
+      </Link>
+
       {/* Ganar puntos: encuesta de AFORE + referidos */}
       {!demo && (
         <>
