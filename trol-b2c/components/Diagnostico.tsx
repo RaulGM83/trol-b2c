@@ -45,13 +45,15 @@ export function Diagnostico({ vm, demo = false }: { vm: DiagnosticoVM; demo?: bo
         </div>
       </section>
 
-      {/* Conserva derechos */}
-      <div className="mb-4 flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3 text-sm">
-        <span className="text-muted">Conservación de derechos (Ley 73)</span>
-        <span className={`font-bold ${vm.conservaDerechos ? 'text-ink' : 'text-red-600'}`}>
-          {vm.conservaDerechos ? 'Vigente ✓' : 'Revisar'}
-        </span>
-      </div>
+      {/* Conserva derechos — solo aplica a Ley 73 */}
+      {vm.ley === 'Ley73' && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3 text-sm">
+          <span className="text-muted">Conservación de derechos (Ley 73)</span>
+          <span className={`font-bold ${vm.conservaDerechos ? 'text-ink' : 'text-red-600'}`}>
+            {vm.conservaDerechos ? 'Vigente ✓' : 'Revisar'}
+          </span>
+        </div>
+      )}
 
       {/* Mejor jugada */}
       {vm.mejorJugada && (
