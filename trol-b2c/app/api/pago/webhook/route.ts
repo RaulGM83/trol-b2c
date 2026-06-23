@@ -90,6 +90,13 @@ export async function POST(req: Request) {
           !cli?.calculo_pensional_at ||
           Date.now() - new Date(cli.calculo_pensional_at).getTime() > 30 * 86_400_000;
         if (cli?.curp && vieja) {
+          // Marca el refresh silencioso: el chain Jordan→Waterfall→Calculos lee
+          // esta columna y corre en mass_refresh=true (sin notificar al usuario).
+          await admin
+            .from('clientes')
+            .update({ sisec_refresh_solicitado_at: new Date().toISOString() })
+            .eq('id', orden.cliente_id);
+
           fetch(n8nUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -98,7 +105,6 @@ export async function POST(req: Request) {
               cliente_id: orden.cliente_id,
               orden_id: pago.external_reference,
               origen: 'b2c_pago',
-              notificar_usuario: false,
             }),
           }).catch(() => {});
         }
