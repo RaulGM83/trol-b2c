@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
 import type { Producto } from '@/lib/productos';
@@ -21,6 +21,25 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [spei, setSpei] = useState<{ monto: number; referencia: string; voucher_url: string | null; clabe: string | null } | null>(null);
+
+  // SPEI es asíncrono: mientras esperamos la transferencia, consultamos el
+  // estado de la orden cada 5s y al confirmarse pasamos a la pantalla de éxito.
+  useEffect(() => {
+    if (!spei) return;
+    const supabase = createClient();
+    const iv = setInterval(async () => {
+      const { data } = await supabase
+        .from('ordenes_b2c')
+        .select('estado')
+        .eq('id', spei.referencia)
+        .maybeSingle();
+      if (data?.estado === 'cumplida') {
+        clearInterval(iv);
+        setPagado(true);
+      }
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [spei]);
 
   const esPuntos = via === 'puntos';
   const cashback = esPuntos ? 0 : cashbackPuntos(producto.precioMXN); // sin cashback si paga con puntos
@@ -101,12 +120,16 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
             Ver mi CLABE y datos para transferir
           </a>
         )}
-        <button onClick={() => location.reload()}
-          className="mt-2 w-full rounded-xl border border-line bg-white px-4 py-3 text-sm font-bold text-ink">
-          Ya transferí · revisar estado
-        </button>
-        <p className="mt-4 text-center text-[11px] leading-relaxed text-muted">
-          La transferencia SPEI puede tardar unos minutos en confirmarse. Te avisamos por WhatsApp al activarse.
+
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-cream px-4 py-3 text-sm text-ink/80">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#65a30d] opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#65a30d]" />
+          </span>
+          Esperando tu transferencia… se confirma sola
+        </div>
+        <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">
+          La transferencia SPEI tarda unos minutos. Puedes cerrar esta pantalla; te avisamos por WhatsApp al activarse y tu calculadora queda lista.
         </p>
       </main>
     );

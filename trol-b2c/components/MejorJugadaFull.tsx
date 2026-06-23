@@ -56,7 +56,11 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
       <section className="mb-5 rounded-2xl border border-line bg-white p-5">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-extrabold">{producto.nombre}</h2>
-          <span className="text-lg font-extrabold">${producto.precioMXN}</span>
+          {yaTiene ? (
+            <span className="rounded-full bg-lime px-2.5 py-1 text-xs font-bold text-ink">Pagado ✓</span>
+          ) : (
+            <span className="text-lg font-extrabold">${producto.precioMXN}</span>
+          )}
         </div>
         <p className="mt-1 text-sm text-muted">{producto.descripcion}</p>
 

@@ -1,5 +1,35 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+
+// Valida la firma x-signature de Mercado Pago (HMAC-SHA256 del manifest con el
+// secreto del webhook). Si MP_WEBHOOK_SECRET no está, no se valida (best-effort).
+function firmaValida(req: Request, dataId: string | null): boolean {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) return true;
+  if (!dataId) return false;
+  const sig = req.headers.get('x-signature') ?? '';
+  const reqId = req.headers.get('x-request-id') ?? '';
+  const parts: Record<string, string> = {};
+  sig.split(',').forEach((p) => {
+    const [k, v] = p.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  });
+  const ts = parts['ts'];
+  const v1 = parts['v1'];
+  if (!ts || !v1) return false;
+  // MP: el request-id se omite del manifest si no viene en la notificación.
+  const segs = [`id:${dataId.toLowerCase()}`];
+  if (reqId) segs.push(`request-id:${reqId}`);
+  segs.push(`ts:${ts}`);
+  const manifest = segs.join(';') + ';';
+  const hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(v1));
+  } catch {
+    return false;
+  }
+}
 
 // Webhook de conciliación de Mercado Pago. MP notifica un pago; consultamos su
 // estado con nuestro token y, si está aprobado, marcamos la orden cumplida y
@@ -16,10 +46,16 @@ export async function POST(req: Request) {
   } catch {
     /* MP también puede mandar query params */
   }
-  if (!paymentId) {
-    const u = new URL(req.url);
-    paymentId = u.searchParams.get('data.id') ?? u.searchParams.get('id');
+  const dataIdQuery = new URL(req.url).searchParams.get('data.id') ?? new URL(req.url).searchParams.get('id');
+  if (!paymentId) paymentId = dataIdQuery;
+
+  // Firma del webhook: se registra si no cuadra, pero NO se bloquea — la
+  // seguridad autoritativa es consultar el pago en MP con nuestro token abajo
+  // (un atacante no puede falsificar un pago aprobado con external_reference real).
+  if (!firmaValida(req, dataIdQuery ?? paymentId)) {
+    console.warn('[pago/webhook] firma x-signature no coincide', { paymentId });
   }
+
   if (!token || !paymentId) return NextResponse.json({ ok: true }); // ack para no reintentar
 
   const pago = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
