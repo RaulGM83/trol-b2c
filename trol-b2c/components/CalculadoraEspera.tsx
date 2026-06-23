@@ -16,7 +16,8 @@ const IMSS_URL = 'https://serviciosdigitales.imss.gob.mx/semanascotizadas-web/us
 
 // Pantalla de espera útil: mientras llega el SISEC, el usuario estima su
 // pensión a mano con el mismo motor (Plan Maestro §16, estado sin-CURP).
-export function CalculadoraEspera() {
+// `publica`: versión para leads fríos (link de Tako) sin sesión ni CURP.
+export function CalculadoraEspera({ publica = false }: { publica?: boolean }) {
   const [inp, setInp] = useState<InputManual>({
     anioNacimiento: 1965,
     anioPrimeraCotizacion: 1990,
@@ -41,19 +42,32 @@ export function CalculadoraEspera() {
         </span>
       </header>
 
-      {/* Estado: cálculo real en camino */}
+      {/* Encabezado: leads fríos (público) vs cliente en espera del SISEC */}
       <div className="mb-6 rounded-2xl bg-ink p-5 text-white">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-lime" />
-          </span>
-          <span className="text-[11px] font-bold uppercase tracking-wide text-lime">Preparando tu cálculo exacto</span>
-        </div>
-        <h1 className="mt-2 text-xl font-extrabold leading-tight">Mientras tanto, calcula tu pensión aquí</h1>
-        <p className="mt-1 text-sm text-white/70">
-          Estamos trayendo tu historial del IMSS. Te avisamos por WhatsApp en cuanto esté tu cálculo oficial.
-        </p>
+        {publica ? (
+          <>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-lime">Sin CURP · gratis</span>
+            <h1 className="mt-2 text-xl font-extrabold leading-tight">Calcula tu pensión en 1 minuto</h1>
+            <p className="mt-1 text-sm text-white/70">
+              Sin dar tu CURP. Pon tus datos y mira tu estimación. Si quieres tu cálculo exacto con tu historial del
+              IMSS, te ayudamos por WhatsApp.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-lime" />
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-wide text-lime">Preparando tu cálculo exacto</span>
+            </div>
+            <h1 className="mt-2 text-xl font-extrabold leading-tight">Mientras tanto, calcula tu pensión aquí</h1>
+            <p className="mt-1 text-sm text-white/70">
+              Estamos trayendo tu historial del IMSS. Te avisamos por WhatsApp en cuanto esté tu cálculo oficial.
+            </p>
+          </>
+        )}
       </div>
 
       <h2 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-muted">Estima tu pensión</h2>
@@ -148,9 +162,11 @@ export function CalculadoraEspera() {
         </p>
       </section>
 
-      {/* Camino de rescate: enviar la hoja de semanas cotizadas (cuando falla la obtención automática) */}
+      {/* Camino al cálculo exacto: enviar la hoja de semanas cotizadas */}
       <section className="mt-6 rounded-2xl border border-line bg-white p-5">
-        <div className="text-sm font-bold text-ink">¿Tarda o no encontramos tu historial?</div>
+        <div className="text-sm font-bold text-ink">
+          {publica ? '¿Quieres tu cálculo exacto?' : '¿Tarda o no encontramos tu historial?'}
+        </div>
         <p className="mt-1 text-sm text-muted">
           Mándanos tu <b className="text-ink">Reporte de Semanas Cotizadas</b> del IMSS y armamos tu cálculo oficial nosotros.
         </p>
