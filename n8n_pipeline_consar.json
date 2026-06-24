@@ -1,0 +1,214 @@
+{
+  "name": "Pipeline CONSAR (SISET) - afore_mercado",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 16,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "5924517d7b5a4205",
+      "name": "Cada mes (dia 16)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -280,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.consar.gob.mx/gobmx/aplicativo/siset/CuadroInicial.aspx?md=38",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "e08552ec6d4744aa",
+      "name": "Recursos (AUM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.consar.gob.mx/gobmx/aplicativo/siset/CuadroInicial.aspx?md=40",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "408a9649ee404c8b",
+      "name": "Cuentas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.consar.gob.mx/gobmx/aplicativo/siset/CuadroInicial.aspx?md=42",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "1f64ca14cf0947eb",
+      "name": "Traspasos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir filas — parsea las tablas HTML de SISET (CONSAR) por AFORE.\n// Fuentes: md=38 Recursos (AUM), md=40 Cuentas, md=42 Traspasos. Mensual.\nconst AFORES=[['azteca','Azteca'],['banamex','Citibanamex'],['coppel','Coppel'],\n ['inbursa','Inbursa'],['invercap','Invercap'],['pensionissste','PensionISSSTE'],\n ['principal','Principal'],['profuturo','Profuturo'],['sura','SURA'],['xxi banorte','Banorte']];\n\nfunction tabla(html){\n  const text=String(html||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\\s+/g,' ').toLowerCase();\n  const pos=AFORES.map(([k])=>({k,i:text.indexOf(k)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i);\n  const res={};\n  pos.forEach((o,idx)=>{\n    const start=o.i+o.k.length;\n    let end;\n    if(idx+1<pos.length) end=pos[idx+1].i;\n    else { const t=text.indexOf(' total',start); end=t>=0?t:text.length; }\n    const slice=text.slice(start,end);\n    res[o.k]=(slice.match(/-?\\d[\\d,]*\\.?\\d*/g)||[]).map(s=>parseFloat(s.replace(/,/g,'')));\n  });\n  const m=text.match(/cierre de ([a-zñ]+ de \\d{4})/);\n  res._periodo=m?m[1]:null;\n  return res;\n}\n\nconst recursos=tabla($('Recursos (AUM)').first().json.data);   // AUM = 5º número (Total Admin. por las Afores)\nconst cuentas =tabla($('Cuentas').first().json.data);           // [regSiefores, regBanxico, asignados, total]\nconst traspasos=tabla($('Traspasos').first().json.data);        // [recibidos, cedidos, netos]\nconst periodo = cuentas._periodo || recursos._periodo || null;\n\nconst rows=AFORES.map(([k,afore])=>{\n  const r={afore, periodo};\n  if(cuentas[k]&&cuentas[k].length){\n    r.cuentas=cuentas[k][cuentas[k].length-1];                       // total (incluye asignadas)\n    if(cuentas[k].length>=2) r.cuentas_registradas=cuentas[k][0]+cuentas[k][1]; // registrados (Siefores+Banxico)\n  }\n  if(recursos[k]&&recursos[k].length>=5) r.aum_mdp=recursos[k][4];\n  if(traspasos[k]&&traspasos[k].length>=2){ r.recibidos_cuentas=traspasos[k][0]; r.cedidos_cuentas=traspasos[k][1]; }\n  return r;\n}).filter(r=>r.cuentas_registradas!=null||r.aum_mdp!=null||r.cedidos_cuentas!=null);\n\nreturn [{ json: { rows, _debug: { periodo, ejemplo: rows[0] } } }];\n"
+      },
+      "id": "0508674857344719",
+      "name": "Construir filas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/afore_mercado?on_conflict=afore",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {}
+      },
+      "id": "bc588dfd0bf442a6",
+      "name": "Upsert afore_mercado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Pipeline CONSAR (SISET) -> afore_mercado\n\nLee 3 cuadros mensuales por GET y los parsea por AFORE:\n- md=38 Recursos -> AUM (millones de pesos)\n- md=40 Cuentas -> registradas (Siefores+Banxico) y total\n- md=42 Traspasos (recibidos/cedidos, en cuentas)\n\nLa FUGA se mide sobre cuentas REGISTRADAS (no totales) y la calcula la vista vista_comparador_afore. Aqui solo subimos crudo.\nTraspasos vienen en CUENTAS (no pesos): fuga_saldo queda null hasta sumar una fuente en pesos.\n\nDefine en n8n las env SUPABASE_URL y SUPABASE_SERVICE_KEY.",
+        "height": 300,
+        "width": 440
+      },
+      "id": "abcc2a6b48324df3",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -60
+      ]
+    }
+  ],
+  "connections": {
+    "Cada mes (dia 16)": {
+      "main": [
+        [
+          {
+            "node": "Recursos (AUM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursos (AUM)": {
+      "main": [
+        [
+          {
+            "node": "Cuentas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cuentas": {
+      "main": [
+        [
+          {
+            "node": "Traspasos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traspasos": {
+      "main": [
+        [
+          {
+            "node": "Construir filas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir filas": {
+      "main": [
+        [
+          {
+            "node": "Upsert afore_mercado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

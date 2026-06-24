@@ -66,20 +66,28 @@ export const CONTACTO_HORARIO = [
 // el dato exacto cambia cada mes — confirmar/actualizar desde consar.gob.mx.
 // El IRN varía por tu año de nacimiento, por eso se muestra por generación.
 // ============================================================================
-export type GeneracionKey = '90-94' | '85-89' | '80-84' | '75-79' | '70-74';
-
-export const MEJORES_POR_GENERACION: Record<GeneracionKey, { rango: string; top: { afore: string; irn: number }[] }> = {
-  '90-94': { rango: 'nacidos en 1990 o después', top: [{ afore: 'Profuturo', irn: 8.06 }, { afore: 'SURA', irn: 7.6 }, { afore: 'Inbursa', irn: 7.28 }] },
-  '85-89': { rango: 'nacidos entre 1985 y 1989', top: [{ afore: 'Profuturo', irn: 8.0 }, { afore: 'SURA', irn: 7.55 }, { afore: 'Inbursa', irn: 7.22 }] },
-  '80-84': { rango: 'nacidos entre 1980 y 1984', top: [{ afore: 'Profuturo', irn: 7.85 }, { afore: 'SURA', irn: 7.43 }, { afore: 'Citibanamex', irn: 7.15 }] },
-  '75-79': { rango: 'nacidos entre 1975 y 1979', top: [{ afore: 'Profuturo', irn: 7.55 }, { afore: 'SURA', irn: 7.18 }, { afore: 'Citibanamex', irn: 6.85 }] },
-  '70-74': { rango: 'nacidos antes de 1975', top: [{ afore: 'Profuturo', irn: 7.22 }, { afore: 'SURA', irn: 6.91 }, { afore: 'Citibanamex', irn: 6.27 }] },
-};
+// SIEFOREs Básicas Generacionales de CONSAR (las que usa la tabla afore_irn).
+export type GeneracionKey =
+  | 'SB Inicial' | 'SB 95-99' | 'SB 90-94' | 'SB 85-89' | 'SB 80-84'
+  | 'SB 75-79' | 'SB 70-74' | 'SB 65-69' | 'SB 60-64' | 'SB de Pensiones';
 
 export function generacionPorAnio(anio: number): GeneracionKey {
-  if (anio >= 1990) return '90-94';
-  if (anio >= 1985) return '85-89';
-  if (anio >= 1980) return '80-84';
-  if (anio >= 1975) return '75-79';
-  return '70-74';
+  if (anio >= 2000) return 'SB Inicial';
+  if (anio >= 1995) return 'SB 95-99';
+  if (anio >= 1990) return 'SB 90-94';
+  if (anio >= 1985) return 'SB 85-89';
+  if (anio >= 1980) return 'SB 80-84';
+  if (anio >= 1975) return 'SB 75-79';
+  if (anio >= 1970) return 'SB 70-74';
+  if (anio >= 1965) return 'SB 65-69';
+  if (anio >= 1960) return 'SB 60-64';
+  return 'SB de Pensiones';
+}
+
+export function rangoGeneracion(g: GeneracionKey): string {
+  if (g === 'SB Inicial') return 'nacidos en 2000 o después';
+  if (g === 'SB de Pensiones') return 'nacidos antes de 1960 / próximos a pensionarse';
+  const m = g.match(/(\d{2})-(\d{2})/);
+  if (m) return `nacidos entre 19${m[1]} y 19${m[2]}`;
+  return g;
 }

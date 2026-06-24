@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { MEJORES_POR_GENERACION, generacionPorAnio } from '@/lib/afores';
+import { generacionPorAnio, rangoGeneracion } from '@/lib/afores';
+
+export type FilaIRN = { afore: string; generacion: string; irn: number | null };
 
 export type FilaAfore = {
   afore: string;
@@ -14,6 +16,8 @@ export type FilaAfore = {
   atencion_prom: number | null;
   asesoria_prom: number | null;
   recomienda_pct: number | null;
+  fuga_cuentas_pct: number | null;
+  fuga_saldo_pct: number | null;
 };
 
 type Orden = 'rendimiento' | 'comision' | 'recomienda';
@@ -21,10 +25,12 @@ const MIN_RESENAS = 3;
 
 export function ComparadorView({
   filas,
+  irn = [],
   autenticado,
   anioPrefill,
 }: {
   filas: FilaAfore[];
+  irn?: FilaIRN[];
   autenticado: boolean;
   anioPrefill?: number;
 }) {
@@ -34,8 +40,15 @@ export function ComparadorView({
   const gen = useMemo(() => {
     const n = parseInt(anio, 10);
     if (!Number.isFinite(n) || n < 1940 || n > 2010) return null;
-    return MEJORES_POR_GENERACION[generacionPorAnio(n)];
-  }, [anio]);
+    const key = generacionPorAnio(n);
+    const top = irn
+      .filter((r) => r.generacion === key && r.irn != null)
+      .sort((a, b) => (b.irn ?? 0) - (a.irn ?? 0))
+      .slice(0, 3)
+      .map((r) => ({ afore: r.afore, irn: Number(r.irn) }));
+    if (!top.length) return null;
+    return { rango: rangoGeneracion(key), top };
+  }, [anio, irn]);
 
   const ordenadas = useMemo(() => {
     const f = [...filas];
@@ -88,7 +101,7 @@ export function ComparadorView({
               ))}
             </div>
             <p className="mt-2 text-[10px] leading-relaxed text-white/50">
-              IRN de CONSAR (corte reciente, referencia). Verifica el dato vigente en consar.gob.mx antes de decidir.
+IRN oficial de CONSAR por tu generación (corte may-2026). Cambia cada mes; rendimientos pasados no garantizan resultados futuros.
             </p>
           </div>
         )}
@@ -123,6 +136,7 @@ export function ComparadorView({
               <th className="px-3 py-2 text-left font-bold">AFORE</th>
               <th className="px-3 py-2 text-right font-bold">IRN (ref.)</th>
               <th className="px-3 py-2 text-right font-bold">Comisión</th>
+              <th className="px-3 py-2 text-right font-bold">Fuga</th>
               <th className="px-3 py-2 text-right font-bold">Recomiendan</th>
             </tr>
           </thead>
@@ -145,6 +159,16 @@ export function ComparadorView({
                     {f.rendimiento_neto != null ? `${Number(f.rendimiento_neto).toFixed(2)}%` : '—'}
                   </td>
                   <td className="px-3 py-3 text-right">{f.comision != null ? `${Number(f.comision).toFixed(2)}%` : '—'}</td>
+                  <td className="px-3 py-3 text-right">
+                    {(() => {
+                      const fuga = f.fuga_saldo_pct ?? f.fuga_cuentas_pct;
+                      return fuga != null ? (
+                        <span className="font-bold text-red-600">▲ {Number(fuga).toFixed(1)}%</span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-3 text-right font-bold">
                     {conResenas && f.recomienda_pct != null ? `${f.recomienda_pct}%` : <span className="text-muted">—</span>}
                   </td>

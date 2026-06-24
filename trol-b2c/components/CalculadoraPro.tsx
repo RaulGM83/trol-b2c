@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { computeLey73, computeLey97 } from '@trol/pension-core';
 import { UMA } from '@trol/pension-core/tablas';
@@ -98,6 +99,9 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
       <header className="mb-5 flex items-center gap-2">
         <span className="text-xl font-extrabold tracking-tight">tr<span className="text-lime">o</span>l</span>
         <span className="text-xs text-muted">· calculadora pro</span>
+        <Link href="/diagnostico" className="ml-auto text-xs font-semibold text-ink hover:underline">
+          ← volver al diagnóstico
+        </Link>
       </header>
       <Stepper activo={3} />
 

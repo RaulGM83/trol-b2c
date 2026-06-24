@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSemillaV2Cliente } from '@/lib/cliente';
-import { ComparadorView, type FilaAfore } from '@/components/ComparadorView';
+import { ComparadorView, type FilaAfore, type FilaIRN } from '@/components/ComparadorView';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,11 +31,21 @@ export default async function ComparadorPage() {
     const admin = createAdminClient();
     const { data } = await admin
       .from('vista_comparador_afore')
-      .select('afore, comision, rendimiento_neto, afiliados_millones, fortaleza, n_resenas, atencion_prom, asesoria_prom, recomienda_pct');
+      .select('afore, comision, rendimiento_neto, afiliados_millones, fortaleza, n_resenas, atencion_prom, asesoria_prom, recomienda_pct, fuga_cuentas_pct, fuga_saldo_pct');
     filas = (data ?? []) as FilaAfore[];
   } catch {
     filas = [];
   }
 
-  return <ComparadorView filas={filas} autenticado={!!user} anioPrefill={anioPrefill} />;
+  // Matriz IRN oficial por generación (para "la mejor para tu edad").
+  let irn: FilaIRN[] = [];
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from('afore_irn').select('afore, generacion, irn');
+    irn = (data ?? []) as FilaIRN[];
+  } catch {
+    irn = [];
+  }
+
+  return <ComparadorView filas={filas} irn={irn} autenticado={!!user} anioPrefill={anioPrefill} />;
 }

@@ -1,0 +1,152 @@
+{
+  "name": "Pipeline CONSAR - IRN por generacion",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 16,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "ac56d1cd9b6b4621",
+      "name": "Cada mes (dia 16)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.consar.gob.mx/gobmx/aplicativo/siset/Series.aspx?cd=212&cdAlt=False",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "fe5c2c96b5b14797",
+      "name": "IRN cd=212",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea el IRN por SIEFORE generacional (SISET cd=212) y arma filas para afore_irn.\n// Toma el ULTIMO valor de cada fila (la columna más reciente).\nconst GENS=[['sb de pensiones','SB de Pensiones'],['sb 60-64','SB 60-64'],['sb 65-69','SB 65-69'],\n ['sb 70-74','SB 70-74'],['sb 75-79','SB 75-79'],['sb 80-84','SB 80-84'],['sb 85-89','SB 85-89'],\n ['sb 90-94','SB 90-94'],['sb 95-99','SB 95-99'],['sb inicial','SB Inicial']];\nconst AF=[['azteca','Azteca'],['banamex','Citibanamex'],['coppel','Coppel'],['inbursa','Inbursa'],\n ['invercap','Invercap'],['pensionissste','PensionISSSTE'],['principal','Principal'],\n ['profuturo','Profuturo'],['sura','SURA'],['xxi-banorte','Banorte']];\n\nconst html=$('IRN cd=212').first().json.data;\nconst text=String(html||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\\s+/g,' ').toLowerCase();\n\n// periodo = último \"mes año\" antes de la primera AFORE\nconst firstAz=text.indexOf('azteca');\nconst head=firstAz>0?text.slice(0,firstAz):text;\nconst meses=head.match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\\s+\\d{4}/g)||[];\nconst periodo=meses.length?meses[meses.length-1]:null;\n\n// posiciones de cada generación\nconst gpos=GENS.map(([k,lbl])=>({k,lbl,i:text.indexOf('neto '+k)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i);\nconst rows=[];\ngpos.forEach((g,gi)=>{\n  const gend = gi+1<gpos.length ? gpos[gi+1].i : text.length;\n  const sec=text.slice(g.i,gend);\n  // posiciones de cada AFORE dentro de la sección\n  const apos=AF.map(([k,afore])=>({k,afore,i:sec.indexOf(k)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i);\n  apos.forEach((a,ai)=>{\n    const aend = ai+1<apos.length ? apos[ai+1].i : sec.length;\n    const slice=sec.slice(a.i+a.k.length, aend);\n    const nums=(slice.match(/\\d+\\.\\d+/g)||[]).map(Number);\n    if(nums.length){ rows.push({ afore:a.afore, generacion:g.lbl, irn:nums[nums.length-1], periodo }); }\n  });\n});\nreturn [{ json: { rows, _debug:{ periodo, generaciones:gpos.length, filas:rows.length, ejemplo:rows[0] } } }];\n"
+      },
+      "id": "c24cd1a5b37c473f",
+      "name": "Construir IRN",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/afore_irn?on_conflict=afore,generacion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {}
+      },
+      "id": "ddc193e71a514bdb",
+      "name": "Upsert afore_irn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## IRN por generacion (SISET cd=212) -> afore_irn\n\nLee la matriz oficial del Indicador de Rendimiento Neto por SIEFORE generacional y AFORE,\ntoma el valor mas reciente (ultima columna) y hace upsert a afore_irn (afore, generacion).\n\nAlimenta el modulo 'la mejor para tu edad' del comparador.\nDefine en n8n las env SUPABASE_URL y SUPABASE_SERVICE_KEY.",
+        "height": 240,
+        "width": 420
+      },
+      "id": "cdcd785b90f34599",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        20
+      ]
+    }
+  ],
+  "connections": {
+    "Cada mes (dia 16)": {
+      "main": [
+        [
+          {
+            "node": "IRN cd=212",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IRN cd=212": {
+      "main": [
+        [
+          {
+            "node": "Construir IRN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir IRN": {
+      "main": [
+        [
+          {
+            "node": "Upsert afore_irn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
