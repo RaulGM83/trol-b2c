@@ -81,14 +81,21 @@ export async function POST(req: Request) {
         .eq('id', pago.external_reference)
         .maybeSingle();
       if (orden?.cliente_id) {
-        const { data: cli } = await admin
+        // Cast a `any`: el nombre de columna con acento (última_fecha_sisec) no
+        // lo soporta el parser de tipos de supabase-js en el string de select.
+        const { data: cli } = await (admin as any)
           .from('clientes')
-          .select('curp, calculo_pensional_at')
+          .select('curp, última_fecha_sisec')
           .eq('id', orden.cliente_id)
           .maybeSingle();
+        // "Vieja" se decide por la antigüedad real del DATO del IMSS
+        // (última_fecha_sisec), no por la fecha de la semilla
+        // (calculo_pensional_at, que se recalcula y siempre se ve fresca).
+        // Sin fecha SISEC = nunca tuvimos dato oficial → refrescar.
+        const fechaSisec = cli?.['última_fecha_sisec'] as string | null | undefined;
         const vieja =
-          !cli?.calculo_pensional_at ||
-          Date.now() - new Date(cli.calculo_pensional_at).getTime() > 30 * 86_400_000;
+          !fechaSisec ||
+          Date.now() - new Date(fechaSisec).getTime() > 30 * 86_400_000;
         if (cli?.curp && vieja) {
           // Marca el refresh silencioso: el chain Jordan→Waterfall→Calculos lee
           // esta columna y corre en mass_refresh=true (sin notificar al usuario).

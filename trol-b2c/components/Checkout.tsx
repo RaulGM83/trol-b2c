@@ -60,6 +60,10 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
         if (r?.error === 'saldo_insuficiente') return setError(`Te faltan puntos (tienes ${r.saldo}, cuesta ${r.precio}).`);
         return setError('No se pudo desbloquear con puntos.');
       }
+      // El pago dispara el refresh de Jordan vía webhook; el desbloqueo por
+      // puntos no pasa por MP, así que lo pedimos aquí (activa al Segmento B
+      // sin semilla). Fire-and-forget: no bloquea la pantalla de éxito.
+      fetch('/api/refrescar', { method: 'POST' }).catch(() => {});
       return setPagado(true);
     }
     setCargando(true);
