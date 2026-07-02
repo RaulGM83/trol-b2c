@@ -12,6 +12,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const product_code = typeof body.product_code === 'string' ? body.product_code : 'CALCULADORA_ADDON';
+  const usar_puntos = body.usar_puntos === true;
 
   const supabase = createClient();
   const {
@@ -36,12 +37,24 @@ export async function POST(req: Request) {
   const precio = Number(prod?.precio_mxn ?? 0);
   if (!precio) return NextResponse.json({ ok: false, error: 'producto_invalido' }, { status: 400 });
 
+  // Pago mixto: puntos verificados server-side; se cobra solo el resto (mín. $5
+  // con tarjeta). Los puntos se debitan al cumplirse la orden (procesar_pago_orden).
+  let puntosAplicados = 0;
+  let monto = precio;
+  if (usar_puntos) {
+    const { data: saldoData } = await supabase.rpc('saldo_puntos');
+    const saldo = typeof saldoData === 'number' ? saldoData : 0;
+    puntosAplicados = Math.max(0, Math.min(saldo, precio - 5));
+    monto = precio - puntosAplicados;
+  }
+
   const { data: orden } = await admin
     .from('ordenes_b2c')
     .insert({
       cliente_id: cliente.id,
       product_code,
-      monto: precio,
+      monto,
+      puntos_aplicados: puntosAplicados,
       unlock_method: 'pago',
       estado: 'pendiente',
       payment_provider: 'mercadopago',
@@ -60,7 +73,7 @@ export async function POST(req: Request) {
       'X-Idempotency-Key': orden.id,
     },
     body: JSON.stringify({
-      transaction_amount: precio,
+      transaction_amount: monto,
       token: body.token,
       payment_method_id: body.payment_method_id,
       issuer_id: body.issuer_id,

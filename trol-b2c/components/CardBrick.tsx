@@ -16,11 +16,14 @@ declare global {
 export function CardBrick({
   amount,
   productCode,
+  usarPuntos = false,
   onApproved,
   onError,
 }: {
   amount: number;
   productCode: string;
+  /** Pago mixto: el server aplica los puntos del cliente y cobra solo el resto. */
+  usarPuntos?: boolean;
   onApproved: () => void;
   onError: (msg: string) => void;
 }) {
@@ -48,7 +51,7 @@ export function CardBrick({
                 fetch('/api/pago/tarjeta', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ...(formData as object), product_code: productCode }),
+                  body: JSON.stringify({ ...(formData as object), product_code: productCode, usar_puntos: usarPuntos }),
                 })
                   .then((r) => r.json())
                   .then((res) => {

@@ -2,15 +2,20 @@ import Link from 'next/link';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
 import { GANAR_PUNTOS, alcanzaPuntos } from '@/lib/puntos';
 import type { Producto } from '@/lib/productos';
+import { WA } from '@/lib/whatsapp';
 import { Stepper } from './Stepper';
+import { PuntosChip } from './PuntosChip';
 
 const money = (n: number | null) => (n == null ? 'N/A' : '$' + Math.round(n).toLocaleString('es-MX'));
 
-/** Pantalla 2 del Inc 0 — Mejor jugada completa + desbloqueo dual (§16). */
+/** Pantalla 2 del Inc 0 — Mejor jugada completa + desbloqueo (puntos primero). */
 export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: { vm: DiagnosticoVM; producto: Producto; saldoPuntos: number; yaTiene?: boolean }) {
   const j = vm.mejorJugada;
   const puedePuntos = alcanzaPuntos(saldoPuntos, producto.precioMXN);
   const faltan = Math.max(0, producto.precioMXN - saldoPuntos);
+  // Pago mixto: usa todos sus puntos y paga solo el resto (mínimo $5 con tarjeta).
+  const puedeMixto = !puedePuntos && saldoPuntos > 0 && producto.precioMXN - saldoPuntos >= 5;
+  const restoMixto = producto.precioMXN - saldoPuntos;
 
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
@@ -21,6 +26,7 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
         <Link href="/diagnostico" className="text-xs text-muted hover:underline">
           ← volver al diagnóstico
         </Link>
+        <PuntosChip saldo={saldoPuntos} />
       </header>
 
       <Stepper activo={2} />
@@ -70,61 +76,76 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
           </Link>
         ) : (
         <>
-        {/* Desbloqueo dual (§16) */}
+        {/* Desbloqueo: la vía de PUNTOS primero (la ruta destacada para B2C). */}
         <div className="mt-4 flex flex-col gap-2">
-          <Link
-            href={`/checkout?p=${producto.code}&via=pago`}
-            className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-bold text-white"
-          >
-            Pagar ${producto.precioMXN}
-          </Link>
-
           {puedePuntos ? (
             <Link
               href={`/checkout?p=${producto.code}&via=puntos`}
               className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink"
             >
-              Gánala con puntos · tienes {saldoPuntos} pts
+              Desbloquear con mis puntos · tienes {saldoPuntos} pts ✓
+            </Link>
+          ) : puedeMixto ? (
+            <Link
+              href={`/checkout?p=${producto.code}&via=pago&mix=1`}
+              className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink"
+            >
+              Usar mis {saldoPuntos} pts y pagar solo ${restoMixto}
             </Link>
           ) : (
-            <div className="rounded-xl border border-line px-4 py-3 text-center text-sm">
-              <span className="font-bold text-ink">Te faltan {faltan} pts</span>{' '}
-              <span className="text-muted">(tienes {saldoPuntos})</span>
+            <div className="rounded-xl border border-lime bg-cream px-4 py-3 text-center text-sm">
+              <span className="font-bold text-ink">Te faltan {faltan} pts para ganarla gratis</span>
+              <span className="text-muted"> (tienes {saldoPuntos})</span>
             </div>
           )}
+
+          <Link
+            href={`/checkout?p=${producto.code}&via=pago`}
+            className={`rounded-xl px-4 py-3 text-center text-sm font-bold ${
+              puedePuntos ? 'border border-line bg-white text-ink' : 'bg-ink text-white'
+            }`}
+          >
+            {puedePuntos ? `O págala: $${producto.precioMXN}` : `Pagar $${producto.precioMXN}`}
+          </Link>
         </div>
 
-        {/* Cómo ganar puntos */}
-        <div className="mt-4 rounded-xl bg-cream p-3">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Gana puntos</div>
-          <ul className="mt-1 space-y-1 text-sm">
-            {GANAR_PUNTOS.map((g) => (
-              <li key={g.motivo} className="flex justify-between gap-3">
-                <span className="text-ink/80">{g.motivo}</span>
-                <span className="font-bold">+{g.puntos}</span>
-              </li>
-            ))}
-            <li className="flex justify-between gap-3">
-              <span className="text-ink/80">Evaluar tu AFORE (encuesta)</span>
-              <span className="font-bold">+50</span>
-            </li>
-            <li className="flex justify-between gap-3">
-              <span className="text-ink/80">Invita a un amigo (llega a diagnóstico)</span>
-              <span className="font-bold">+100</span>
-            </li>
-          </ul>
-          <div className="mt-3 flex flex-col gap-2">
-            <Link href="/encuesta" className="block rounded-lg border border-ink px-3 py-2 text-center text-xs font-bold text-ink">
-              Evaluar mi AFORE (+50)
-            </Link>
-            <Link href="/referidos" className="block rounded-lg bg-ink px-3 py-2 text-center text-xs font-bold text-white">
-              Invita y gana puntos
-            </Link>
+        {/* Cómo ganar puntos (valores reales del backend) */}
+        {!puedePuntos && (
+          <div className="mt-4 rounded-xl bg-cream p-3">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-muted">
+              Gana los {faltan} pts que te faltan
+            </div>
+            <ul className="mt-1 space-y-1 text-sm">
+              {GANAR_PUNTOS.map((g) => (
+                <li key={g.motivo} className="flex justify-between gap-3">
+                  <span className="text-ink/80">{g.motivo}</span>
+                  <span className="font-bold">+{g.puntos}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-col gap-2">
+              <Link href="/encuesta" className="block rounded-lg border border-ink px-3 py-2 text-center text-xs font-bold text-ink">
+                Evaluar mi AFORE (+50)
+              </Link>
+              <Link href="/referidos" className="block rounded-lg bg-ink px-3 py-2 text-center text-xs font-bold text-white">
+                Invitar a un amigo (+100)
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
         </>
         )}
       </section>
+
+      {/* Paso humano: quien prefiere hablar antes de pagar */}
+      <a
+        href={WA.asesoriaBasica()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-5 block rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink"
+      >
+        ¿Dudas con tu jugada? Platícalo gratis con un experto
+      </a>
 
       <p className="text-center text-[11px] leading-relaxed text-muted">
         El trámite ante el IMSS es gratis. Solo cobramos nuestras asesorías y herramientas; nunca pedimos anticipos en efectivo.

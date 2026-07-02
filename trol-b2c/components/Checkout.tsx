@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
 import type { Producto } from '@/lib/productos';
-import { cashbackPuntos } from '@/lib/productos';
+import { cashbackPuntos, calcularMixto, SPEI_MINIMO_MXN } from '@/lib/productos';
 import { createClient } from '@/lib/supabase/client';
 import { WA, BOOKING_URL } from '@/lib/whatsapp';
 import { CasoResumen } from './CasoResumen';
@@ -15,8 +15,25 @@ type Via = 'pago' | 'puntos';
 type Metodo = 'spei' | 'tarjeta';
 
 /** Pantalla 3 del Inc 0 — Checkout integrado con el caso a la vista (§13, §16). */
-export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: Producto; via: Via }) {
+export function Checkout({
+  vm,
+  producto,
+  via,
+  saldoPuntos = 0,
+  mixInicial = false,
+}: {
+  vm: DiagnosticoVM;
+  producto: Producto;
+  via: Via;
+  saldoPuntos?: number;
+  mixInicial?: boolean;
+}) {
   const [metodo, setMetodo] = useState<Metodo>('spei'); // SPEI-first
+  // Pago mixto: aplica los puntos disponibles y paga solo el resto. Los puntos
+  // se debitan hasta que el pago se confirma (webhook), nunca antes.
+  const mixto = calcularMixto(producto.precioMXN, saldoPuntos);
+  const mixtoDisponible = via === 'pago' && mixto.puntos > 0 && saldoPuntos < producto.precioMXN;
+  const [usarPuntos, setUsarPuntos] = useState(mixInicial && mixtoDisponible);
   const [cfdi, setCfdi] = useState(false);
   const [rfc, setRfc] = useState('');
   const [pagado, setPagado] = useState(false);
@@ -44,7 +61,11 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
   }, [spei]);
 
   const esPuntos = via === 'puntos';
-  const cashback = esPuntos ? 0 : cashbackPuntos(producto.precioMXN); // sin cashback si paga con puntos
+  // Con pago mixto, SPEI solo si el resto alcanza el mínimo de MP ($100).
+  const speiPermitido = !usarPuntos || mixto.speiDisponible;
+  const metodoEfectivo: Metodo = speiPermitido ? metodo : 'tarjeta';
+  const montoAPagar = usarPuntos ? mixto.resto : producto.precioMXN;
+  const cashback = esPuntos ? 0 : cashbackPuntos(montoAPagar); // 10% de lo pagado en efectivo
 
   async function confirmar() {
     setError(null);
@@ -69,12 +90,12 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
     setCargando(true);
     const noConfig = 'El pago aún no está configurado (faltan las llaves de Mercado Pago).';
     try {
-      if (metodo === 'spei') {
+      if (metodoEfectivo === 'spei') {
         // SPEI nativo: genera la CLABE y la mostramos en pantalla.
         const res = await fetch('/api/pago/spei', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product_code: producto.code }),
+          body: JSON.stringify({ product_code: producto.code, usar_puntos: usarPuntos }),
         }).then((r) => r.json());
         setCargando(false);
         if (res?.ok) return setSpei(res);
@@ -126,6 +147,17 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
             Ver mi CLABE y datos para transferir
           </a>
         )}
+
+        {/* La CLABE a la mano en su WhatsApp: no se pierde al cambiar de app
+            (la mayoría transfiere desde el celular). */}
+        <a
+          href={WA.claveSpei(spei.clabe, spei.monto, spei.referencia)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block rounded-xl bg-[#25D366] px-4 py-3 text-center text-sm font-bold text-white"
+        >
+          Mandarme la CLABE por WhatsApp
+        </a>
 
         <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-cream px-4 py-3 text-sm text-ink/80">
           <span className="relative flex h-2.5 w-2.5">
@@ -245,27 +277,62 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
 
       {!esPuntos && (
         <>
+          {/* Pago mixto: aplica tus puntos y paga solo el resto */}
+          {mixtoDisponible && (
+            <section className="mb-4 rounded-xl border border-lime bg-white p-4">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm">
+                  <span className="font-bold text-ink">Usar mis {mixto.puntos} pts</span>{' '}
+                  <span className="text-muted">y pagar solo ${mixto.resto}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={usarPuntos}
+                  onChange={(e) => setUsarPuntos(e.target.checked)}
+                  className="h-4 w-4 accent-lime"
+                />
+              </label>
+              {usarPuntos && (
+                <p className="mt-2 text-[11px] text-muted">
+                  Tus puntos se descuentan hasta que el pago se confirma.
+                  {!mixto.speiDisponible &&
+                    ` Como el resto es menor a $${SPEI_MINIMO_MXN} (mínimo de SPEI), se paga con tarjeta.`}
+                </p>
+              )}
+            </section>
+          )}
+
           {/* Método de pago — SPEI-first */}
           <section className="mb-4">
             <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">Método de pago</div>
             <div className="grid grid-cols-2 gap-2">
-              {(['spei', 'tarjeta'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMetodo(m)}
-                  className={`rounded-xl border px-4 py-3 text-sm font-bold ${
-                    metodo === m ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink'
-                  }`}
-                >
-                  {m === 'spei' ? 'Transferencia SPEI' : 'Tarjeta'}
-                </button>
-              ))}
+              {(['spei', 'tarjeta'] as const).map((m) => {
+                const deshabilitado = m === 'spei' && !speiPermitido;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={deshabilitado}
+                    onClick={() => setMetodo(m)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-bold ${
+                      deshabilitado
+                        ? 'cursor-not-allowed border-line bg-cream text-muted'
+                        : metodoEfectivo === m
+                          ? 'border-ink bg-ink text-white'
+                          : 'border-line bg-white text-ink'
+                    }`}
+                  >
+                    {m === 'spei' ? 'Transferencia SPEI' : 'Tarjeta'}
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-3 rounded-xl bg-cream p-3 text-sm text-ink/80">
-              {metodo === 'spei'
-                ? 'Te damos una CLABE para transferir desde tu banco. Confirmamos automáticamente al recibir el pago.'
-                : 'Paga con tarjeta de débito o crédito aquí mismo, de forma segura.'}
+              {!speiPermitido
+                ? `SPEI requiere un mínimo de $${SPEI_MINIMO_MXN}; tu resto con puntos se paga con tarjeta aquí mismo.`
+                : metodoEfectivo === 'spei'
+                  ? 'Te damos una CLABE para transferir desde tu banco. Confirmamos automáticamente al recibir el pago.'
+                  : 'Paga con tarjeta de débito o crédito aquí mismo, de forma segura.'}
             </div>
           </section>
 
@@ -289,9 +356,21 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
 
       {/* Resumen */}
       <section className="mb-4 rounded-xl bg-white p-4 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted">{esPuntos ? 'Puntos a usar' : 'Total'}</span>
-          <span className="font-extrabold">{esPuntos ? `${producto.precioMXN} pts` : `$${producto.precioMXN} MXN`}</span>
+        {usarPuntos && !esPuntos && (
+          <>
+            <div className="flex justify-between text-ink/70">
+              <span>{producto.nombre}</span>
+              <span>${producto.precioMXN}</span>
+            </div>
+            <div className="mt-1 flex justify-between text-ink/70">
+              <span>Tus puntos</span>
+              <span className="font-bold">−{mixto.puntos} pts</span>
+            </div>
+          </>
+        )}
+        <div className={`flex justify-between ${usarPuntos && !esPuntos ? 'mt-1 border-t border-line pt-2' : ''}`}>
+          <span className="text-muted">{esPuntos ? 'Puntos a usar' : 'Total a pagar'}</span>
+          <span className="font-extrabold">{esPuntos ? `${producto.precioMXN} pts` : `$${montoAPagar} MXN`}</span>
         </div>
         {cashback > 0 && (
           <div className="mt-1 flex justify-between text-ink/70">
@@ -301,11 +380,14 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
         )}
       </section>
 
-      {!esPuntos && metodo === 'tarjeta' ? (
+      {!esPuntos && metodoEfectivo === 'tarjeta' ? (
         // Tarjeta in-page: el Brick de MP trae su propio botón de pago.
+        // key: re-monta el Brick si cambia el monto (toggle de puntos).
         <CardBrick
-          amount={producto.precioMXN}
+          key={montoAPagar}
+          amount={montoAPagar}
           productCode={producto.code}
+          usarPuntos={usarPuntos}
           onApproved={() => setPagado(true)}
           onError={(e) => setError(e)}
         />
@@ -316,7 +398,7 @@ export function Checkout({ vm, producto, via }: { vm: DiagnosticoVM; producto: P
           disabled={cargando}
           className="w-full rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
         >
-          {cargando ? 'Procesando…' : esPuntos ? `Usar ${producto.precioMXN} pts` : `Pagar $${producto.precioMXN}`}
+          {cargando ? 'Procesando…' : esPuntos ? `Usar ${producto.precioMXN} pts` : `Pagar $${montoAPagar}`}
         </button>
       )}
       {error && <p className="mt-2 text-center text-sm text-red-600">{error}</p>}

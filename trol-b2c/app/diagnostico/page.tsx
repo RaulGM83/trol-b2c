@@ -4,6 +4,7 @@ import { Diagnostico } from '@/components/Diagnostico';
 import { CalculadoraEspera } from '@/components/CalculadoraEspera';
 import { ReferralClaim } from '@/components/ReferralClaim';
 import { getSesionCliente } from '@/lib/cliente';
+import { getEstadoMision, otorgarBienvenida } from '@/lib/puntos';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,10 +25,19 @@ export default async function DiagnosticoPage() {
     );
   }
 
+  // Gamificación: bono de bienvenida (+20, idempotente, fija etapa >= 1) y
+  // estado de la misión "Activa tu plan" para la UI.
+  let mision = null;
+  let bono = { otorgado: false, puntos: 0 };
+  if (sesion.real) {
+    bono = await otorgarBienvenida();
+    mision = await getEstadoMision();
+  }
+
   return (
     <>
       {claim}
-      <Diagnostico vm={sesion.vm} demo={!sesion.real} />
+      <Diagnostico vm={sesion.vm} demo={!sesion.real} mision={mision} bonoRecienOtorgado={bono.otorgado} />
     </>
   );
 }

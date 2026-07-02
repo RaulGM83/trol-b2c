@@ -18,6 +18,16 @@ export interface Producto {
 }
 
 export const PRODUCTOS: Record<string, Producto> = {
+  ASESORIA_BASICA: {
+    code: 'ASESORIA_BASICA',
+    nombre: 'Asesoría básica',
+    precioMXN: 0,
+    etapa: 3,
+    tipo: 'asesoria',
+    descripcion:
+      'Platica tu caso con un experto en pensiones por WhatsApp: qué significa tu diagnóstico y cuál es tu mejor siguiente paso. Sin costo.',
+    entrega: 'Por WhatsApp, en horario hábil. Sin costo y sin compromiso.',
+  },
   CALCULADORA_ADDON: {
     code: 'CALCULADORA_ADDON',
     nombre: 'Calculadora pro',
@@ -49,8 +59,12 @@ export const PRODUCTOS: Record<string, Producto> = {
   },
 };
 
-/** Productos de asesoría, en orden de oferta. */
-export const ASESORIAS: Producto[] = [PRODUCTOS.DIAGNOSTICO_AVANZADO, PRODUCTOS.DIAGNOSTICO_AVANZADO_SESION];
+/** Productos de asesoría, en orden de oferta (escalera: gratis → $500 → $800). */
+export const ASESORIAS: Producto[] = [
+  PRODUCTOS.ASESORIA_BASICA,
+  PRODUCTOS.DIAGNOSTICO_AVANZADO,
+  PRODUCTOS.DIAGNOSTICO_AVANZADO_SESION,
+];
 
 export function getProducto(code: string | undefined): Producto {
   return (code && PRODUCTOS[code]) || PRODUCTOS.CALCULADORA_ADDON;
@@ -59,4 +73,19 @@ export function getProducto(code: string | undefined): Producto {
 /** Cashback del 10% del valor al contratar (desde el primer producto). No aplica si se desbloqueó con puntos. */
 export function cashbackPuntos(precioMXN: number): number {
   return Math.round(precioMXN * 0.1);
+}
+
+// ============================================================================
+// Pago mixto (puntos + efectivo). Restricciones de Mercado Pago:
+// - SPEI: monto mínimo $100 MXN → si el resto es menor, solo tarjeta.
+// - Tarjeta: mínimo práctico ~$5 MXN → los puntos se capean para dejar resto >= $5.
+// ============================================================================
+export const SPEI_MINIMO_MXN = 100;
+export const TARJETA_MINIMO_MXN = 5;
+
+/** Puntos aplicables a un pago mixto y resto en efectivo resultante. */
+export function calcularMixto(precioMXN: number, saldoPuntos: number): { puntos: number; resto: number; speiDisponible: boolean } {
+  const puntos = Math.max(0, Math.min(saldoPuntos, precioMXN - TARJETA_MINIMO_MXN));
+  const resto = precioMXN - puntos;
+  return { puntos, resto, speiDisponible: resto >= SPEI_MINIMO_MXN };
 }

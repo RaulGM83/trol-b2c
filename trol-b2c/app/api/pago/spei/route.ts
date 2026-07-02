@@ -11,9 +11,11 @@ export async function POST(req: Request) {
   if (!token) return NextResponse.json({ error: 'mp_no_configurado' }, { status: 503 });
 
   let product_code = 'CALCULADORA_ADDON';
+  let usar_puntos = false;
   try {
     const body = await req.json();
     if (body?.product_code) product_code = String(body.product_code);
+    usar_puntos = body?.usar_puntos === true;
   } catch {
     /* default */
   }
@@ -41,12 +43,28 @@ export async function POST(req: Request) {
   const precio = Number(prod?.precio_mxn ?? 0);
   if (!precio) return NextResponse.json({ error: 'producto_invalido' }, { status: 400 });
 
+  // Pago mixto: aplica los puntos del cliente (verificados server-side) y cobra
+  // solo el resto. Los puntos se debitan al confirmarse el pago (webhook →
+  // procesar_pago_orden), nunca antes. SPEI exige un mínimo de $100 en MP.
+  let puntosAplicados = 0;
+  let monto = precio;
+  if (usar_puntos) {
+    const { data: saldoData } = await supabase.rpc('saldo_puntos');
+    const saldo = typeof saldoData === 'number' ? saldoData : 0;
+    puntosAplicados = Math.max(0, Math.min(saldo, precio - 5)); // deja resto cobrable
+    monto = precio - puntosAplicados;
+    if (puntosAplicados > 0 && monto < 100) {
+      return NextResponse.json({ error: 'spei_minimo', resto: monto }, { status: 400 });
+    }
+  }
+
   const { data: orden } = await admin
     .from('ordenes_b2c')
     .insert({
       cliente_id: cliente.id,
       product_code,
-      monto: precio,
+      monto,
+      puntos_aplicados: puntosAplicados,
       unlock_method: 'pago',
       estado: 'pendiente',
       payment_provider: 'mercadopago',
@@ -68,7 +86,7 @@ export async function POST(req: Request) {
       'X-Idempotency-Key': orden.id,
     },
     body: JSON.stringify({
-      transaction_amount: precio,
+      transaction_amount: monto,
       description: product_code,
       payment_method_id: 'clabe',
       external_reference: orden.id,
@@ -95,7 +113,8 @@ export async function POST(req: Request) {
     ok: true,
     payment_id: pago.id,
     estado: pago.status, // pending hasta que llegue la transferencia
-    monto: precio,
+    monto,
+    puntos_aplicados: puntosAplicados,
     referencia: orden.id,
     voucher_url: voucher,
     clabe,

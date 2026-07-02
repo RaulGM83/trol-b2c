@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import type { Producto } from '@/lib/productos';
 import { alcanzaPuntos } from '@/lib/puntos';
+import { WA } from '@/lib/whatsapp';
+import { PuntosChip } from './PuntosChip';
 
 type Item = { producto: Producto; yaTiene: boolean };
 
-/** Hub de asesorías de pago (§6) — Diagnóstico avanzado y +sesión, con desbloqueo dual. */
+/** Hub de asesorías (§6) — escalera: básica gratis → avanzado → +sesión. */
 export function AsesoriaHub({ items, saldoPuntos }: { items: Item[]; saldoPuntos: number }) {
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
@@ -15,17 +17,42 @@ export function AsesoriaHub({ items, saldoPuntos }: { items: Item[]; saldoPuntos
         <Link href="/diagnostico" className="text-xs text-muted hover:underline">
           ← volver a mi diagnóstico
         </Link>
+        <PuntosChip saldo={saldoPuntos} />
       </header>
 
       <h1 className="mb-1 text-2xl font-extrabold tracking-tight">Lleva tu plan más lejos</h1>
       <p className="mb-5 text-sm text-muted">
         Pasa de la estimación a un plan accionable, con un experto en pensiones de tu lado.
+        Empieza gratis.
       </p>
 
       <div className="flex flex-col gap-4">
         {items.map(({ producto, yaTiene }) => {
           const puedePuntos = alcanzaPuntos(saldoPuntos, producto.precioMXN);
           const faltan = Math.max(0, producto.precioMXN - saldoPuntos);
+
+          // Asesoría básica: gratis, por WhatsApp — el primer paso humano.
+          if (producto.precioMXN === 0) {
+            return (
+              <section key={producto.code} className="rounded-2xl border-2 border-lime bg-white p-5">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-lg font-extrabold">{producto.nombre}</h2>
+                  <span className="rounded-full bg-lime px-2.5 py-1 text-xs font-bold text-ink">Gratis</span>
+                </div>
+                <p className="mt-1 text-sm text-muted">{producto.descripcion}</p>
+                <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-ink/50">{producto.entrega}</p>
+                <a
+                  href={WA.asesoriaBasica()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 block rounded-xl bg-[#25D366] px-4 py-3 text-center text-sm font-bold text-white"
+                >
+                  Empezar por WhatsApp
+                </a>
+              </section>
+            );
+          }
+
           return (
             <section key={producto.code} className="rounded-2xl border border-line bg-white p-5">
               <div className="flex items-baseline justify-between">

@@ -13,6 +13,15 @@ export const WA = {
   // Tras pagar la sesión 1:1: el cliente nos pide el horario por WhatsApp.
   agendarSesion: () =>
     waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
+  // Asesoría básica gratuita: el paso humano después del diagnóstico.
+  asesoriaBasica: () =>
+    waLink('Hola, ya vi mi diagnóstico en app.trol.mx y quiero mi asesoría básica gratuita para entender mi mejor siguiente paso.'),
+  // Espera de SPEI: el cliente se lleva la CLABE a su WhatsApp para tenerla a la mano.
+  claveSpei: (clabe: string | null, monto: number, referencia: string) =>
+    waLink(
+      `Hola, estoy pagando por SPEI en El Trol y quiero mis datos a la mano. ` +
+        `Monto: $${monto} MXN.${clabe ? ` CLABE: ${clabe}.` : ''} Referencia: ${referencia.slice(0, 8)}.`,
+    ),
 };
 
 // Calendario externo (Calendly/booking) para auto-agendar la sesión pagada.
