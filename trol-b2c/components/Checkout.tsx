@@ -138,7 +138,11 @@ export function Checkout({
               <div className="text-lg font-bold tracking-wider">{spei.clabe}</div>
             </div>
           )}
-          <div className="mt-3 text-xs text-white/60">Referencia: {spei.referencia.slice(0, 8)}</div>
+          <div className="mt-3 border-t border-white/15 pt-3 text-xs text-white/70">
+            En tu banco el beneficiario aparecerá como <b className="text-white">Mercado Pago</b> (o STP):
+            es nuestro procesador de pagos, es correcto.
+          </div>
+          <div className="mt-2 text-xs text-white/60">Referencia: {spei.referencia.slice(0, 8)}</div>
         </div>
 
         {spei.voucher_url && (
@@ -151,12 +155,18 @@ export function Checkout({
         {/* La CLABE a la mano en su WhatsApp: no se pierde al cambiar de app
             (la mayoría transfiere desde el celular). */}
         <a
-          href={WA.claveSpei(spei.clabe, spei.monto, spei.referencia)}
+          href={WA.claveSpei({
+            clabe: spei.clabe,
+            monto: spei.monto,
+            referencia: spei.referencia,
+            producto: producto.nombre,
+            voucherUrl: spei.voucher_url,
+          })}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-2 block rounded-xl bg-[#25D366] px-4 py-3 text-center text-sm font-bold text-white"
         >
-          Mandarme la CLABE por WhatsApp
+          Mandarme los datos por WhatsApp
         </a>
 
         <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-cream px-4 py-3 text-sm text-ink/80">

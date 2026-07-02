@@ -16,11 +16,25 @@ export const WA = {
   // Asesoría básica gratuita: el paso humano después del diagnóstico.
   asesoriaBasica: () =>
     waLink('Hola, ya vi mi diagnóstico en app.trol.mx y quiero mi asesoría básica gratuita para entender mi mejor siguiente paso.'),
-  // Espera de SPEI: el cliente se lleva la CLABE a su WhatsApp para tenerla a la mano.
-  claveSpei: (clabe: string | null, monto: number, referencia: string) =>
+  // Espera de SPEI: el cliente se lleva los datos completos a su WhatsApp.
+  // Incluye TODO el contexto para que el bot/asesor pueda ayudar: producto,
+  // monto, CLABE, beneficiario (Mercado Pago, el procesador de pagos de El
+  // Trol) y el comprobante con los datos oficiales.
+  claveSpei: (args: {
+    clabe: string | null;
+    monto: number;
+    referencia: string;
+    producto: string;
+    voucherUrl: string | null;
+  }) =>
     waLink(
-      `Hola, estoy pagando por SPEI en El Trol y quiero mis datos a la mano. ` +
-        `Monto: $${monto} MXN.${clabe ? ` CLABE: ${clabe}.` : ''} Referencia: ${referencia.slice(0, 8)}.`,
+      `Hola, estoy pagando "${args.producto}" en El Trol por transferencia SPEI y quiero mis datos a la mano:\n` +
+        `• Monto exacto: $${args.monto} MXN\n` +
+        (args.clabe ? `• CLABE: ${args.clabe}\n` : '') +
+        `• El beneficiario aparecerá como *Mercado Pago* (o STP) — es el procesador de pagos de El Trol, es correcto.\n` +
+        (args.voucherUrl ? `• Ficha oficial con los datos: ${args.voucherUrl}\n` : '') +
+        `• Referencia de mi orden: ${args.referencia.slice(0, 8)}\n` +
+        `Mi acceso se activa solo unos minutos después de transferir.`,
     ),
 };
 

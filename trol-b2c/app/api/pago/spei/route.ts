@@ -99,13 +99,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'mp_error', detail: pago }, { status: 502 });
   }
 
-  // La CLABE/comprobante vive en external_resource_url; intentamos exponer la CLABE si viene.
+  // La CLABE/comprobante vive en external_resource_url; intentamos exponer la
+  // CLABE si viene (varios candidatos según la versión de la API de MP; una
+  // CLABE válida son 18 dígitos).
   const voucher =
     pago?.transaction_details?.external_resource_url ?? pago?.point_of_interaction?.transaction_data?.ticket_url ?? null;
-  const clabe =
-    pago?.transaction_details?.financial_institution ??
-    pago?.point_of_interaction?.transaction_data?.bank_transfer_id ??
-    null;
+  const esClabe = (v: unknown): v is string => typeof v === 'string' && /^\d{18}$/.test(v);
+  const candidatosClabe = [
+    pago?.point_of_interaction?.transaction_data?.clabe,
+    pago?.transaction_details?.payment_method_reference_id,
+    pago?.transaction_details?.financial_institution,
+    pago?.point_of_interaction?.transaction_data?.bank_transfer_id,
+  ];
+  const clabe = candidatosClabe.find(esClabe) ?? null;
 
   await admin.from('ordenes_b2c').update({ payment_ref: String(pago.id) }).eq('id', orden.id);
 
