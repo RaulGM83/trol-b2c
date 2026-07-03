@@ -87,16 +87,21 @@ function calcularConservacion(inp: InputManual, anioHoy: number): ConservacionVM
   };
 }
 
-const UMA_2026 = UMA[2026];
-const TOPE_DIARIO = 25 * UMA_2026; // 25 UMA
-const HOY = new Date(Date.UTC(2026, 5, 15));
+const ANIO_HOY = new Date().getFullYear();
+// Si la tabla aún no tiene el año actual (p. ej. enero antes de actualizarla),
+// usa el último año disponible.
+const anioTabla = (t: Record<number, number>) =>
+  t[ANIO_HOY] != null ? ANIO_HOY : Math.max(...Object.keys(t).map(Number));
+const UMA_HOY = UMA[anioTabla(UMA)];
+const TOPE_DIARIO = 25 * UMA_HOY; // 25 UMA
+const HOY = new Date();
 
 export function estimarDireccional(inp: InputManual): EstimacionVM {
   const ley = inp.anioPrimeraCotizacion < 1997 ? 'Ley73' : 'Ley97';
-  const edadActual = 2026 - inp.anioNacimiento;
+  const edadActual = ANIO_HOY - inp.anioNacimiento;
   const salarioDiario = Math.min(inp.salarioMensual / 30.4, TOPE_DIARIO);
-  const sm = SALARIO_MINIMO[2026];
-  const conservacion = calcularConservacion(inp, 2026);
+  const sm = SALARIO_MINIMO[anioTabla(SALARIO_MINIMO)];
+  const conservacion = calcularConservacion(inp, ANIO_HOY);
   const semanasMinimas = 500; // Ley 73
 
   const perfil = {
@@ -109,11 +114,13 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     status_empleo: inp.sigueCotizando ? ('empleado' as const) : ('desempleado' as const),
     salario_diario_registrado: salarioDiario,
     salario_promedio_250: salarioDiario,
-    ratio_historico_salario_uma: salarioDiario / UMA[2025],
+    ratio_historico_salario_uma: salarioDiario / UMA_HOY,
     semanas: { cotizadas: inp.semanas, descontadas: 0, recuperadas: 0, netas: inp.semanas },
     fechas: {
       primera_cotizacion: `${inp.anioPrimeraCotizacion}-01-01`,
-      ultima_cotizacion_valida: inp.sigueCotizando ? '2026-06-15' : `${inp.anioUltimaCotizacion}-06-15`,
+      ultima_cotizacion_valida: inp.sigueCotizando
+        ? HOY.toISOString().slice(0, 10)
+        : `${inp.anioUltimaCotizacion}-06-15`,
       ultima_cotizacion_mod40: null,
       limite_inscripcion_mod40: null,
       fin_conservacion_derechos: null,

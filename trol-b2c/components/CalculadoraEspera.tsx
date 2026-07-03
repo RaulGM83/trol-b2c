@@ -22,7 +22,7 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
   const [inp, setInp] = useState<InputManual>({
     anioNacimiento: 1965,
     anioPrimeraCotizacion: 1990,
-    anioUltimaCotizacion: 2024,
+    anioUltimaCotizacion: new Date().getFullYear(),
     semanas: 1200,
     salarioMensual: 15000,
     sigueCotizando: true,
@@ -104,7 +104,19 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
       </div>
 
       <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
-        <input type="checkbox" checked={inp.sigueCotizando} onChange={(e) => set('sigueCotizando', e.target.checked)} className="h-4 w-4 accent-lime" />
+        <input
+          type="checkbox"
+          checked={inp.sigueCotizando}
+          onChange={(e) =>
+            setInp((p) => ({
+              ...p,
+              sigueCotizando: e.target.checked,
+              // Si sigue cotizando, la última cotización es el año actual.
+              anioUltimaCotizacion: e.target.checked ? new Date().getFullYear() : p.anioUltimaCotizacion,
+            }))
+          }
+          className="h-4 w-4 accent-lime"
+        />
         Sigo cotizando hoy
       </label>
 
