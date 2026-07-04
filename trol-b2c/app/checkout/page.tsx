@@ -4,6 +4,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Checkout } from '@/components/Checkout';
+import { VerificarTelefono } from '@/components/VerificarTelefono';
+import { createClient } from '@/lib/supabase/server';
 import { getSesionCliente } from '@/lib/cliente';
 import { getProducto } from '@/lib/productos';
 import { getSaldoPuntos } from '@/lib/puntos';
@@ -29,6 +31,24 @@ export default async function CheckoutPage({
   const producto = getProducto(searchParams.p);
   // La asesoría básica es gratis: no pasa por checkout.
   if (producto.precioMXN === 0) redirect('/asesoria');
+
+  // Step-up para sesiones de magic link (entraron sin OTP): antes de pagar o
+  // gastar puntos, el celular se verifica UNA vez por SMS.
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user && !user.phone) {
+    const { data: fila } = await supabase
+      .from('clientes')
+      .select('telefono')
+      .eq('auth_user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+    const tel10 = (fila?.telefono ?? '').replace(/\D/g, '').slice(-10);
+    return <VerificarTelefono telInicial={tel10} />;
+  }
+
   const via = searchParams.via === 'puntos' ? 'puntos' : 'pago';
   const saldoPuntos = await getSaldoPuntos();
   return (
