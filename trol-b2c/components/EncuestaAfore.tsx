@@ -12,6 +12,8 @@ import {
   AHORRO_MENSUAL,
   CONTACTO_CANAL,
   CONTACTO_HORARIO,
+  RANGO_SALDO_AFORE,
+  RANGO_SALDO_INFONAVIT,
 } from '@/lib/afores';
 
 type Prefill = {
@@ -29,9 +31,20 @@ type Prefill = {
   ahorro_mensual?: string;
   contacto_canal?: string;
   contacto_horario?: string;
+  rango_saldo_afore?: string;
+  rango_saldo_infonavit?: string;
+  cotizando_actualmente?: boolean | null;
 };
 
-export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
+export function EncuestaAfore({
+  prefill,
+  volverHref = '/diagnostico',
+}: {
+  prefill?: Prefill;
+  /** A dónde regresar al terminar (p.ej. '/comparativo' si vino del comparativo). */
+  volverHref?: string;
+}) {
+  const vieneDeComparativo = volverHref.startsWith('/comparativo');
   const [afore, setAfore] = useState(prefill?.afore ?? '');
   const [atencion, setAtencion] = useState(prefill?.atencion ?? 0);
   const [asesoria, setAsesoria] = useState(prefill?.asesoria ?? 0);
@@ -47,6 +60,9 @@ export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
   const [ahorro, setAhorro] = useState(prefill?.ahorro_mensual ?? '');
   const [canal, setCanal] = useState(prefill?.contacto_canal ?? '');
   const [horario, setHorario] = useState(prefill?.contacto_horario ?? '');
+  const [rangoAfore, setRangoAfore] = useState(prefill?.rango_saldo_afore ?? '');
+  const [rangoInfonavit, setRangoInfonavit] = useState(prefill?.rango_saldo_infonavit ?? '');
+  const [cotizando, setCotizando] = useState<boolean | null>(prefill?.cotizando_actualmente ?? null);
 
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +92,9 @@ export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
         ahorro_mensual: ahorro || null,
         contacto_canal: canal || null,
         contacto_horario: horario || null,
+        rango_saldo_afore: rangoAfore || null,
+        rango_saldo_infonavit: rangoInfonavit || null,
+        cotizando_actualmente: cotizando,
       },
     });
     setCargando(false);
@@ -106,12 +125,25 @@ export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
           )}
         </div>
         <div className="mt-4 flex flex-col gap-2">
-          <Link href="/mejor-jugada" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
-            Usar mis puntos
-          </Link>
-          <Link href="/diagnostico" className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
-            Volver a mi diagnóstico
-          </Link>
+          {vieneDeComparativo ? (
+            <>
+              <Link href="/comparativo" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
+                Ver dónde queda mi AFORE en mi comparativo →
+              </Link>
+              <Link href="/mejor-jugada" className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
+                Usar mis puntos
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/mejor-jugada" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
+                Usar mis puntos
+              </Link>
+              <Link href={volverHref} className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
+                Volver a mi diagnóstico
+              </Link>
+            </>
+          )}
         </div>
       </main>
     );
@@ -123,7 +155,7 @@ export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
         <span className="text-xl font-extrabold tracking-tight">
           tr<span className="text-lime">o</span>l
         </span>
-        <Link href="/diagnostico" className="text-xs text-muted hover:underline">
+        <Link href={volverHref} className="text-xs text-muted hover:underline">
           ← volver
         </Link>
       </header>
@@ -174,8 +206,22 @@ export function EncuestaAfore({ prefill }: { prefill?: Prefill }) {
       <section className="mt-5 flex flex-col gap-5 rounded-2xl border border-line bg-white p-5">
         <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Tu situación (para personalizar tu plan)</div>
 
+        <SiNo label="¿Estás cotizando al IMSS actualmente?" value={cotizando} onChange={setCotizando} />
         <SiNo label="¿Ya usaste tu crédito Infonavit?" value={infonavit} onChange={setInfonavit} />
         <SiNo label="¿Te interesa conocer productos de ahorro e inversión?" value={interes} onChange={setInteres} />
+
+        <Selector
+          label="¿Cuánto tienes hoy en tu AFORE? (aprox.)"
+          value={rangoAfore}
+          onChange={setRangoAfore}
+          opciones={RANGO_SALDO_AFORE}
+        />
+        <Selector
+          label="¿Y en tu subcuenta Infonavit? (aprox.)"
+          value={rangoInfonavit}
+          onChange={setRangoInfonavit}
+          opciones={RANGO_SALDO_INFONAVIT}
+        />
 
         <Selector label="¿Cuándo planeas pensionarte?" value={horizonte} onChange={setHorizonte} opciones={HORIZONTE_RETIRO} />
         <Selector label="¿Cuál es tu situación laboral hoy?" value={laboral} onChange={setLaboral} opciones={SITUACION_LABORAL} />

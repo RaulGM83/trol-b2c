@@ -7,7 +7,14 @@ import { LEGAL } from '@/lib/legal';
 
 const soloDigitos = (s: string) => s.replace(/\D/g, '');
 
-export function LoginForm({ initialTel = '' }: { initialTel?: string }) {
+export function LoginForm({
+  initialTel = '',
+  next = '/diagnostico',
+}: {
+  initialTel?: string;
+  /** A dónde llevar tras el OTP (p.ej. '/comparativo' para la campaña Compara Afore). */
+  next?: string;
+}) {
   const router = useRouter();
   const supabase = createClient();
   const [paso, setPaso] = useState<'tel' | 'otp'>('tel');
@@ -41,7 +48,7 @@ export function LoginForm({ initialTel = '' }: { initialTel?: string }) {
     // Vincula este login con su ficha de cliente por teléfono (idempotente).
     await supabase.rpc('vincular_cliente_actual');
     setCargando(false);
-    router.push('/diagnostico');
+    router.push(next.startsWith('/') ? next : '/diagnostico');
     router.refresh();
   }
 

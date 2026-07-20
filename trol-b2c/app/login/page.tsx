@@ -4,13 +4,20 @@ import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage({ searchParams }: { searchParams: { tel?: string } }) {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: { tel?: string; next?: string };
+}) {
+  // Destino tras entrar (solo rutas internas).
+  const next = searchParams.next?.startsWith('/') ? searchParams.next : '/diagnostico';
+
   // Si ya hay sesión en este dispositivo, no se pide el código de nuevo.
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect('/diagnostico');
+  if (user) redirect(next);
 
   const telPrefill = (searchParams.tel ?? '').replace(/\D/g, '').slice(-10);
   return (
@@ -24,7 +31,7 @@ export default async function LoginPage({ searchParams }: { searchParams: { tel?
       <p className="mb-6 text-sm text-muted">
         Entra con tu celular y revisa tu diagnóstico. El trámite ante el IMSS es gratis; nunca pedimos anticipos.
       </p>
-      <LoginForm initialTel={telPrefill} />
+      <LoginForm initialTel={telPrefill} next={next} />
     </main>
   );
 }

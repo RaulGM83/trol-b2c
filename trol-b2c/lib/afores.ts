@@ -49,6 +49,29 @@ export const AHORRO_MENSUAL = [
   { v: '3000+', l: 'Más de $3,000' },
 ] as const;
 
+// Rangos de saldo (alineados a waves de campaña y productos: unlock/asesoría
+// para AFORE; Millas/crédito para Infonavit). Se guardan en saldos_declarados
+// y viajan en el aviso al asesor.
+export const RANGO_SALDO_AFORE = [
+  { v: 'no_se', l: 'No sé' },
+  { v: '<100k', l: 'Menos de $100 mil' },
+  { v: '100-250k', l: '$100 – $250 mil' },
+  { v: '250-500k', l: '$250 – $500 mil' },
+  { v: '500k-1m', l: '$500 mil – $1 millón' },
+  { v: '>1m', l: 'Más de $1 millón' },
+] as const;
+
+export const RANGO_SALDO_INFONAVIT = [
+  { v: 'no_se', l: 'No sé' },
+  { v: 'nada', l: 'Nada' },
+  { v: 'ya_lo_use', l: 'Ya lo usé' },
+  { v: '<50k', l: 'Menos de $50 mil' },
+  { v: '50-200k', l: '$50 – $200 mil' },
+  { v: '200-350k', l: '$200 – $350 mil' },
+  { v: '350-500k', l: '$350 – $500 mil' },
+  { v: '>500k', l: 'Más de $500 mil' },
+] as const;
+
 export const CONTACTO_CANAL = [
   { v: 'whatsapp', l: 'WhatsApp' },
   { v: 'llamada', l: 'Llamada' },

@@ -123,6 +123,29 @@ export function Diagnostico({
       {/* Misión gamificada: aquí viven encuesta y referidos, con meta visible */}
       {!demo && mision && <Mision mision={mision} />}
 
+      {/* Herramientas: acceso discreto a lo demás sin saturar el camino principal */}
+      {!demo && (
+        <section className="mt-5">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">Herramientas</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              href="/comparativo"
+              className="rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-ink"
+            >
+              Compara tu AFORE
+              <span className="mt-0.5 block text-[11px] font-normal text-muted">con tu historia real</span>
+            </Link>
+            <Link
+              href="/comparador"
+              className="rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-ink"
+            >
+              Comparador AFOREs
+              <span className="mt-0.5 block text-[11px] font-normal text-muted">todas, con opiniones</span>
+            </Link>
+          </div>
+        </section>
+      )}
+
       <p className="mt-6 text-center text-[11px] leading-relaxed text-muted">
         El trámite ante el IMSS es gratis. El Trol no pide anticipos en efectivo ni garantiza montos.
         <br />Cálculo con el motor oficial de Trol (Ley 73/97 · Modalidad 40).

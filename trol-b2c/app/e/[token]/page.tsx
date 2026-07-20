@@ -18,13 +18,16 @@ export default async function EntradaCampania({
   searchParams: { c?: string };
 }) {
   const campania = (searchParams.c ?? 'reactivacion').slice(0, 40);
+  // Campaña Compara Afore → la experiencia aterriza en /comparativo.
+  const esComparaAfore = campania.startsWith('comparaafore');
+  const destino = esComparaAfore ? '/comparativo' : '/diagnostico';
 
-  // Si ya hay sesión en este dispositivo, directo a su diagnóstico.
+  // Si ya hay sesión en este dispositivo, directo a su destino.
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect('/diagnostico');
+  if (user) redirect(destino);
 
   // Resolver al cliente por id (service role) para prellenar y registrar la apertura.
   let telPrefill = '';
@@ -53,19 +56,32 @@ export default async function EntradaCampania({
         </span>
       </header>
 
-      {/* Aviso de la nueva herramienta */}
-      <div className="mb-5 rounded-2xl bg-lime p-5">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Nuevo en El Trol</div>
-        <h1 className="mt-1 text-xl font-extrabold leading-tight text-ink">
-          {nombre ? `${nombre}, ya puedes ver tu pensión en vivo` : 'Ya puedes ver tu pensión en vivo'}
-        </h1>
-        <p className="mt-1 text-sm text-ink/80">
-          Estrenamos una calculadora interactiva: mueve las palancas (edad, semanas, Modalidad 40, ahorro) y mira
-          cómo cambia tu pensión. Entra con tu celular para ver tu caso actualizado.
-        </p>
-      </div>
+      {/* Aviso según campaña */}
+      {esComparaAfore ? (
+        <div className="mb-5 rounded-2xl bg-lime p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Tu comparativo está listo</div>
+          <h1 className="mt-1 text-xl font-extrabold leading-tight text-ink">
+            {nombre ? `${nombre}, hicimos números con tu historia laboral` : 'Hicimos números con tu historia laboral'}
+          </h1>
+          <p className="mt-1 text-sm text-ink/80">
+            Simulamos tu ahorro para el retiro en cada AFORE, con tus aportaciones reales y los precios históricos de
+            CONSAR. Entra con tu celular para ver tu comparativo personalizado.
+          </p>
+        </div>
+      ) : (
+        <div className="mb-5 rounded-2xl bg-lime p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Nuevo en El Trol</div>
+          <h1 className="mt-1 text-xl font-extrabold leading-tight text-ink">
+            {nombre ? `${nombre}, ya puedes ver tu pensión en vivo` : 'Ya puedes ver tu pensión en vivo'}
+          </h1>
+          <p className="mt-1 text-sm text-ink/80">
+            Estrenamos una calculadora interactiva: mueve las palancas (edad, semanas, Modalidad 40, ahorro) y mira
+            cómo cambia tu pensión. Entra con tu celular para ver tu caso actualizado.
+          </p>
+        </div>
+      )}
 
-      <LoginForm initialTel={telPrefill} />
+      <LoginForm initialTel={telPrefill} next={destino} />
 
       <p className="mt-6 text-center text-[11px] leading-relaxed text-muted">
         El trámite ante el IMSS es gratis; nunca pedimos anticipos. Entras con un código que te enviamos por SMS.

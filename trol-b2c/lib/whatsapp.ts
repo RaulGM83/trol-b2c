@@ -16,6 +16,17 @@ export const WA = {
   // Asesoría básica gratuita: el paso humano después del diagnóstico.
   asesoriaBasica: () =>
     waLink('Hola, ya vi mi diagnóstico en app.trol.mx y quiero mi asesoría básica gratuita para entender mi mejor siguiente paso.'),
+  // Compara Afore — unlock v1: el cliente manda su estado de cuenta por chat y
+  // el equipo captura el saldo manualmente (el parser automático es F2).
+  comparaAfore: () =>
+    waLink(
+      'Hola, vi mi comparativo de AFORE en app.trol.mx y quiero el siguiente paso: comparar contra mi saldo real (les mando mi estado de cuenta), localizar mi AFORE o actualizar mis datos.',
+    ),
+  // Traspaso a SURA (aliado): la conversión estrella del comparativo.
+  traspasoSura: () =>
+    waLink(
+      'Hola, vi mi comparativo de AFORE en app.trol.mx y quiero cambiarme a SURA. ¿Me ayudan con el trámite?',
+    ),
   // Espera de SPEI: el cliente se lleva los datos completos a su WhatsApp.
   // Incluye TODO el contexto para que el bot/asesor pueda ayudar: producto,
   // monto, CLABE, beneficiario (Mercado Pago, el procesador de pagos de El

@@ -5,7 +5,13 @@ import { EncuestaAfore } from '@/components/EncuestaAfore';
 
 export const dynamic = 'force-dynamic';
 
-export default async function EncuestaPage() {
+export default async function EncuestaPage({
+  searchParams,
+}: {
+  searchParams: { volver?: string };
+}) {
+  // Regreso contextual: quien llega desde el comparativo vuelve a él al terminar.
+  const volverHref = searchParams.volver === 'comparativo' ? '/comparativo' : '/diagnostico';
   const supabase = createClient();
   const {
     data: { user },
@@ -26,7 +32,7 @@ export default async function EncuestaPage() {
   const { data: prev } = await supabase
     .from('encuesta_afore')
     .select(
-      'afore, atencion, asesoria, recomendaria, comentario, infonavit_usado, interes_ahorro, estado, situacion_pensional, horizonte_retiro, situacion_laboral, ahorro_mensual, contacto_canal, contacto_horario',
+      'afore, atencion, asesoria, recomendaria, comentario, infonavit_usado, interes_ahorro, estado, situacion_pensional, horizonte_retiro, situacion_laboral, ahorro_mensual, contacto_canal, contacto_horario, rango_saldo_afore, rango_saldo_infonavit, cotizando_actualmente',
     )
     .maybeSingle();
 
@@ -46,8 +52,11 @@ export default async function EncuestaPage() {
         ahorro_mensual: prev.ahorro_mensual ?? undefined,
         contacto_canal: prev.contacto_canal ?? undefined,
         contacto_horario: prev.contacto_horario ?? undefined,
+        rango_saldo_afore: prev.rango_saldo_afore ?? undefined,
+        rango_saldo_infonavit: prev.rango_saldo_infonavit ?? undefined,
+        cotizando_actualmente: prev.cotizando_actualmente,
       }
     : undefined;
 
-  return <EncuestaAfore prefill={prefill} />;
+  return <EncuestaAfore prefill={prefill} volverHref={volverHref} />;
 }
