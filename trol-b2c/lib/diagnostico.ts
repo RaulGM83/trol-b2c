@@ -13,10 +13,18 @@
 
 import { computeLey73 } from '@trol/pension-core';
 import { computeLey97 } from '@trol/pension-core';
+import { computeTransicion } from '@trol/pension-core';
 import { computeProyectoMod40 } from '@trol/pension-core';
 import { parseSemillaV2, type SemillaV2 } from '@trol/pension-core/semilla';
 import { UMA } from '@trol/pension-core/tablas';
-import type { EntradaCalculo, Palancas } from '@trol/pension-core/types';
+import type {
+  EntradaCalculo,
+  EstatusPension,
+  Palancas,
+  RazonNegativa73,
+  RazonNegativa97,
+  SalidaNegativa97,
+} from '@trol/pension-core/types';
 
 export interface MejorJugada {
   titulo: string;
@@ -45,6 +53,26 @@ export interface DiagnosticoVM {
   pensionHoy: number | null;
   escenarioMaximo: { monto: number | null; edad: number };
   mejorJugada: MejorJugada | null;
+  /**
+   * Estatus del escenario BASE ("tu pensión hoy"), vocabulario compartido
+   * `escenario_base_status`. Cuando no es 'viable' el front NO debe pintar
+   * campo de monto: la negativa es un resultado, no un dato que falte.
+   */
+  status: EstatusPension;
+  /** Ley 97: razón y salida (Art. 154). */
+  razon97: RazonNegativa97 | null;
+  salida: SalidaNegativa97 | null;
+  /** Ley 73: razón (semanas y/o conservación de derechos, Art. 150/151). */
+  razon73: RazonNegativa73 | null;
+  /** Ley 73: monto si el único obstáculo es la conservación y la reactiva. */
+  pensionSiReactiva: number | null;
+  /**
+   * Régimen bajo el que se pensionaría. Un transición que perdió conservación
+   * cae a 'Ley97' si alcanza el umbral de semanas de su año de retiro.
+   */
+  regimenEfectivo: 'Ley73' | 'Ley97' | 'ninguno';
+  /** Ley 97: true si el escenario máximo SÍ alcanza (palanca: seguir cotizando). */
+  reversibleCotizando: boolean;
 }
 
 const UMA_2026 = UMA[2026];
@@ -78,14 +106,18 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
   const base = (p: Palancas): EntradaCalculo => ({ perfil, saldos, salario_60m, palancas: p, hoy });
 
   if (perfil.ley === 'Ley73') {
-    // Pensión "hoy": retiro a la edad mínima, sin estrategia.
-    const rHoy = computeLey73(base(palancas({ edadRetiro: 60 })));
+    // Pensión "hoy": retiro a la edad mínima, sin estrategia. Se resuelve por
+    // transición: si perdió la conservación de derechos, la Ley 73 no está
+    // disponible y la ruta que le queda es la Ley 97 con su saldo AFORE.
+    const tHoy = computeTransicion(base(palancas({ edadRetiro: 60 })));
+    const rHoy = tHoy.ley73;
     const edadActual = Math.floor(rHoy.detalle.edadActual);
+    const pierdeConservacion = !!rHoy.razon?.pierdeConservacion;
 
     let mejorJugada: MejorJugada;
     let escenarioMaximoMonto: number | null;
 
-    const proy = perfil.aplica_mod40
+    const proy = perfil.aplica_mod40 && !pierdeConservacion
       ? computeProyectoMod40(base(palancas({ edadRetiro: EDAD_PROYECTO, recuperarSemanasDescontadas: true })))
       : null;
 
@@ -107,14 +139,20 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
           : `Tras crédito y retroactivo, pondrías ~${money(Math.abs(proy.efectivo.resultado))} de tu bolsa. Puedes bajar el costo cotizando a menos UMAs en la calculadora.`,
       };
     } else {
-      // Sin Mod 40: recuperar semanas + cotizar al tope hasta 65.
+      // Sin Mod 40: recuperar semanas + cotizar al tope hasta 65. Cotizar
+      // también REACTIVA los derechos perdidos (Art. 151), así que este mismo
+      // escenario es la palanca para quien los perdió.
       const rMax = computeLey73(
         base(palancas({ edadRetiro: EDAD_PROYECTO, pctTiempoCotizando: 1, recuperarSemanasDescontadas: true })),
       );
       const recuperables = semanasRecuperables(perfil);
       escenarioMaximoMonto = rMax.pensionMensual;
       mejorJugada = {
-        titulo: recuperables > 0 ? 'Recuperar semanas y cotizar' : 'Seguir cotizando al tope',
+        titulo: pierdeConservacion
+          ? 'Reactivar tus derechos cotizando'
+          : recuperables > 0
+            ? 'Recuperar semanas y cotizar'
+            : 'Seguir cotizando al tope',
         de: rHoy.pensionMensual,
         a: rMax.pensionMensual,
         deltaMensual:
@@ -126,8 +164,9 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
         costoProyecto: Math.round(rMax.costoTotal),
         efectivoCliente: null,
         seAutofinancia: false,
-        nota:
-          recuperables > 0
+        nota: pierdeConservacion
+          ? `Volviendo a cotizar ${rHoy.razon!.semanasParaReactivar} semanas recuperas tus derechos de Ley 73, y si sigues hasta los ${EDAD_PROYECTO} cotizas al tope.`
+          : recuperables > 0
             ? `Recuperas ${recuperables} semanas descontadas y cotizas hasta los ${EDAD_PROYECTO}.`
             : `Cotizas al tope (25 UMA) hasta los ${EDAD_PROYECTO}.`,
       };
@@ -139,9 +178,18 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
       edadActual,
       semanas: perfil.semanas.netas,
       conservaDerechos: perfil.conserva_derechos,
-      pensionHoy: rHoy.pensionMensual,
+      // Si cayó a Ley 97 por perder conservación, el monto "hoy" es el de esa
+      // ruta, no el de una Ley 73 que no está disponible.
+      pensionHoy: tHoy.pensionMensual,
       escenarioMaximo: { monto: escenarioMaximoMonto, edad: EDAD_PROYECTO },
       mejorJugada,
+      status: tHoy.status,
+      razon97: tHoy.ley97Alterna?.razon ?? null,
+      salida: tHoy.ley97Alterna?.salida ?? null,
+      razon73: rHoy.razon,
+      pensionSiReactiva: rHoy.pensionSiReactiva,
+      regimenEfectivo: tHoy.regimenEfectivo,
+      reversibleCotizando: escenarioMaximoMonto != null,
     };
   }
 
@@ -154,6 +202,29 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
   const de = rHoy.pensionAfore;
   const a = rMax.pensionAfore;
 
+  // Con negativa en el escenario base, la jugada NO es "aporta más a tu AFORE":
+  // más saldo no compra semanas. La palanca es seguir cotizando (Modalidad
+  // 10/40) hasta alcanzar las que exige su año de retiro.
+  const negativaHoy = rHoy.status === 'negativa';
+  const reversibleCotizando = rMax.status === 'viable';
+  const faltan = rHoy.razon?.semanasFaltantes ?? 0;
+
+  const jugadaNegativa: MejorJugada = {
+    titulo: reversibleCotizando
+      ? 'Completar tus semanas (Modalidad 10 o 40)'
+      : 'Revisar tu caso con un asesor',
+    de,
+    a,
+    deltaMensual: null,
+    multiplicador: null,
+    costoProyecto: null,
+    efectivoCliente: null,
+    seAutofinancia: false,
+    nota: reversibleCotizando
+      ? `Hoy te faltan ${faltan.toLocaleString('es-MX')} semanas y el IMSS te negaría la pensión. Si sigues cotizando hasta los ${EDAD_PROYECTO} las completas y sí te pensionas: ahí es donde cambia tu caso.`
+      : `Te faltan ${faltan.toLocaleString('es-MX')} semanas y, cotizando hasta los ${EDAD_PROYECTO}, todavía no alcanzarías el mínimo. Vale la pena revisar tu caso: puede haber semanas no reconocidas o periodos que sí cuentan.`,
+  };
+
   return {
     nombre: perfil.nombre,
     ley: 'Ley97',
@@ -162,17 +233,26 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
     conservaDerechos: perfil.conserva_derechos,
     pensionHoy: de,
     escenarioMaximo: { monto: a, edad: EDAD_PROYECTO },
-    mejorJugada: {
-      titulo: 'Seguir aportando (AFORE / PPR)',
-      de,
-      a,
-      deltaMensual: de != null && a != null ? Math.round(a - de) : null,
-      multiplicador: de ? (a ?? 0) / de : null,
-      costoProyecto: null,
-      efectivoCliente: null,
-      seAutofinancia: false,
-      nota: 'Asegúrate de estar en una de las mejores AFOREs y complementa tu pensión con ahorro (PPR).',
-    },
+    status: rHoy.status,
+    razon97: rHoy.razon,
+    salida: rHoy.salida,
+    razon73: null,
+    pensionSiReactiva: null,
+    regimenEfectivo: rHoy.status === 'viable' ? 'Ley97' : 'ninguno',
+    reversibleCotizando,
+    mejorJugada: negativaHoy
+      ? jugadaNegativa
+      : {
+          titulo: 'Seguir aportando (AFORE / PPR)',
+          de,
+          a,
+          deltaMensual: de != null && a != null ? Math.round(a - de) : null,
+          multiplicador: de ? (a ?? 0) / de : null,
+          costoProyecto: null,
+          efectivoCliente: null,
+          seAutofinancia: false,
+          nota: 'Asegúrate de estar en una de las mejores AFOREs y complementa tu pensión con ahorro (PPR).',
+        },
   };
 }
 

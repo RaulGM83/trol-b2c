@@ -1,0 +1,407 @@
+{
+  "name": "CDA validateCapacity (Millas para el Retiro) - batch",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Consulta CDA -> cda_validaciones\n\nValida capacidad de aportacion (validateCapacity) por CURP contra el API de Millas para el Retiro y guarda cada resultado en cda_validaciones. La vista vista_cda_oportunidades segmenta: habilitado / asesor (false y RCV>=$300k) / modulo / sin_consultar.\n\n**Variables requeridas en n8n:**\n- $vars: SUPABASE_SERVICE_KEY, CDA_USER, CDA_PASSWORD (URLs van fijas en los nodos)\n\n**Piloto vs barrido:** en el nodo Config, n=100 para piloto; n=15000 para la base completa (~12,800 CURPs, ~6 h con throttle de 1.5 s). El RPC curps_para_cda solo regresa CURPs sin resultado vigente (TTL 60 dias), asi que se puede re-correr sin duplicar.\n\nToken: se renueva al inicio de cada lote de 400 CURPs (vigencia oficial 1 h). Errores por CURP no detienen la corrida: se guardan con can_receive=null y el mensaje de error.\n\n**v2 (31-jul):** el API regreso 429 (rate limit) en el primer piloto con 400 ms. Ahora: 1 request cada 1.5 s + 3 reintentos con 5 s de espera. Si el proximo piloto sale limpio, se puede probar bajar el intervalo; si vuelve a haber 429, subirlo. Los fallidos quedan con status null y curps_para_cda los vuelve a tomar en la siguiente corrida.",
+        "height": 540,
+        "width": 460
+      },
+      "id": "ca7292c3-32e0-4af1-ab33-6349dcf5c89c",
+      "name": "Instrucciones",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7bf4a02c-a279-4979-999e-e37b77cdf8a9",
+      "name": "Ejecutar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n-param",
+              "name": "n",
+              "value": 100,
+              "type": "number"
+            },
+            {
+              "id": "ttl-param",
+              "name": "ttl_dias",
+              "value": 60,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1fd5821-e93a-470c-b266-2b43ede56d2e",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/rpc/curps_para_cda",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ n: $json.n, ttl_dias: $json.ttl_dias }) }}",
+        "options": {}
+      },
+      "id": "7c96e5ea-3f52-4ab8-b5e7-c8531656eefb",
+      "name": "CURPs pendientes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 400,
+        "options": {}
+      },
+      "id": "aeb81281-08ea-4c50-9470-6c662df3e7d9",
+      "name": "Lote de CURPs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        672,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api-core-production.millasparaelretiro.com/inquire/v1/token/generateToken",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user: $vars.CDA_USER, password: $vars.CDA_PASSWORD }) }}",
+        "options": {
+          "timeout": 35000
+        }
+      },
+      "id": "fc78b6d9-30c8-4c4d-99ac-7cdd5d31e637",
+      "name": "Token CDA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        880,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Re-emite las CURPs del lote actual (el nodo Token colapsa el flujo a 1 item).\nreturn $('Lote de CURPs').all();"
+      },
+      "id": "73a66fd6-cce6-4488-b280-b8f727c5fa42",
+      "name": "Preparar lote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api-core-production.millasparaelretiro.com/inquire/v1/contribution/validateCapacity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization-pc",
+              "value": "=Bearer-PC {{ $('Token CDA').first().json.model.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ curp: $json.curp }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 35000
+        }
+      },
+      "id": "36ccdc92-712b-4b11-abb6-f5a8df1ac64c",
+      "name": "Validar capacidad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        592
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une la respuesta del API con la CURP original (mismo orden del lote)\n// y arma las filas para cda_validaciones.\nconst originales = $('Preparar lote').all();\nconst respuestas = $input.all();\nconst rows = respuestas.map((it, i) => {\n  const o = originales[i] ? originales[i].json : {};\n  const j = it.json || {};\n  const ok = j.status === 200 && j.model && typeof j.model.canReceiveContributions === 'boolean';\n  return {\n    cliente_id: o.cliente_id || null,\n    curp: o.curp,\n    can_receive: ok ? j.model.canReceiveContributions : null,\n    status: (j.status !== undefined && j.status !== null) ? j.status : null,\n    message: j.message || (j.error ? String(j.error.message || j.error) : null),\n    fuente: 'batch'\n  };\n});\nconst resumen = {\n  lote: rows.length,\n  si_puede: rows.filter(r => r.can_receive === true).length,\n  no_puede: rows.filter(r => r.can_receive === false).length,\n  errores: rows.filter(r => r.can_receive === null).length\n};\nreturn [{ json: { rows, resumen } }];"
+      },
+      "id": "9cabc085-104a-45e5-b461-ef99f9571502",
+      "name": "Construir filas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/cda_validaciones",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {
+          "timeout": 35000
+        }
+      },
+      "id": "46eaaf44-e28c-4f44-b6fe-3152ef62ec80",
+      "name": "Guardar en cda_validaciones",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/rpc/resumen_cda",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {}
+      },
+      "id": "d97331d1-debb-4306-b5b5-35592bca003d",
+      "name": "Resumen de segmentos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "executeOnce": true,
+      "position": [
+        880,
+        352
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Ejecutar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "CURPs pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CURPs pendientes": {
+      "main": [
+        [
+          {
+            "node": "Lote de CURPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lote de CURPs": {
+      "main": [
+        [
+          {
+            "node": "Resumen de segmentos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Token CDA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token CDA": {
+      "main": [
+        [
+          {
+            "node": "Preparar lote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar lote": {
+      "main": [
+        [
+          {
+            "node": "Validar capacidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar capacidad": {
+      "main": [
+        [
+          {
+            "node": "Construir filas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir filas": {
+      "main": [
+        [
+          {
+            "node": "Guardar en cda_validaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en cda_validaciones": {
+      "main": [
+        [
+          {
+            "node": "Lote de CURPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ae15c992-11e8-423b-b7cf-4fdde87a1200",
+  "meta": {
+    "instanceId": "5a3a31f3035b66c47c1d1dbba0bc9edea33f6009f5bdeadf4b64978cf207b067"
+  },
+  "nodeGroups": [],
+  "id": "haYdcPika5NWnLwv",
+  "tags": []
+}

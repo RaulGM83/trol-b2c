@@ -5,9 +5,13 @@ import { WA } from '@/lib/whatsapp';
 import { Stepper } from './Stepper';
 import { Mision } from './Mision';
 import { PuntosChip } from './PuntosChip';
+import { NegativaPension } from './NegativaPension';
+import { NegativaLey73 } from './NegativaLey73';
 
+// Solo se llama en escenarios viables: una negativa nunca llega aquí, se
+// renderiza como resultado. El '—' es para huecos genuinos de dato.
 const money = (n: number | null) =>
-  n == null ? 'N/A' : '$' + Math.round(n).toLocaleString('es-MX');
+  n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX');
 
 // Pantalla 1 — Diagnóstico. Un solo camino: la mejor jugada se INSINÚA aquí
 // (título + multiplicador) y el detalle completo vive en /mejor-jugada. Lo
@@ -57,18 +61,52 @@ export function Diagnostico({
         {vm.edadActual} años · {vm.semanas.toLocaleString('es-MX')} semanas
       </p>
 
-      {/* Pensión hoy + escenario máximo */}
-      <section className="mb-4 rounded-2xl bg-ink p-5 text-white">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-lime">
-          Tu pensión estimada hoy
+      {/* Pensión hoy + escenario máximo. Con negativa NO se pinta campo de
+          monto: se pinta el resultado (badge + razón + salida). */}
+      {vm.status !== 'viable' && vm.razon73 ? (
+        <div className="mb-4">
+          <NegativaLey73
+            razon={vm.razon73}
+            pensionSiReactiva={vm.pensionSiReactiva}
+            regimenEfectivo={vm.regimenEfectivo}
+            pensionLey97={vm.pensionHoy}
+            edadProyecto={vm.escenarioMaximo.edad}
+          />
+          {vm.escenarioMaximo.monto != null && (
+            <div className="mt-2 rounded-xl bg-ink px-4 py-3 text-sm text-white/80">
+              Reactivando y cotizando hasta los {vm.escenarioMaximo.edad}:{' '}
+              <b className="text-lime">{money(vm.escenarioMaximo.monto)}</b> al mes
+            </div>
+          )}
         </div>
-        <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(vm.pensionHoy)}</div>
-        <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/70">
-          Escenario máximo:{' '}
-          <b className="text-white">{money(vm.escenarioMaximo.monto)}</b> a los{' '}
-          {vm.escenarioMaximo.edad} años
+      ) : vm.status === 'negativa' ? (
+        <div className="mb-4">
+          <NegativaPension
+            razon={vm.razon97}
+            salida={vm.salida}
+            reversibleCotizando={vm.reversibleCotizando}
+            edadProyecto={vm.escenarioMaximo.edad}
+          />
+          {vm.escenarioMaximo.monto != null && (
+            <div className="mt-2 rounded-xl bg-ink px-4 py-3 text-sm text-white/80">
+              Si completas tus semanas cotizando hasta los {vm.escenarioMaximo.edad}:{' '}
+              <b className="text-lime">{money(vm.escenarioMaximo.monto)}</b> al mes
+            </div>
+          )}
         </div>
-      </section>
+      ) : (
+        <section className="mb-4 rounded-2xl bg-ink p-5 text-white">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-lime">
+            Tu pensión estimada hoy
+          </div>
+          <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(vm.pensionHoy)}</div>
+          <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/70">
+            Escenario máximo:{' '}
+            <b className="text-white">{money(vm.escenarioMaximo.monto)}</b> a los{' '}
+            {vm.escenarioMaximo.edad} años
+          </div>
+        </section>
+      )}
 
       {/* Conserva derechos — solo aplica a Ley 73 */}
       {vm.ley === 'Ley73' && (

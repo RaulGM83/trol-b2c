@@ -1,0 +1,49 @@
+{
+  "name": "BAJA → lista no contactar (Supabase)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "baja-whatsapp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-620, -40],
+      "id": "wh-baja-0001",
+      "name": "Webhook BAJA (Tako)",
+      "webhookId": "baja-whatsapp",
+      "notes": "Lo llama la automatización de Tako cuando un cliente responde BAJA. Payload real: body = { nombre, apellido, mobil, conversationId }. Tako ya filtró la palabra BAJA — aquí no se filtra nada, solo se registra."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/rpc/registrar_baja",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "REEMPLAZA_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer REEMPLAZA_SERVICE_ROLE_KEY" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_telefono: ($json.body?.mobil ?? $json.body?.phone ?? $json.mobil ?? '').toString(), p_detalle: ('BAJA vía Tako · ' + (($json.body?.nombre ?? '') + ' ' + ($json.body?.apellido ?? '')).trim() + ' · conv ' + ($json.body?.conversationId ?? '')).toString().slice(0, 200) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-380, -40],
+      "id": "http-baja-0003",
+      "name": "Registrar en no_contactar",
+      "notes": "RPC registrar_baja: normaliza a 10 dígitos, liga al cliente si existe y hace upsert en no_contactar. Idempotente — repetir BAJA no duplica. Todas las vistas de campaña excluyen esta lista automáticamente."
+    }
+  ],
+  "connections": {
+    "Webhook BAJA (Tako)": { "main": [[{ "node": "Registrar en no_contactar", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,90 @@
+{
+  "name": "Avisos asesor — encuesta AFORE",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 5 }]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-660, -60],
+      "id": "sched-avisos-0001",
+      "name": "Cada 5 min"
+    },
+    {
+      "parameters": {
+        "url": "https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/vista_avisos_asesor_pendientes",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "select", "value": "*" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "REEMPLAZA_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer REEMPLAZA_SERVICE_ROLE_KEY" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-440, -60],
+      "id": "http-avisos-0002",
+      "name": "Avisos pendientes",
+      "notes": "GET a la vista: ya viene ordenada (prioridad alta primero). Si no hay pendientes, el flujo termina aquí. Pega el service_role key en los 2 headers (o usa tu credencial de Supabase existente)."
+    },
+    {
+      "parameters": {
+        "sendTo": "lacoachmoni@trol.mx, veronica@trol.mx, andrea@trol.mx",
+        "subject": "={{ ($json.prioridad === 'alta' ? '🔴' : '🔔') + ' Encuesta AFORE: ' + ($json.payload.nombre || 'cliente') + ' (' + $json.payload.afore + ') — prioridad ' + $json.prioridad }}",
+        "emailType": "text",
+        "message": "={{ 'Cliente: ' + ($json.payload.nombre || '—') + '\\nTeléfono: ' + ($json.payload.telefono || '—') + '\\nEvento: ' + $json.payload.evento + '\\n\\nAFORE: ' + $json.payload.afore + '\\nRecomendaría: ' + ($json.payload.recomendaria ?? '—') + '/10 · Atención: ' + ($json.payload.atencion ?? '—') + '★ · Asesoría: ' + ($json.payload.asesoria ?? '—') + '★\\n\\nRetiro: ' + ($json.payload.horizonte_retiro || '—') + ' · Laboral: ' + ($json.payload.situacion_laboral || '—') + ' · Ahorro/mes: ' + ($json.payload.ahorro_mensual || '—') + '\\n¿Interés en ahorro/inversión?: ' + ($json.payload.interes_ahorro === true ? 'SÍ ✅' : $json.payload.interes_ahorro === false ? 'no' : '—') + ' · ¿Usó Infonavit?: ' + ($json.payload.infonavit_usado === true ? 'sí' : $json.payload.infonavit_usado === false ? 'no' : '—') + '\\nEstado: ' + ($json.payload.estado || '—') + '\\n\\n📞 CONTACTAR POR: ' + ($json.payload.contacto_canal || 'no indicó') + ' · Horario: ' + ($json.payload.contacto_horario || 'no indicó') + '\\n\\n💬 Comentario: ' + ($json.payload.comentario || '—') + '\\n📝 Situación pensional: ' + ($json.payload.situacion_pensional || '—') + '\\n\\n💰 Saldo RCV97 (ref): ' + ($json.payload.saldo_rcv97_ref ? '$' + Math.round($json.payload.saldo_rcv97_ref).toLocaleString('es-MX') : '—') + ($json.payload.contrafactual ? '\\n📊 Su comparativo: top $' + Math.round($json.payload.contrafactual.canasta_superior_prom).toLocaleString('es-MX') + ' vs mediana $' + Math.round($json.payload.contrafactual.mediana_sistema).toLocaleString('es-MX') + ' · brecha top-baja $' + Math.round($json.payload.contrafactual.brecha_top_vs_baja).toLocaleString('es-MX') + (($json.payload.contrafactual.flag_publicable === false) ? ' · ⚠ no publicable (historia incompleta)' : '') : '\\n📊 Sin comparativo calculado aún') + '\\n\\nFicha: cliente_id ' + $json.payload.cliente_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-200, -60],
+      "id": "gmail-avisos-0003",
+      "name": "Email a asesoras",
+      "webhookId": "",
+      "credentials": {},
+      "notes": "Conecta tu credencial de Gmail (o cambia este nodo por SMTP / por el nodo HTTP de Tako si prefieren el aviso por WhatsApp interno)."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/avisos_asesor?id=eq.' + $('Avisos pendientes').item.json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "REEMPLAZA_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer REEMPLAZA_SERVICE_ROLE_KEY" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ status: 'enviado', sent_at: $now.toISO() }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [40, -60],
+      "id": "http-avisos-0004",
+      "name": "Marcar enviado",
+      "notes": "Solo se marca si el email salió (va después del nodo de envío). Si falla el envío, el aviso queda pendiente y se reintenta al siguiente ciclo."
+    }
+  ],
+  "connections": {
+    "Cada 5 min": { "main": [[{ "node": "Avisos pendientes", "type": "main", "index": 0 }]] },
+    "Avisos pendientes": { "main": [[{ "node": "Email a asesoras", "type": "main", "index": 0 }]] },
+    "Email a asesoras": { "main": [[{ "node": "Marcar enviado", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { computeLey73 } from '../ley73';
 import { computeLey97 } from '../ley97';
 import { computeProyectoMod40 } from '../mod40-proyecto';
+import { computeTransicion } from '../transicion';
 import type { EntradaCalculo, Palancas } from '../types';
 import { HOY_EXCEL, perfilMoja, saldosMoja, salario60mMoja } from './fixture-moja';
 
@@ -91,6 +92,118 @@ describe('Ley 73 (hoja Calculadora 73)', () => {
   });
 });
 
+// La Ley 73 pide DOS cosas: 500 semanas y conservación de derechos vigente
+// (Art. 150). El motor solo miraba las semanas.
+describe('Ley 73 — conservación de derechos (Art. 150/151)', () => {
+  // Perfil con semanas de sobra (1583 netas) pero sin conservación vigente.
+  const sinConservacion = (gap_meses: number) => ({
+    ...perfilMoja,
+    conserva_derechos: false,
+    gap_meses,
+  });
+  const sinCotizarMas = { ...palancasExcel73, pctTiempoCotizando: 0 as const };
+
+  it('pierde conservación y no cotiza más → negativa_sin_reactivacion', () => {
+    const r = computeLey73({ ...base, perfil: sinConservacion(120), palancas: sinCotizarMas });
+
+    expect(r.status).toBe('negativa_sin_reactivacion');
+    expect(r.negativa).toBe(true);
+    expect(r.pensionMensual).toBeNull();
+    // Le sobran semanas: el bloqueo es SOLO la conservación.
+    expect(r.razon!.faltanSemanas).toBe(false);
+    expect(r.razon!.pierdeConservacion).toBe(true);
+    // Y sabemos cuánto le tocaría si reactiva.
+    expect(r.pensionSiReactiva).not.toBeNull();
+    expect(r.pensionSiReactiva!).toBeGreaterThan(0);
+  });
+
+  it('Art. 151: las semanas para reactivar dependen del gap', () => {
+    // Fracc. I — interrupción ≤ 3 años: reconocimiento inmediato al reingresar.
+    expect(
+      computeLey73({ ...base, perfil: sinConservacion(30), palancas: sinCotizarMas }).razon!
+        .semanasParaReactivar,
+    ).toBe(0);
+    // Fracc. II — > 3 y ≤ 6 años: 26 semanas.
+    expect(
+      computeLey73({ ...base, perfil: sinConservacion(60), palancas: sinCotizarMas }).razon!
+        .semanasParaReactivar,
+    ).toBe(26);
+    // Fracc. III — > 6 años: 52 semanas.
+    expect(
+      computeLey73({ ...base, perfil: sinConservacion(120), palancas: sinCotizarMas }).razon!
+        .semanasParaReactivar,
+    ).toBe(52);
+  });
+
+  it('cotizar hasta el retiro reactiva y devuelve la Ley 73', () => {
+    // pct=1 con retiro a los 65 cubre de sobra las 52 semanas del Art. 151.
+    const r = computeLey73({
+      ...base,
+      perfil: sinConservacion(120),
+      palancas: { ...palancasExcel73, pctTiempoCotizando: 1, edadRetiro: 65 },
+    });
+    expect(r.status).toBe('viable');
+    expect(r.pensionMensual).not.toBeNull();
+    expect(r.pensionSiReactiva).toBeNull(); // ya no aplica: no hay obstáculo
+  });
+
+  it('faltan semanas → negativa, no negativa_sin_reactivacion', () => {
+    // Reactivar no resuelve un caso al que le faltan semanas.
+    const r = computeLey73({
+      ...base,
+      perfil: { ...perfilMoja, semanas: { cotizadas: 300, descontadas: 0, recuperadas: 0, netas: 300 } },
+      palancas: { ...sinCotizarMas, recuperarSemanasDescontadas: false, recuperarSemanasMod40Retro: false },
+    });
+    expect(r.status).toBe('negativa');
+    expect(r.razon!.faltanSemanas).toBe(true);
+    expect(r.razon!.pierdeConservacion).toBe(false);
+    expect(r.pensionSiReactiva).toBeNull();
+  });
+});
+
+describe('Transición: Ley 73 caída → Ley 97', () => {
+  const sinCotizarMas = { ...palancasExcel73, pctTiempoCotizando: 0 as const };
+
+  it('sin conservación pero con semanas Ley 97 → se pensiona por Ley 97', () => {
+    const r = computeTransicion({
+      ...base,
+      perfil: { ...perfilMoja, conserva_derechos: false, gap_meses: 120 },
+      palancas: sinCotizarMas,
+    });
+    // 1583 semanas > 875 del umbral 2026.
+    expect(r.regimenEfectivo).toBe('Ley97');
+    expect(r.status).toBe('negativa_sin_reactivacion'); // la Ley 73 sigue recuperable
+    expect(r.pensionMensual).not.toBeNull();
+    expect(r.ley97Alterna!.status).toBe('viable');
+    expect(r.ley73.status).toBe('negativa_sin_reactivacion');
+  });
+
+  it('sin conservación y sin semanas Ley 97 → no se pensiona', () => {
+    const r = computeTransicion({
+      ...base,
+      perfil: {
+        ...perfilMoja,
+        conserva_derechos: false,
+        gap_meses: 120,
+        semanas: { cotizadas: 600, descontadas: 0, recuperadas: 0, netas: 600 },
+      },
+      palancas: { ...sinCotizarMas, recuperarSemanasDescontadas: false, recuperarSemanasMod40Retro: false },
+    });
+    // 600 alcanza las 500 de Ley 73 pero no las 875 de Ley 97 en 2026.
+    expect(r.ley73.razon!.faltanSemanas).toBe(false);
+    expect(r.ley97Alterna!.status).toBe('negativa');
+    expect(r.regimenEfectivo).toBe('ninguno');
+    expect(r.pensionMensual).toBeNull();
+  });
+
+  it('con conservación vigente no se evalúa la ruta alterna', () => {
+    const r = computeTransicion({ ...base, palancas: sinCotizarMas });
+    expect(r.regimenEfectivo).toBe('Ley73');
+    expect(r.ley97Alterna).toBeNull();
+    expect(r.status).toBe('viable');
+  });
+});
+
 describe('Ley 97 (hoja Calculadora 97)', () => {
   const r = computeLey97({
     ...base,
@@ -112,6 +225,60 @@ describe('Ley 97 (hoja Calculadora 97)', () => {
   it('pensiones (K22/K23)', () => {
     cerca(r.pensionAfore!, 9548.25556);
     cerca(r.pensionAforeInfonavit!, 9548.25556);
+  });
+
+  it('escenario viable: sin razón ni salida de negativa', () => {
+    expect(r.status).toBe('viable');
+    expect(r.razon).toBeNull();
+    expect(r.salida).toBeNull();
+  });
+
+  it('negativa: estatus explícito, con razón y salida (no un monto vacío)', () => {
+    const r2 = computeLey97({
+      ...base,
+      perfil: {
+        ...perfilMoja,
+        semanas: { cotizadas: 300, descontadas: 0, recuperadas: 0, netas: 300 },
+      },
+      palancas: {
+        ...palancasExcel73,
+        salarioMod40: 2829,
+        pctTiempoCotizando: 0,
+        recuperarSemanasDescontadas: false,
+      },
+    });
+
+    expect(r2.status).toBe('negativa');
+    expect(r2.negativa).toBe(true);
+    expect(r2.pensionAfore).toBeNull();
+
+    // La razón se compara contra el umbral de SU año de retiro (tabla por año),
+    // nunca contra un 1000 fijo.
+    expect(r2.razon).not.toBeNull();
+    expect(r2.razon!.semanasRequeridas).toBe(r2.detalle.semanasMinimasPMG);
+    expect(r2.razon!.semanasActuales).toBe(300);
+    expect(r2.razon!.semanasAlRetiro).toBe(300); // pct=0 → sin cotización futura
+    expect(r2.razon!.semanasFaltantes).toBe(r2.detalle.semanasMinimasPMG - 300);
+    expect(r2.razon!.anioRetiro).toBe(r2.detalle.fechaRetiro.getUTCFullYear());
+
+    // La salida es dinero real: lo que se lleva si acepta la negativa.
+    expect(r2.salida).not.toBeNull();
+    expect(r2.salida!.retiroUnaExhibicion).toBe(r2.detalle.saldoAforeProyectado);
+    expect(r2.salida!.devolucionVivienda).toBe(r2.detalle.saldoInfonavitProyectado);
+    expect(r2.salida!.total).toBeGreaterThan(0);
+    expect(r2.salida!.semanasFaltantes).toBe(r2.razon!.semanasFaltantes);
+  });
+
+  it('el umbral de semanas sale de la tabla por año de retiro, no de un 1000 fijo', () => {
+    // Mismo perfil, retiros distintos → umbrales distintos (750→1000 por la
+    // reforma 2020). Si estuviera hardcodeado, ambos darían el mismo número.
+    const joven = computeLey97({
+      ...base,
+      perfil: { ...perfilMoja, fecha_nacimiento: '1980-06-08' },
+      palancas: { ...palancasExcel73, edadRetiro: 65 },
+    });
+    expect(joven.detalle.semanasMinimasPMG).toBe(1000); // retiro 2045 → tope
+    expect(r.detalle.semanasMinimasPMG).toBe(875); // retiro 2026
   });
 
   it('crédito Infonavit anula el saldo Infonavit', () => {

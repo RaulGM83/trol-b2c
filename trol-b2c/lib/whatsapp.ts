@@ -10,9 +10,25 @@ export const WA = {
   agendar: () => waLink('Hola, quiero agendar una asesoría de pensión con El Trol.'),
   hoja: () =>
     waLink('Hola, no pudieron traer mi historial del IMSS. Les envío mi Reporte de Semanas Cotizadas para mi diagnóstico de pensión.'),
+  // Alta de prospecto nuevo (/alta): no hubo búsqueda fallida que reportar,
+  // simplemente prefiere mandar su constancia en vez de dar su CURP.
+  altaConstancia: () =>
+    waLink('Hola, me estoy registrando en El Trol y prefiero enviarles mi Reporte de Semanas Cotizadas en vez de mi CURP para que armen mi diagnóstico de pensión.'),
   // Tras pagar la sesión 1:1: el cliente nos pide el horario por WhatsApp.
   agendarSesion: () =>
     waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
+  // Negativa de pensión Ley 97: el caso NO es autoservicio. Necesita asesor
+  // para revisar semanas no reconocidas y armar la ruta de Modalidad 10/40.
+  negativaLey97: () =>
+    waLink(
+      'Hola, vi en app.trol.mx que con mis semanas actuales el IMSS me negaría la pensión (Ley 97). Quiero revisar mi caso: cuántas semanas me faltan, si hay periodos que no me están contando y cómo completarlas con Modalidad 10 o 40.',
+    ),
+  // Negativa Ley 73: casi siempre es conservación de derechos (Art. 150/151),
+  // que se resuelve reactivando. Requiere asesor para armar la ruta.
+  negativaLey73: () =>
+    waLink(
+      'Hola, vi en app.trol.mx que hoy no podría pensionarme por Ley 73. Quiero revisar mi caso: si es por semanas o por conservación de derechos, cuánto tengo que cotizar para reactivarlos y qué me conviene más.',
+    ),
   // Asesoría básica gratuita: el paso humano después del diagnóstico.
   asesoriaBasica: () =>
     waLink('Hola, ya vi mi diagnóstico en app.trol.mx y quiero mi asesoría básica gratuita para entender mi mejor siguiente paso.'),

@@ -14,7 +14,13 @@ import {
   SALARIO_MINIMO,
   UMA,
 } from './tablas';
-import type { DesgloseRetro, EntradaCalculo, ResultadoLey73 } from './types';
+import type {
+  DesgloseRetro,
+  EntradaCalculo,
+  EstatusPension73,
+  RazonNegativa73,
+  ResultadoLey73,
+} from './types';
 import {
   addDias,
   addMeses,
@@ -128,17 +134,42 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     (mesesPasados * smPasado + mesesFuturos * smFuturo + mesesRetroSal * smRetro) / 60; // K12 (÷60 en el Excel)
   const factorSalarial = Math.max(1, salarioCot250 / salarioMin250); // K13
 
+  // ---- Conservación de derechos (Art. 150/151 LSS) ----
+  // Segundo requisito, independiente de las semanas: quien dejó de cotizar
+  // conserva sus derechos por 1/4 del tiempo cubierto; vencido ese plazo no
+  // puede pensionarse por Ley 73 hasta REACTIVAR con nuevas cotizaciones.
+  const gapMeses = Math.max(0, perfil.gap_meses);
+  // Art. 151: I ≤3 años → reconocimiento inmediato al reingresar; II >3 y ≤6
+  // años → 26 semanas; III >6 años → 52 semanas.
+  const semanasParaReactivar = perfil.conserva_derechos
+    ? 0
+    : gapMeses <= 36
+      ? 0
+      : gapMeses <= 72
+        ? 26
+        : 52;
+  // Reactivar exige REINGRESAR al régimen: incluso en la fracc. I (0 semanas
+  // extra) el reconocimiento ocurre "al momento de la reinscripción". Con
+  // pct=0 no vuelve a cotizar, así que no reactiva aunque el gap sea corto.
+  const semanasFuturas = (diasEntre(hoy, fechaRetiro) * pct) / 7;
+  const reactiva =
+    perfil.conserva_derechos || (pct > 0 && semanasFuturas >= semanasParaReactivar);
+  const pierdeConservacion = !reactiva;
+
   // ---- Pensión (D38..D43) ----
-  const negativa = !(semanasRetiro > 500);
+  const faltanSemanas = !(semanasRetiro > 500);
+  const negativa = faltanSemanas || pierdeConservacion;
   const [, cuantia, incremento] = lookupAprox(
     factorSalarial,
     CUANTIAS_LEY73 as Array<[number, number, number]>,
   );
-  const cuantiaBasica = negativa ? 0 : cuantia * salarioCot250 * 365 * 1.11; // D38
+  // El CÁLCULO solo depende de las semanas; la conservación se aplica al final,
+  // para poder decirle cuánto le tocaría si reactiva.
+  const cuantiaBasica = faltanSemanas ? 0 : cuantia * salarioCot250 * 365 * 1.11; // D38
   const bloques = (semanasRetiro - 500) / 52;
   const fraccion = (bloques - Math.trunc(bloques)) * 52;
   const [, extra] = lookupAprox(fraccion, REDONDEO_INCREMENTO as Array<[number, number]>);
-  const incrementos = negativa
+  const incrementos = faltanSemanas
     ? 0
     : incremento * salarioCot250 * 365 * 1.11 * (Math.trunc(bloques) + extra); // D39
   const asignaciones = (cuantiaBasica + incrementos) * 0.15; // D40
@@ -152,9 +183,14 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       ? porAnio(PMG_LEY73, ultimaCot.getUTCFullYear())
       : porAnio(PMG_LEY73, fechaRetiro.getUTCFullYear()); // K16
   const pensionMaxima = porAnio(UMA, anioHoy) * 25 * DIAS_MES_PENSION; // K17
-  const pensionMensual = negativa
+  // D43. Monto que le corresponde por semanas y salario, antes del filtro de
+  // conservación: es lo que vería si reactiva sus derechos.
+  const montoPorSemanas = faltanSemanas
     ? null
-    : round(Math.min(pensionMaxima, Math.max(pensionCalculada, pensionMinima)), -2); // D43
+    : round(Math.min(pensionMaxima, Math.max(pensionCalculada, pensionMinima)), -2);
+  const pensionMensual = negativa ? null : montoPorSemanas;
+  // Solo tiene sentido ofrecerlo cuando la conservación es el ÚNICO obstáculo.
+  const pensionSiReactiva = pierdeConservacion && !faltanSemanas ? montoPorSemanas : null;
 
   // ---- Costo Mod40 retroactivo (P/Q/R → D47..D49) ----
   let retro: DesgloseRetro | null = null;
@@ -225,10 +261,35 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const advertenciaConservacion =
     !perfil.conserva_derechos && diasEntre(hoy, fechaRetiro) < 365; // D44
 
+  // `negativa_sin_reactivacion` = sería negativa MIENTRAS no reactive. Si el
+  // bloqueo son las semanas (y no la conservación), reactivar no lo resuelve.
+  const status: EstatusPension73 = !negativa
+    ? 'viable'
+    : pierdeConservacion
+      ? 'negativa_sin_reactivacion'
+      : 'negativa';
+
+  const razon: RazonNegativa73 | null = negativa
+    ? {
+        faltanSemanas,
+        pierdeConservacion,
+        semanasActuales: Math.round(semanasVigentes),
+        semanasAlRetiro: Math.round(semanasRetiro),
+        semanasRequeridas: 500,
+        semanasFaltantes: Math.max(0, Math.ceil(500 - semanasRetiro)),
+        gapMeses,
+        semanasParaReactivar,
+        finConservacion: perfil.fechas.fin_conservacion_derechos,
+      }
+    : null;
+
   return {
     ley: 'Ley73',
     pensionMensual,
+    status,
     negativa,
+    razon,
+    pensionSiReactiva,
     detalle: {
       edadActual,
       fechaRetiro,

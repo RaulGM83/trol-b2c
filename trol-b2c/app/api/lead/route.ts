@@ -13,6 +13,10 @@ export async function POST(req: Request) {
   const correo = String(body.correo ?? '').trim();
   const telefono = soloDigitos(String(body.telefono ?? '')).slice(-10);
   const origen = String(body.origen ?? 'calcula').slice(0, 40);
+  // /alta sí captura el nombre; /calcula no (queda ''), como hasta ahora.
+  const nombreCompleto = String(body.nombre ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  const [nombre = '', ...resto] = nombreCompleto ? nombreCompleto.split(' ') : [];
+  const apellido = resto.join(' ');
   const campania = String(body.campania ?? 'tako').slice(0, 40);
   const referrer = body.referrer ? String(body.referrer).slice(0, 64) : undefined;
 
@@ -44,8 +48,8 @@ export async function POST(req: Request) {
         curp,
         correo,
         mobil: telefono,
-        nombre: '',
-        apellido: '',
+        nombre,
+        apellido,
         entry_channel,
         conversationId: `web-${campania}`,
         status: 'nuevo',
