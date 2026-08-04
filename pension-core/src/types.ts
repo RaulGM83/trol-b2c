@@ -93,11 +93,48 @@ export interface DesgloseRetro {
   total: number;
 }
 
+/**
+ * Por qué se negó en Ley 73. Son DOS requisitos independientes: llegar a 500
+ * semanas y tener vigente la conservación de derechos (Art. 150 LSS). El motor
+ * solo miraba las semanas, así que quien perdió la conservación veía un monto
+ * que sin reactivar no le corresponde.
+ */
+export interface RazonNegativa73 {
+  /** No llega a las 500 semanas al retiro. */
+  faltanSemanas: boolean;
+  /** Perdió la conservación de derechos y no la reactiva en este escenario. */
+  pierdeConservacion: boolean;
+  semanasActuales: number;
+  semanasAlRetiro: number;
+  /** 500 (Art. 162 LSS 73). */
+  semanasRequeridas: number;
+  semanasFaltantes: number;
+  /** Meses transcurridos desde la última cotización. */
+  gapMeses: number;
+  /**
+   * Art. 151 LSS: semanas de NUEVAS cotizaciones para recuperar las anteriores.
+   * 0 si la interrupción no excede 3 años (fracc. I, reconocimiento inmediato);
+   * 26 si excede 3 pero no 6 (fracc. II); 52 si excede 6 (fracc. III).
+   */
+  semanasParaReactivar: number;
+  /** Fin del periodo de conservación (Art. 150), si la semilla lo trae. */
+  finConservacion: string | null;
+}
+
 export interface ResultadoLey73 {
   ley: 'Ley73';
   /** Pensión mensual (null = negativa de pensión). */
   pensionMensual: number | null;
+  status: EstatusPension73;
+  /** Derivado de `status`; se conserva por compatibilidad. */
   negativa: boolean;
+  /** Solo cuando status !== 'viable'. */
+  razon: RazonNegativa73 | null;
+  /**
+   * Monto que le tocaría si el ÚNICO obstáculo es la conservación y la
+   * reactiva. null cuando además le faltan semanas o ya es viable.
+   */
+  pensionSiReactiva: number | null;
   /** Detalle del cálculo (para mostrar el "cómo"). */
   detalle: {
     edadActual: number;
@@ -126,12 +163,68 @@ export interface ResultadoLey73 {
   costoTotal: number;
 }
 
+/**
+ * Estatus del escenario. La negativa NO es un valor faltante: es un resultado,
+ * y el front debe pintarla como tal en vez de dejar el monto vacío.
+ * Vocabulario alineado con `escenario_base_status` de HubSpot
+ * (`con_pension` ≡ `viable`; `sin_dato` no se emite desde el motor).
+ *
+ *  · viable                    → se pensiona.
+ *  · negativa                  → no se pensiona y reactivar derechos no es el
+ *                                bloqueo (le faltan semanas).
+ *  · negativa_sin_reactivacion → sería negativa MIENTRAS no reactive sus
+ *                                derechos (Art. 150/151 LSS). Solo Ley 73.
+ */
+export type EstatusPension = 'viable' | 'negativa' | 'negativa_sin_reactivacion';
+
+/** Ley 97 no emite `negativa_sin_reactivacion` (la conservación es Ley 73). */
+export type EstatusPension97 = Extract<EstatusPension, 'viable' | 'negativa'>;
+
+/** Ley 73 puede emitir los tres. */
+export type EstatusPension73 = EstatusPension;
+
+/** Por qué se negó: lo que tiene contra lo que exige SU año de retiro. */
+export interface RazonNegativa97 {
+  anioRetiro: number;
+  /** Semanas que ya tiene (netas de descuentos). */
+  semanasActuales: number;
+  /** Semanas proyectadas a la fecha de retiro (incluye cotización futura). */
+  semanasAlRetiro: number;
+  /** Umbral del año de retiro (tabla 2021→750 … 2031→1000). */
+  semanasRequeridas: number;
+  semanasFaltantes: number;
+}
+
+/**
+ * Qué pasa con su dinero cuando hay negativa (Art. 154 LSS): no se pensiona,
+ * pero retira lo acumulado. La palanca para revertirlo es seguir cotizando
+ * (Modalidad 10/40) hasta alcanzar las semanas.
+ */
+export interface SalidaNegativa97 {
+  /** Subcuenta RCV en una sola exhibición. */
+  retiroUnaExhibicion: number;
+  /** Devolución de la subcuenta de vivienda (0 si hay crédito vigente). */
+  devolucionVivienda: number;
+  /** Ahorro voluntario, disponible en cualquier caso. */
+  ahorroVoluntario: number;
+  /** Total que se lleva si acepta la negativa. */
+  total: number;
+  /** Semanas que le faltan para revertirla cotizando. */
+  semanasFaltantes: number;
+}
+
 export interface ResultadoLey97 {
   ley: 'Ley97';
   pensionAfore: number | null;
   pensionAforeInfonavit: number | null;
   pensionTotal: number | null; // + ahorro voluntario
+  status: EstatusPension97;
+  /** Derivado de `status`; se conserva por compatibilidad. */
   negativa: boolean;
+  /** Solo cuando status === 'negativa'. */
+  razon: RazonNegativa97 | null;
+  /** Solo cuando status === 'negativa'. */
+  salida: SalidaNegativa97 | null;
   detalle: {
     edadActual: number;
     fechaRetiro: Date;

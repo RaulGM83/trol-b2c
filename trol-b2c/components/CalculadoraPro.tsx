@@ -8,6 +8,7 @@ import type { SemillaV2 } from '@trol/pension-core/semilla';
 import type { EntradaCalculo, Palancas, ResultadoLey73, ResultadoLey97 } from '@trol/pension-core/types';
 import { WA } from '@/lib/whatsapp';
 import { Stepper } from './Stepper';
+import { BadgeNegativa } from './NegativaPension';
 
 const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
 const UMA_2026 = UMA[2026];
@@ -59,9 +60,13 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
     },
   });
   const pension97 = (r: ResultadoLey97) => (incluirInfonavit ? r.pensionAforeInfonavit : r.pensionAfore);
-  const pensionDe = (edad: number): number | null => {
-    if (esLey73) return computeLey73(mk(edad)).pensionMensual;
-    return pension97(computeLey97(mk(edad)));
+  const pensionDe = (edad: number): { pension: number | null; negativa: boolean } => {
+    if (esLey73) {
+      const r = computeLey73(mk(edad));
+      return { pension: r.pensionMensual, negativa: r.status !== 'viable' };
+    }
+    const r = computeLey97(mk(edad));
+    return { pension: pension97(r), negativa: r.status === 'negativa' };
   };
 
   const edades = useMemo(() => {
@@ -92,7 +97,7 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
     : 0;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const barrido = useMemo(() => edades.map((e) => ({ edad: e, pension: pensionDe(e) })), [edades, pct, umas, recuperar, mod40retro, overrides, incluirInfonavit]);
+  const barrido = useMemo(() => edades.map((e) => ({ edad: e, ...pensionDe(e) })), [edades, pct, umas, recuperar, mod40retro, overrides, incluirInfonavit]);
 
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
@@ -110,13 +115,84 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         {esLey73 ? 'Ley 73' : 'Ley 97'} · {Math.floor(edadActual)} años · {perfil.semanas.netas.toLocaleString('es-MX')} semanas
       </p>
 
-      {/* Resultado */}
+      {/* Resultado. Con negativa no hay monto que pintar: el resultado ES la
+          negativa, y aquí se ve en vivo cómo las palancas la revierten. */}
       <section className="rounded-2xl bg-ink p-5 text-white">
         <div className="text-[11px] font-bold uppercase tracking-wide text-lime">
           {esLey97 ? (incluirInfonavit ? 'Pensión mensual (AFORE + Infonavit)' : 'Pensión mensual (AFORE)') : 'Pensión mensual'}
         </div>
-        <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(pension)}</div>
-        <div className="mt-1 text-sm text-white/70">al retirarte a los {edadRetiro} años</div>
+        {r73?.status !== undefined && r73.status !== 'viable' ? (
+          <>
+            <div className="mt-2">
+              <BadgeNegativa tono="oscuro" />
+            </div>
+            <div className="mt-2 text-lg font-extrabold leading-tight">
+              {r73.razon!.pierdeConservacion && !r73.razon!.faltanSemanas
+                ? 'Tienes las semanas, pero tus derechos están suspendidos.'
+                : `A los ${edadRetiro} años el IMSS no te otorgaría pensión.`}
+            </div>
+            <div className="mt-1 text-sm text-white/70">
+              {r73.razon!.faltanSemanas && (
+                <>
+                  Llegarías con {r73.razon!.semanasAlRetiro.toLocaleString('es-MX')} de las{' '}
+                  {r73.razon!.semanasRequeridas} semanas de Ley 73:{' '}
+                  <b className="text-amber-300">
+                    te faltan {r73.razon!.semanasFaltantes.toLocaleString('es-MX')}
+                  </b>
+                  .{' '}
+                </>
+              )}
+              {r73.razon!.pierdeConservacion && (
+                <>
+                  Llevas {Math.round(r73.razon!.gapMeses / 12)} años sin cotizar, así que necesitas{' '}
+                  <b className="text-amber-300">
+                    {r73.razon!.semanasParaReactivar === 0
+                      ? 'volver a cotizar'
+                      : `${r73.razon!.semanasParaReactivar} semanas de nuevas cotizaciones`}
+                  </b>{' '}
+                  para reactivar tus derechos.{' '}
+                </>
+              )}
+              Sube el tiempo cotizando para verlo cambiar.
+            </div>
+            {r73.pensionSiReactiva != null && (
+              <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
+                Si reactivas, tu pensión sería{' '}
+                <b className="text-lime">{money(r73.pensionSiReactiva)}</b> al mes.
+              </div>
+            )}
+          </>
+        ) : r97?.status === 'negativa' ? (
+          <>
+            <div className="mt-2">
+              <BadgeNegativa tono="oscuro" />
+            </div>
+            <div className="mt-2 text-lg font-extrabold leading-tight">
+              A los {edadRetiro} años el IMSS no te otorgaría pensión.
+            </div>
+            {r97.razon && (
+              <div className="mt-1 text-sm text-white/70">
+                Llegarías con {r97.razon.semanasAlRetiro.toLocaleString('es-MX')} semanas y tu retiro en{' '}
+                {r97.razon.anioRetiro} pide {r97.razon.semanasRequeridas.toLocaleString('es-MX')}:{' '}
+                <b className="text-amber-300">
+                  te faltan {r97.razon.semanasFaltantes.toLocaleString('es-MX')}
+                </b>
+                . Sube la edad de retiro o el tiempo cotizando para verlo cambiar.
+              </div>
+            )}
+            {r97.salida && (
+              <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
+                Te entregarían <b className="text-white">{money(r97.salida.total)}</b> en una sola
+                exhibición (AFORE + devolución de vivienda).
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(pension)}</div>
+            <div className="mt-1 text-sm text-white/70">al retirarte a los {edadRetiro} años</div>
+          </>
+        )}
         {esLey73 && costo > 0 && (
           <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/80">
             Costo de la estrategia: <b className="text-white">{money(costo)}</b>
@@ -244,7 +320,10 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
             {barrido.map((b) => (
               <tr key={b.edad} className={`border-t border-line ${b.edad === edadRetiro ? 'bg-lime/10' : ''}`}>
                 <td className="px-4 py-2.5 text-ink/70">{b.edad} años</td>
-                <td className="px-4 py-2.5 text-right font-bold">{money(b.pension)}</td>
+                <td className="px-4 py-2.5 text-right font-bold">
+                  {/* Fila sin pensión por negativa: se etiqueta, no se deja vacía. */}
+                  {b.negativa ? <BadgeNegativa /> : money(b.pension)}
+                </td>
               </tr>
             ))}
           </tbody>

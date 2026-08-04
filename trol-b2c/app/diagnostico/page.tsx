@@ -1,5 +1,6 @@
 // Pantalla 1 del Incremento 0 — Diagnóstico.
 // Lee la semilla real del cliente autenticado (Llave 1); fallback a demo.
+import { redirect } from 'next/navigation';
 import { Diagnostico } from '@/components/Diagnostico';
 import { CalculadoraEspera } from '@/components/CalculadoraEspera';
 import { ReferralClaim } from '@/components/ReferralClaim';
@@ -11,19 +12,14 @@ export const dynamic = 'force-dynamic';
 export default async function DiagnosticoPage() {
   const sesion = await getSesionCliente();
 
-  // Si llegó por un link de referido y ya tiene sesión, registra/otorga puntos.
-  const claim = sesion.autenticado ? <ReferralClaim /> : null;
+  // Nunca lo hemos visto (referido, tráfico nuevo): el default es REGISTRO.
+  // Nunca "no encontramos tu información" — ese copy exige un identificador
+  // real que hayamos buscado, y aquí no hay ninguno.
+  if (sesion.motivo === 'no_match') redirect('/alta');
 
-  // Autenticado pero aún sin semilla (sin SISEC): calculadora de espera
-  // (estimación manual con el mismo motor, sin depender del historial).
-  if (!sesion.vm) {
-    return (
-      <>
-        {claim}
-        <CalculadoraEspera />
-      </>
-    );
-  }
+  // Cliente nuestro pero aún sin semilla (sin SISEC): calculadora de espera
+  // (estimación manual con el mismo motor) + ruta de constancia.
+  if (!sesion.vm) return <CalculadoraEspera />;
 
   // Gamificación: bono de bienvenida (+20, idempotente, fija etapa >= 1) y
   // estado de la misión "Activa tu plan" para la UI.
@@ -36,7 +32,11 @@ export default async function DiagnosticoPage() {
 
   return (
     <>
-      {claim}
+      {/* Anti-fraude: el crédito del referido se otorga al llegar a etapa 1
+          (diagnóstico REAL), igual que el bono de bienvenida. Antes bastaba con
+          estar autenticado, así que la pantalla de espera —sin semilla y sin
+          etapa 1— ya disparaba los +100/+50. */}
+      {sesion.real && <ReferralClaim />}
       <Diagnostico vm={sesion.vm} demo={!sesion.real} mision={mision} bonoRecienOtorgado={bono.otorgado} />
     </>
   );

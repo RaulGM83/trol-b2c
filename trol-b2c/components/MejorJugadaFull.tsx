@@ -5,8 +5,10 @@ import type { Producto } from '@/lib/productos';
 import { WA } from '@/lib/whatsapp';
 import { Stepper } from './Stepper';
 import { PuntosChip } from './PuntosChip';
+import { NegativaPension } from './NegativaPension';
+import { NegativaLey73 } from './NegativaLey73';
 
-const money = (n: number | null) => (n == null ? 'N/A' : '$' + Math.round(n).toLocaleString('es-MX'));
+const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
 
 /** Pantalla 2 del Inc 0 — Mejor jugada completa + desbloqueo (puntos primero). */
 export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: { vm: DiagnosticoVM; producto: Producto; saldoPuntos: number; yaTiene?: boolean }) {
@@ -33,7 +35,42 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
 
       <h1 className="mb-1 text-2xl font-extrabold tracking-tight">Tu mejor jugada</h1>
 
-      {j && (
+      {/* Con negativa el "de X a Y" no aplica: el punto de partida no es un
+          monto bajo, es que no hay pensión. Se pinta el resultado completo. */}
+      {vm.status !== 'viable' && vm.razon73 && (
+        <div className="mb-5">
+          <NegativaLey73
+            razon={vm.razon73}
+            pensionSiReactiva={vm.pensionSiReactiva}
+            regimenEfectivo={vm.regimenEfectivo}
+            pensionLey97={vm.pensionHoy}
+            edadProyecto={vm.escenarioMaximo.edad}
+          />
+        </div>
+      )}
+
+      {vm.status === 'negativa' && !vm.razon73 && (
+        <div className="mb-5">
+          <NegativaPension
+            razon={vm.razon97}
+            salida={vm.salida}
+            reversibleCotizando={vm.reversibleCotizando}
+            edadProyecto={vm.escenarioMaximo.edad}
+          />
+        </div>
+      )}
+
+      {/* Con negativa el "de X a Y" no aplica, pero la jugada sí: es el único
+          lugar donde se explica POR QUÉ es Modalidad 10/40 y no aportar más. */}
+      {j && vm.status !== 'viable' && (
+        <section className="mb-5 rounded-2xl bg-lime p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Tu mejor jugada</div>
+          <div className="mt-1 text-lg font-extrabold text-ink">{j.titulo}</div>
+          <p className="mt-1 text-sm text-ink/80">{j.nota}</p>
+        </section>
+      )}
+
+      {j && vm.status === 'viable' && (
         <section className="mb-5 rounded-2xl bg-ink p-5 text-white">
           <div className="text-[11px] font-bold uppercase tracking-wide text-lime">{j.titulo}</div>
           <div className="mt-1 text-3xl font-extrabold tracking-tight">

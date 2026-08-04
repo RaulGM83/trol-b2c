@@ -13,7 +13,13 @@ import {
   UMA,
   URV,
 } from './tablas';
-import type { EntradaCalculo, ResultadoLey97 } from './types';
+import type {
+  EntradaCalculo,
+  EstatusPension97,
+  RazonNegativa97,
+  ResultadoLey97,
+  SalidaNegativa97,
+} from './types';
 import {
   addDias,
   addMeses,
@@ -140,12 +146,43 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     : Math.max(((saldoAfore + saldoInfonavit) / urv) * FACTOR_RETIRO / 12, pmg); // K23
   const pensionTotal = negativa ? null : pensionAforeInfonavit! + saldoAV / urv / 12; // K24
 
+  // La negativa es un RESULTADO, no un dato faltante: se acompaña de su razón
+  // (semanas que tiene vs. las que exige su año de retiro) y de su salida
+  // (Art. 154 LSS: retiro en una sola exhibición + devolución de vivienda).
+  const status: EstatusPension97 = negativa ? 'negativa' : 'viable';
+  // Las faltantes se derivan de las semanas YA REDONDEADAS que se muestran, no
+  // del float: semanasRetiro pasa por meses y regresa (×7/30.4 ×30.4/7), y el
+  // residuo hacía que "862 de 1,000" reportara 139 faltantes en vez de 138.
+  const semanasAlRetiro = Math.round(semanasRetiro);
+  const semanasFaltantes = Math.max(0, semanasMinimasPMG - semanasAlRetiro);
+  const razon: RazonNegativa97 | null = negativa
+    ? {
+        anioRetiro: fechaRetiro.getUTCFullYear(),
+        semanasActuales: Math.round(semanasCalculo),
+        semanasAlRetiro,
+        semanasRequeridas: semanasMinimasPMG,
+        semanasFaltantes,
+      }
+    : null;
+  const salida: SalidaNegativa97 | null = negativa
+    ? {
+        retiroUnaExhibicion: saldoAfore,
+        devolucionVivienda: saldoInfonavit, // ya viene en 0 si hay crédito vigente
+        ahorroVoluntario: saldoAV,
+        total: saldoAfore + saldoInfonavit + saldoAV,
+        semanasFaltantes,
+      }
+    : null;
+
   return {
     ley: 'Ley97',
     pensionAfore,
     pensionAforeInfonavit,
     pensionTotal,
+    status,
     negativa,
+    razon,
+    salida,
     detalle: {
       edadActual,
       fechaRetiro,

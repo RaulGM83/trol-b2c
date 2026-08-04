@@ -14,6 +14,8 @@ export interface EmpleoHistorial {
   salario_base: number | null
   registro_patronal: string | null
   entidad_federativa: string | null
+  /** Salario al inicio del empleo (Belvo initial_salary), si viene. */
+  salario_inicial?: number | null
 }
 
 function str(v: unknown): string | null {
@@ -54,6 +56,7 @@ function fromBelvo(raw: unknown): EmpleoHistorial[] | null {
     salario_base: numOrNull(e?.base_salary),
     registro_patronal: str(e?.registro_patronal),
     entidad_federativa: str(e?.entidad_federativa),
+    salario_inicial: numOrNull(e?.initial_salary),
   }))
 }
 

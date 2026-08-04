@@ -18,8 +18,19 @@ export interface SesionCliente {
   /** true si el VM viene de la semilla real del cliente; false si es la demo. */
   real: boolean;
   vm: DiagnosticoVM | null;
-  /** Motivo cuando no hay VM real (sin sesión / sin match / semilla v1 o hueca). */
-  motivo?: 'sin_sesion' | 'sin_match' | 'semilla_invalida';
+  /**
+   * Motivo cuando no hay VM real. `no_match` y `match_sin_historia` son estados
+   * DISTINTOS y no deben colapsarse: el primero es un desconocido (referido,
+   * tráfico nuevo) cuyo default es REGISTRO; el segundo es un cliente nuestro
+   * que sí existe y al que le pedimos su constancia de semanas cotizadas.
+   *  · sin_sesion         → visitante anónimo → demo pública.
+   *  · no_match           → autenticado pero sin fila en `clientes`: nunca lo
+   *                         hemos visto → alta (NUNCA "no encontramos tu info").
+   *  · match_sin_historia → existe en `clientes` pero sin semilla → ruta manual
+   *                         / constancia.
+   *  · semilla_invalida   → tiene semilla pero es v1 o hueca (no parseable).
+   */
+  motivo?: 'sin_sesion' | 'no_match' | 'match_sin_historia' | 'semilla_invalida';
 }
 
 /** jsonb crudo de clientes.calculo_pensional para el cliente autenticado, o null. */
@@ -49,9 +60,13 @@ async function getSemillaCruda(): Promise<{ seed: unknown } | { error: SesionCli
       .maybeSingle());
   }
 
-  // Autenticado pero sin ficha o sin semilla → "calculadora aún no lista"
-  // (NUNCA demo una vez que hay sesión).
-  if (!data?.calculo_pensional) return { error: 'semilla_invalida' };
+  // Autenticado pero SIN ficha: nunca lo hemos visto (referido, tráfico nuevo).
+  // No es un error de datos, es un alta pendiente.
+  if (!data) return { error: 'no_match' };
+
+  // Ficha existente pero sin semilla (sin SISEC): "calculadora aún no lista",
+  // ahí sí aplica la ruta manual / constancia. (NUNCA demo con sesión abierta.)
+  if (!data.calculo_pensional) return { error: 'match_sin_historia' };
   return { seed: data.calculo_pensional };
 }
 
@@ -73,8 +88,8 @@ export async function getSesionCliente(): Promise<SesionCliente> {
     }
   }
 
-  // Sin login → demo público (preview). Con login pero sin ficha/semilla →
-  // "calculadora aún no lista" (vm null), nunca el demo.
+  // Sin login → demo público (preview). Con login y sin VM real, el `motivo`
+  // decide el destino en /diagnostico: `no_match` → alta, el resto → espera.
   if (crudo.error === 'sin_sesion') {
     return { autenticado: false, real: false, vm: buildDiagnostico(SEED_DEMO, HOY_DEMO), motivo: 'sin_sesion' };
   }

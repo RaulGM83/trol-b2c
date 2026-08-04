@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { estimarDireccional, type InputManual } from '@/lib/estimacion';
+import { WA } from '@/lib/whatsapp';
 import { LeadForm } from './LeadForm';
+import { BadgeNegativa } from './NegativaPension';
 
 const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
 
@@ -37,6 +39,14 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
     (a, b) => ((b.pension ?? 0) > (a?.pension ?? 0) ? b : a),
     null,
   );
+  // Negativa en TODOS los escenarios: no hay monto que mostrar, el resultado
+  // es la negativa. Si alguno sí alcanza, la palanca es la edad de retiro y
+  // hay que decir a qué edad se voltea, no solo que "aún no llega".
+  const esLey97 = est.ley === 'Ley97';
+  const todoNegativa = est.computable && est.escenarios.length > 0 && est.escenarios.every((e) => e.negativa);
+  const primeraEdadViable = est.escenarios.some((e) => e.negativa)
+    ? (est.escenarios.find((e) => !e.negativa)?.edad ?? null)
+    : null;
 
   return (
     <main className="mx-auto max-w-md px-5 py-7">
@@ -180,24 +190,74 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
           <>
             <div className="rounded-2xl bg-ink p-5 text-white">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wide text-lime">Tu pensión estimada</span>
+                <span className="text-[11px] font-bold uppercase tracking-wide text-lime">
+                  {todoNegativa ? 'Tu resultado' : 'Tu pensión estimada'}
+                </span>
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/80">
                   aprox · {est.ley === 'Ley73' ? 'Ley 73' : 'Ley 97'}
                 </span>
               </div>
-              <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(mejor?.pension ?? null)}<span className="text-base font-bold text-white/50"> /mes</span></div>
-              <div className="mt-1 text-sm text-white/70">si te retiras a los {mejor?.edad ?? 65} años</div>
+              {todoNegativa ? (
+                <>
+                  <div className="mt-2">
+                    <BadgeNegativa tono="oscuro" />
+                  </div>
+                  <div className="mt-2 text-lg font-extrabold leading-tight">
+                    {!esLey97 && !est.conservacion.vigente && inp.semanas >= est.semanasMinimas
+                      ? 'Tienes las semanas, pero tus derechos están suspendidos.'
+                      : 'Con estas semanas, el IMSS no otorgaría pensión.'}
+                  </div>
+                  <div className="mt-1 text-sm text-white/70">
+                    {inp.semanas < est.semanasMinimas && (
+                      <>
+                        Tienes {inp.semanas.toLocaleString('es-MX')} semanas y se piden{' '}
+                        {est.semanasMinimas.toLocaleString('es-MX')}:{' '}
+                        <b className="text-amber-300">
+                          faltan{' '}
+                          {Math.max(0, est.semanasMinimas - inp.semanas).toLocaleString('es-MX')}
+                        </b>
+                        .{' '}
+                      </>
+                    )}
+                    {esLey97 ? (
+                      <>
+                        En Ley 97 eso significa retirar tu saldo en una sola exhibición más la
+                        devolución de vivienda, en vez de una pensión mensual.
+                      </>
+                    ) : !est.conservacion.vigente ? (
+                      <>
+                        Además dejaste de cotizar hace tiempo, así que para usar tus semanas primero
+                        tienes que reactivar tus derechos cotizando de nuevo.
+                      </>
+                    ) : (
+                      <>Cotizando de nuevo puedes completarlas: te decimos cómo.</>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(mejor?.pension ?? null)}<span className="text-base font-bold text-white/50"> /mes</span></div>
+                  <div className="mt-1 text-sm text-white/70">si te retiras a los {mejor?.edad ?? 65} años</div>
+                </>
+              )}
             </div>
 
-            {est.ley === 'Ley73' && (
-              <div className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${est.cumpleSemanas ? 'bg-cream text-ink/80' : 'bg-amber-50 text-amber-800'}`}>
-                <span className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${est.cumpleSemanas ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
-                <span>
-                  {est.cumpleSemanas
-                    ? `Ya cumples el mínimo de ${est.semanasMinimas} semanas para pensionarte por Ley 73.`
-                    : `Aún no llegas a las ${est.semanasMinimas} semanas que pide la Ley 73 (llevas ${inp.semanas.toLocaleString('es-MX')}). Te decimos cómo completarlas.`}
-                </span>
-              </div>
+            {/* El mínimo aplica a las DOS leyes; en Ley 97 depende del año de
+                retiro (750 en 2021 → 1,000 en 2031), no es 500. */}
+            {/* Si el bloqueo NO son las semanas (p. ej. conservación de
+                derechos), un "ya cumples el mínimo" contradice a la negativa
+                que ya explica el encabezado: mejor no pintarlo. */}
+            {!(todoNegativa && est.cumpleSemanas) && (
+            <div className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${est.cumpleSemanas ? 'bg-cream text-ink/80' : 'bg-amber-50 text-amber-800'}`}>
+              <span className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${est.cumpleSemanas ? 'bg-[#65a30d]' : 'bg-amber-500'}`} />
+              <span>
+                {est.cumpleSemanas
+                  ? `Ya cumples el mínimo de ${est.semanasMinimas.toLocaleString('es-MX')} semanas para pensionarte por ${esLey97 ? 'Ley 97' : 'Ley 73'}.`
+                  : primeraEdadViable != null
+                    ? `Con ${inp.semanas.toLocaleString('es-MX')} semanas aún no alcanzas si te retiras ya, pero cotizando hasta los ${primeraEdadViable} completas las que pide tu año de retiro.`
+                    : `Aún no llegas a las ${est.semanasMinimas.toLocaleString('es-MX')} semanas que pide la ${esLey97 ? 'Ley 97' : 'Ley 73'} para tu retiro (llevas ${inp.semanas.toLocaleString('es-MX')}). Te decimos cómo completarlas.`}
+              </span>
+            </div>
             )}
 
             <div className="mt-4 overflow-hidden rounded-xl border border-line">
@@ -207,12 +267,26 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
                   {est.escenarios.map((e) => (
                     <tr key={e.edad} className="border-t border-line">
                       <td className="px-4 py-2.5 text-ink/70">{e.edad} años</td>
-                      <td className="px-4 py-2.5 text-right font-bold">{money(e.pension)}</td>
+                      <td className="px-4 py-2.5 text-right font-bold">
+                        {e.negativa ? <BadgeNegativa /> : money(e.pension)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Con negativa el caso no es autoservicio: rutea a asesoría. */}
+            {todoNegativa && (
+              <a
+                href={esLey97 ? WA.negativaLey97() : WA.negativaLey73()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 block rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink"
+              >
+                Revisar mi caso con un asesor · gratis
+              </a>
+            )}
           </>
         ) : (
           <div className="rounded-2xl border border-dashed border-line bg-cream p-5">

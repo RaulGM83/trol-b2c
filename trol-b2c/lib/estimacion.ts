@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { computeLey73, computeLey97 } from '@trol/pension-core';
-import { UMA, SALARIO_MINIMO } from '@trol/pension-core/tablas';
+import { UMA, SALARIO_MINIMO, PMG97_SEMANAS_MINIMAS } from '@trol/pension-core/tablas';
 import type { EntradaCalculo, Palancas } from '@trol/pension-core/types';
 
 export interface InputManual {
@@ -39,12 +39,24 @@ export interface EstimacionVM {
   ley: 'Ley73' | 'Ley97';
   computable: boolean; // Ley 97 no es estimable sin saldo AFORE
   edadActual: number;
-  escenarios: { edad: number; pension: number | null }[];
-  /** Semanas mínimas requeridas (500 Ley 73). */
+  /** `negativa` = no alcanza el mínimo de semanas; no hay monto que pintar. */
+  escenarios: { edad: number; pension: number | null; negativa: boolean }[];
+  /**
+   * Semanas mínimas requeridas. Ley 73 → 500 fijas. Ley 97 → depende del AÑO
+   * DE RETIRO (reforma 2020: 750 en 2021, +25/año hasta 1,000 en 2031); aquí
+   * se reporta el umbral del escenario de retiro más temprano.
+   */
   semanasMinimas: number;
   cumpleSemanas: boolean;
   conservacion: ConservacionVM;
   nota: string;
+}
+
+/** Umbral de semanas del año de retiro (Ley 97), acotado a la tabla. */
+function semanasMinimas97(anioRetiro: number): number {
+  const anios = Object.keys(PMG97_SEMANAS_MINIMAS).map(Number).sort((a, b) => a - b);
+  const y = Math.min(Math.max(anioRetiro, anios[0]), anios[anios.length - 1]);
+  return PMG97_SEMANAS_MINIMAS[y];
 }
 
 /**
@@ -102,7 +114,12 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
   const salarioDiario = Math.min(inp.salarioMensual / 30.4, TOPE_DIARIO);
   const sm = SALARIO_MINIMO[anioTabla(SALARIO_MINIMO)];
   const conservacion = calcularConservacion(inp, ANIO_HOY);
-  const semanasMinimas = 500; // Ley 73
+  // El mínimo NO es una constante compartida: Ley 73 pide 500 fijas, Ley 97
+  // pide lo que marque la tabla para su año de retiro. Antes se usaba 500 para
+  // ambas, así que a un Ley 97 se le decía que ya cumplía con 500 semanas.
+  const edadMinRetiro = Math.max(60, Math.floor(edadActual));
+  const anioRetiroMasTemprano = ANIO_HOY + Math.max(0, edadMinRetiro - Math.floor(edadActual));
+  const semanasMinimas = ley === 'Ley73' ? 500 : semanasMinimas97(anioRetiroMasTemprano);
 
   const perfil = {
     nombre: '',
@@ -127,7 +144,10 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     },
     conserva_derechos: conservacion.vigente,
     aplica_mod40: false,
-    gap_meses: 0,
+    // El motor usa el gap para las fracciones del Art. 151 (0 / 26 / 52
+    // semanas de reactivación). Estaba fijo en 0, lo que hacía ver toda
+    // interrupción como "≤ 3 años" por larga que fuera.
+    gap_meses: inp.sigueCotizando ? 0 : Math.max(0, (ANIO_HOY - inp.anioUltimaCotizacion) * 12),
   };
   const saldos = {
     rcv97: Math.max(0, inp.saldoAfore ?? 0),
@@ -171,7 +191,7 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     const escenarios97 = edades97.map((edad) => {
       const r = computeLey97({ perfil, saldos, salario_60m, palancas: palancas(edad), hoy: HOY } as EntradaCalculo);
       const pension = inp.incluirInfonavit ? r.pensionAforeInfonavit : r.pensionAfore;
-      return { edad, pension };
+      return { edad, pension, negativa: r.status === 'negativa' };
     });
     return {
       ley,
@@ -188,7 +208,8 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
   const edades = [60, 61, 62, 63, 64, 65].filter((e) => e >= Math.min(60, Math.floor(edadActual)));
   const escenarios = edades.map((edad) => {
     const r = computeLey73({ perfil, saldos, salario_60m, palancas: palancas(edad), hoy: HOY } as EntradaCalculo);
-    return { edad, pension: r.pensionMensual };
+    // Incluye la negativa por conservación de derechos, no solo por semanas.
+    return { edad, pension: r.pensionMensual, negativa: r.status !== 'viable' };
   });
 
   return {
