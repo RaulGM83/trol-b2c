@@ -3,6 +3,7 @@
 // Prellena el celular del lado servidor, registra la apertura y manda al OTP.
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { PersistRef } from '@/components/PersistRef';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { LoginForm } from '@/app/login/login-form';
 
@@ -15,9 +16,14 @@ export default async function EntradaCampania({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { c?: string };
+  searchParams: { c?: string; ref?: string };
 }) {
   const campania = (searchParams.c ?? 'reactivacion').slice(0, 40);
+  // Un link de campaña puede traer también quién lo refirió (?ref=<cliente_id>).
+  // Se re-siembra la cookie para que la atribución sobreviva al salto por el
+  // OTP (ver web/ATRIBUCION_DISENO.md). La escritura la hace <PersistRef/> en
+  // cliente: desde un Server Component, cookies().set() lanza en Next 14.
+  const rc = (searchParams.ref ?? '').slice(0, 64);
   // Campaña Compara Afore → la experiencia aterriza en /comparativo.
   const esComparaAfore = campania.startsWith('comparaafore');
   const destino = esComparaAfore ? '/comparativo' : '/diagnostico';
@@ -50,6 +56,7 @@ export default async function EntradaCampania({
 
   return (
     <main className="mx-auto max-w-md px-5 py-10">
+      {rc && <PersistRef codigo={rc} />}
       <header className="mb-6 flex items-center gap-2">
         <span className="text-2xl font-extrabold tracking-tight">
           tr<span className="text-lime">o</span>l

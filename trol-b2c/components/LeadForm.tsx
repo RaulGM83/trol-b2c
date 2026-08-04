@@ -27,8 +27,13 @@ export function LeadForm({ campania = 'tako', origen = 'calcula' }: { campania?:
     if (!acepta) return setError('Acepta los Términos y el Aviso de Privacidad.');
 
     setCargando(true);
+    // El código del referidor viaja por la URL (?rc=) y por cookie. La URL
+    // manda: sobrevive a que WhatsApp abra el link en su navegador in-app y el
+    // cliente complete el formulario ahí, donde la cookie de otro navegador no
+    // existe. La cookie queda como respaldo para la navegación dentro de la app.
+    const rcUrl = new URLSearchParams(window.location.search).get('rc');
     const refM = document.cookie.match(/(?:^|; )trol_ref=([^;]+)/);
-    const referrer = refM ? decodeURIComponent(refM[1]) : undefined;
+    const referrer = rcUrl || (refM ? decodeURIComponent(refM[1]) : undefined);
     try {
       const res = await fetch('/api/lead', {
         method: 'POST',
