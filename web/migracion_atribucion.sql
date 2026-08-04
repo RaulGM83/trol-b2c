@@ -35,6 +35,10 @@ create index idx_atribuciones_telefono  on public.atribuciones (telefono);
 alter table public.atribuciones enable row level security;  -- solo service_role
 
 -- 3) Trigger: resolver binding + crear vínculo peer (first-touch) ---------------
+--    OJO: este trigger cuelga del camino crítico de `clientes`, que es donde
+--    escribe n8n al dar de alta. La atribución es best-effort y NUNCA debe
+--    abortar el alta de un cliente, así que el cuerpo va protegido: si algo
+--    falla se avisa en el log y la escritura del cliente continúa.
 create or replace function public.resolver_atribucion_cliente()
 returns trigger language plpgsql security definer set search_path=public as $$
 begin
@@ -45,16 +49,23 @@ begin
         or (a.telefono is not null and right(regexp_replace(new.telefono,'\D','','g'),10)
                                      = right(regexp_replace(a.telefono,'\D','','g'),10)) );
 
+  -- `referidos.codigo` es NOT NULL: sin el coalesce, un toque sin código
+  -- reventaría el INSERT y, con él, el alta del cliente.
   insert into public.referidos (referrer_cliente_id, referido_cliente_id, codigo, estado)
-  select a.referrer_cliente_id, new.id, a.codigo, 'registrado'
+  select a.referrer_cliente_id, new.id,
+         coalesce(a.codigo, a.referrer_cliente_id::text), 'registrado'
     from public.atribuciones a
    where a.cliente_id = new.id
      and a.canal = 'cliente'
+     and a.referrer_cliente_id is not null
      and a.referrer_cliente_id <> new.id
    order by a.touch_at asc
    limit 1
   on conflict (referido_cliente_id) do nothing;
 
+  return new;
+exception when others then
+  raise warning 'resolver_atribucion_cliente falló para cliente % : %', new.id, sqlerrm;
   return new;
 end $$;
 
