@@ -1,5 +1,16 @@
 # Fix workflow referidos — 29 jun 2026
 
+> **APLICADO.** La rama `calculadora_web` del Switch ya existe en el workflow
+> "Nuevo cliente Booster Asesoria" (confirmado el 3-ago-2026). Este documento
+> queda como registro del incidente y de la causa raíz, **no** como pendiente.
+>
+> Sigue siendo la referencia del contrato de `/api/lead` → n8n: si se agrega
+> otro punto de entrada, tiene que caer en esta rama o repetirá el mismo fallo
+> (contacto sin CURP, sin `procesos`, sin SISEC y sin diagnóstico).
+>
+> Nota: `/alta` (alta de referidos y tráfico nuevo) usa este mismo
+> `entry_channel = calculadora_web` y ahora manda también `nombre`.
+
 ## Síntoma
 Enviaste 3 referidos. Solo llegaron 2 (`veros.cervantes@gmail.com` / +525591988773 y
 `andrea_dflr@hotmail.com` / +526144755362). Los 2 quedaron a medias: **no salieron ni como
