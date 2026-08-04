@@ -82,7 +82,71 @@ left join lateral (
    limit 1
 ) pt on true;
 
--- 5) (Opcional) Backfill peer desde referidos actuales --------------------------
+-- 5) Otorgar puntos SIN depender de la cookie ----------------------------------
+--    El trigger de arriba crea el vínculo server-side, pero los puntos solo los
+--    daba `registrar_referido(p_codigo)`, que necesita el código de la cookie.
+--    Sin cookie quedaba el vínculo registrado y el premio sin acreditar.
+--    Esta variante resuelve el referidor desde `referidos` y solo aplica el
+--    hito, así que funciona aunque el cliente entre desde otro navegador.
+create or replace function public.otorgar_puntos_referido()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare
+  v_referido uuid;
+  v_row public.referidos%rowtype;
+  v_tiene_seed boolean;
+  v_saldo_ref int;
+  v_saldo_rdo int;
+  c_referrer_pts int := 100;
+  c_referido_pts int := 50;
+begin
+  select id into v_referido from public.clientes where auth_user_id = auth.uid() limit 1;
+  if v_referido is null then
+    return jsonb_build_object('ok', false, 'error', 'sin_cliente');
+  end if;
+
+  select * into v_row from public.referidos where referido_cliente_id = v_referido limit 1;
+  if not found then
+    return jsonb_build_object('ok', true, 'otorgado', false, 'sin_vinculo', true);
+  end if;
+
+  -- Etapa 1 = diagnóstico real. Sin semilla no se otorga (anti-fraude).
+  select (calculo_pensional is not null) into v_tiene_seed
+    from public.clientes where id = v_referido;
+  if not v_tiene_seed then
+    return jsonb_build_object('ok', true, 'otorgado', false, 'pendiente_diagnostico', true);
+  end if;
+
+  -- El UPDATE condicionado es la compuerta: si otra llamada concurrente ya
+  -- otorgó, no afecta filas y salimos sin duplicar los movimientos.
+  update public.referidos
+     set puntos_etapa1_otorgados = true, hito_etapa1_at = now(), estado = 'etapa1'
+   where id = v_row.id and not coalesce(puntos_etapa1_otorgados, false);
+  if not found then
+    return jsonb_build_object('ok', true, 'otorgado', false);
+  end if;
+
+  select coalesce(sum(puntos), 0)::int into v_saldo_ref
+    from public.puntos_movimientos
+   where cliente_id = v_row.referrer_cliente_id and (estado is null or estado <> 'caducado');
+  select coalesce(sum(puntos), 0)::int into v_saldo_rdo
+    from public.puntos_movimientos
+   where cliente_id = v_referido and (estado is null or estado <> 'caducado');
+
+  insert into public.puntos_movimientos
+    (cliente_id, tipo, motivo, puntos, saldo_restante, referencia_tipo, referencia_id, estado)
+  values
+    (v_row.referrer_cliente_id, 'earn', 'referido:etapa1', c_referrer_pts,
+     v_saldo_ref + c_referrer_pts, 'referido', v_row.id, 'activo'),
+    (v_referido, 'earn', 'bienvenida_referido', c_referido_pts,
+     v_saldo_rdo + c_referido_pts, 'referido', v_row.id, 'activo');
+
+  return jsonb_build_object('ok', true, 'otorgado', true,
+    'puntos_referrer', c_referrer_pts, 'puntos_referido', c_referido_pts);
+end $$;
+
+grant execute on function public.otorgar_puntos_referido() to authenticated;
+
+-- 6) (Opcional) Backfill peer desde referidos actuales --------------------------
 -- insert into public.atribuciones (cliente_id, canal, referrer_cliente_id, codigo, fuente, touch_at)
 -- select referido_cliente_id, 'cliente', referrer_cliente_id, codigo, 'backfill', creado_at
 --   from public.referidos;
