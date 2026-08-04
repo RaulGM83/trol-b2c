@@ -150,12 +150,16 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   // (semanas que tiene vs. las que exige su año de retiro) y de su salida
   // (Art. 154 LSS: retiro en una sola exhibición + devolución de vivienda).
   const status: EstatusPension97 = negativa ? 'negativa' : 'viable';
-  const semanasFaltantes = Math.max(0, Math.ceil(semanasMinimasPMG - semanasRetiro));
+  // Las faltantes se derivan de las semanas YA REDONDEADAS que se muestran, no
+  // del float: semanasRetiro pasa por meses y regresa (×7/30.4 ×30.4/7), y el
+  // residuo hacía que "862 de 1,000" reportara 139 faltantes en vez de 138.
+  const semanasAlRetiro = Math.round(semanasRetiro);
+  const semanasFaltantes = Math.max(0, semanasMinimasPMG - semanasAlRetiro);
   const razon: RazonNegativa97 | null = negativa
     ? {
         anioRetiro: fechaRetiro.getUTCFullYear(),
         semanasActuales: Math.round(semanasCalculo),
-        semanasAlRetiro: Math.round(semanasRetiro),
+        semanasAlRetiro,
         semanasRequeridas: semanasMinimasPMG,
         semanasFaltantes,
       }

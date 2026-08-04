@@ -81,6 +81,16 @@ const EDAD_PROYECTO = 65; // horizonte estándar de la jugada (cesantía→vejez
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('es-MX');
 
+/** 138 semanas → "2 años 8 meses": el tiempo real que representa la brecha. */
+function tiempoCotizando(semanas: number): string {
+  const meses = Math.round((semanas / 52) * 12);
+  const a = Math.floor(meses / 12);
+  const m = meses % 12;
+  if (a === 0) return `${m} ${m === 1 ? 'mes' : 'meses'}`;
+  if (m === 0) return `${a} ${a === 1 ? 'año' : 'años'}`;
+  return `${a} ${a === 1 ? 'año' : 'años'} ${m} ${m === 1 ? 'mes' : 'meses'}`;
+}
+
 function palancas(over: Partial<Palancas> = {}): Palancas {
   return {
     edadRetiro: 60,
@@ -221,7 +231,7 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
     efectivoCliente: null,
     seAutofinancia: false,
     nota: reversibleCotizando
-      ? `Hoy te faltan ${faltan.toLocaleString('es-MX')} semanas y el IMSS te negaría la pensión. Si sigues cotizando hasta los ${EDAD_PROYECTO} las completas y sí te pensionas: ahí es donde cambia tu caso.`
+      ? `Te faltan ${faltan.toLocaleString('es-MX')} semanas (~${tiempoCotizando(faltan)} cotizando). Aportar más a tu AFORE no las compra: se consiguen cotizando, por un empleo o por tu cuenta con Modalidad 10 o 40. Cotizando hasta los ${EDAD_PROYECTO} las completas y sí te pensionas.`
       : `Te faltan ${faltan.toLocaleString('es-MX')} semanas y, cotizando hasta los ${EDAD_PROYECTO}, todavía no alcanzarías el mínimo. Vale la pena revisar tu caso: puede haber semanas no reconocidas o periodos que sí cuentan.`,
   };
 

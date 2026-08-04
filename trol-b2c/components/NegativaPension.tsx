@@ -3,6 +3,16 @@ import { WA } from '@/lib/whatsapp';
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('es-MX');
 
+/** 138 semanas → "~2 años 8 meses". Las semanas solas no dicen cuánto falta. */
+export function semanasATiempo(semanas: number): string {
+  const meses = Math.round((semanas / 52) * 12);
+  const a = Math.floor(meses / 12);
+  const m = meses % 12;
+  if (a === 0) return `${m} ${m === 1 ? 'mes' : 'meses'}`;
+  if (m === 0) return `${a} ${a === 1 ? 'año' : 'años'}`;
+  return `${a} ${a === 1 ? 'año' : 'años'} ${m} ${m === 1 ? 'mes' : 'meses'}`;
+}
+
 /** Píldora de estatus. Sustituye al monto: no hay cifra que pintar. */
 export function BadgeNegativa({ tono = 'claro' }: { tono?: 'claro' | 'oscuro' }) {
   return (
@@ -38,17 +48,26 @@ export function NegativaPension({
       <div className="flex items-center gap-2">
         <BadgeNegativa />
         <span className="text-[11px] font-bold uppercase tracking-wide text-amber-900/70">
-          Tu escenario hoy
+          Escenario base
         </span>
       </div>
 
       <h2 className="mt-2 text-lg font-extrabold leading-tight text-ink">
-        Con tus semanas de hoy, el IMSS no te otorgaría pensión.
+        {razon
+          ? `Con ${razon.semanasActuales.toLocaleString('es-MX')} semanas y sin cotizar, no alcanzas el mínimo.`
+          : 'Con tus semanas de hoy, el IMSS no te otorgaría pensión.'}
       </h2>
 
       {/* Razón: lo que tiene vs. lo que exige SU año de retiro. */}
       {razon && (
         <div className="mt-3 rounded-xl bg-white/70 p-4">
+          <p className="mb-3 text-sm text-ink/80">
+            Te faltan{' '}
+            <b className="text-ink">
+              {razon.semanasFaltantes.toLocaleString('es-MX')} semanas
+            </b>{' '}
+            (~{semanasATiempo(razon.semanasFaltantes)} cotizando).
+          </p>
           <div className="grid grid-cols-2 gap-y-2 text-sm">
             <span className="text-ink/70">Semanas que tienes</span>
             <span className="text-right font-bold">{razon.semanasActuales.toLocaleString('es-MX')}</span>

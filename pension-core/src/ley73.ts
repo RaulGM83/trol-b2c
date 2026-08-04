@@ -276,7 +276,9 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
         semanasActuales: Math.round(semanasVigentes),
         semanasAlRetiro: Math.round(semanasRetiro),
         semanasRequeridas: 500,
-        semanasFaltantes: Math.max(0, Math.ceil(500 - semanasRetiro)),
+        // Derivadas de las semanas ya redondeadas para que la resta cuadre en
+        // pantalla (ver nota equivalente en ley97.ts).
+        semanasFaltantes: Math.max(0, 500 - Math.round(semanasRetiro)),
         gapMeses,
         semanasParaReactivar,
         finConservacion: perfil.fechas.fin_conservacion_derechos,

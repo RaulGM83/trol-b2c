@@ -13,6 +13,9 @@ import { NegativaLey73 } from './NegativaLey73';
 const money = (n: number | null) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX');
 
+/** Edad mínima de retiro (cesantía). El escenario base proyecta a esta edad. */
+const EDAD_MIN_RETIRO = 60;
+
 // Pantalla 1 — Diagnóstico. Un solo camino: la mejor jugada se INSINÚA aquí
 // (título + multiplicador) y el detalle completo vive en /mejor-jugada. Lo
 // demás (encuesta, referidos) vive en la misión, no como CTAs sueltos.
@@ -27,6 +30,10 @@ export function Diagnostico({
   mision?: EstadoMision | null;
   bonoRecienOtorgado?: boolean;
 }) {
+  // A partir de los 60 el escenario base SÍ es "hoy" (puede pensionarse ya);
+  // antes de eso es una proyección y llamarlo "hoy" desorienta.
+  const yaPuedeRetirarse = vm.edadActual >= EDAD_MIN_RETIRO;
+
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
       {/* Marca + saldo de puntos siempre visible */}
@@ -97,9 +104,16 @@ export function Diagnostico({
       ) : (
         <section className="mb-4 rounded-2xl bg-ink p-5 text-white">
           <div className="text-[11px] font-bold uppercase tracking-wide text-lime">
-            Tu pensión estimada hoy
+            {yaPuedeRetirarse ? 'Tu pensión estimada hoy' : 'Escenario base'}
           </div>
           <div className="mt-1 text-4xl font-extrabold tracking-tight">{money(vm.pensionHoy)}</div>
+          {/* El recuadro base proyecta al retiro a los 60 SIN semanas nuevas:
+              para quien aún no cumple 60 no es un "hoy", es el status quo. */}
+          {!yaPuedeRetirarse && (
+            <div className="mt-1 text-sm text-white/60">
+              Si sigues como vas: te retiras a los {EDAD_MIN_RETIRO} sin sumar semanas nuevas.
+            </div>
+          )}
           <div className="mt-3 border-t border-white/15 pt-3 text-sm text-white/70">
             Escenario máximo:{' '}
             <b className="text-white">{money(vm.escenarioMaximo.monto)}</b> a los{' '}

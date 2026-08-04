@@ -269,6 +269,26 @@ describe('Ley 97 (hoja Calculadora 97)', () => {
     expect(r2.salida!.semanasFaltantes).toBe(r2.razon!.semanasFaltantes);
   });
 
+  it('las semanas faltantes cuadran con las que se muestran (sin residuo float)', () => {
+    // semanasRetiro convierte a meses y regresa (×7/30.4 ×30.4/7), así que 862
+    // sale como 861.9999…; con Math.ceil reportaba 139 faltantes y la resta en
+    // pantalla no cuadraba: "862 de 1,000, faltan 139".
+    const r = computeLey97({
+      ...base,
+      perfil: {
+        ...perfilMoja,
+        fecha_nacimiento: '1971-03-15', // cumple 60 en 2031 → umbral 1,000
+        semanas: { cotizadas: 862, descontadas: 0, recuperadas: 0, netas: 862 },
+      },
+      palancas: { ...palancasExcel73, edadRetiro: 60, pctTiempoCotizando: 0 },
+    });
+    expect(r.razon!.semanasRequeridas).toBe(1000);
+    expect(r.razon!.semanasAlRetiro).toBe(862);
+    expect(r.razon!.semanasFaltantes).toBe(138);
+    // Invariante: lo mostrado siempre debe sumar.
+    expect(r.razon!.semanasAlRetiro + r.razon!.semanasFaltantes).toBe(r.razon!.semanasRequeridas);
+  });
+
   it('el umbral de semanas sale de la tabla por año de retiro, no de un 1000 fijo', () => {
     // Mismo perfil, retiros distintos → umbrales distintos (750→1000 por la
     // reforma 2020). Si estuviera hardcodeado, ambos darían el mismo número.
