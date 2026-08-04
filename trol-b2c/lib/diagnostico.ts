@@ -213,15 +213,20 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
   const a = rMax.pensionAfore;
 
   // Con negativa en el escenario base, la jugada NO es "aporta más a tu AFORE":
-  // más saldo no compra semanas. La palanca es seguir cotizando (Modalidad
-  // 10/40) hasta alcanzar las que exige su año de retiro.
+  // más saldo no compra semanas. La palanca es seguir cotizando hasta alcanzar
+  // las que exige su año de retiro.
+  //
+  // OJO: en Ley 97 NO aplica la Modalidad 40. Esa es continuación voluntaria
+  // pensada para la fórmula de Ley 73, donde subir el salario promedio de las
+  // últimas 250 semanas sube la pensión. Aquí las vías son cotizar con un
+  // empleador o pagar la Modalidad 10 por cuenta propia.
   const negativaHoy = rHoy.status === 'negativa';
   const reversibleCotizando = rMax.status === 'viable';
   const faltan = rHoy.razon?.semanasFaltantes ?? 0;
 
   const jugadaNegativa: MejorJugada = {
     titulo: reversibleCotizando
-      ? 'Completar tus semanas (Modalidad 10 o 40)'
+      ? 'Completar tus semanas (empleo o Modalidad 10)'
       : 'Revisar tu caso con un asesor',
     de,
     a,
@@ -231,7 +236,7 @@ export function buildDiagnostico(seed: unknown, hoy = new Date()): DiagnosticoVM
     efectivoCliente: null,
     seAutofinancia: false,
     nota: reversibleCotizando
-      ? `Te faltan ${faltan.toLocaleString('es-MX')} semanas (~${tiempoCotizando(faltan)} cotizando). Aportar más a tu AFORE no las compra: se consiguen cotizando, por un empleo o por tu cuenta con Modalidad 10 o 40. Cotizando hasta los ${EDAD_PROYECTO} las completas y sí te pensionas.`
+      ? `Te faltan ${faltan.toLocaleString('es-MX')} semanas (~${tiempoCotizando(faltan)} cotizando). Aportar más a tu AFORE no las compra: las semanas solo se consiguen cotizando, ya sea con un empleador o pagando tu Modalidad 10 por tu cuenta. Cotizando hasta los ${EDAD_PROYECTO} las completas y sí te pensionas.`
       : `Te faltan ${faltan.toLocaleString('es-MX')} semanas y, cotizando hasta los ${EDAD_PROYECTO}, todavía no alcanzarías el mínimo. Vale la pena revisar tu caso: puede haber semanas no reconocidas o periodos que sí cuentan.`,
   };
 

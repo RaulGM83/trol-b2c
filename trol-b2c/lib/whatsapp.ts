@@ -18,10 +18,12 @@ export const WA = {
   agendarSesion: () =>
     waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
   // Negativa de pensión Ley 97: el caso NO es autoservicio. Necesita asesor
-  // para revisar semanas no reconocidas y armar la ruta de Modalidad 10/40.
+  // para revisar semanas no reconocidas y armar la ruta de cotización.
+  // En Ley 97 no aplica la Modalidad 40 (es de la fórmula de Ley 73): las vías
+  // son cotizar con un empleador o pagar la Modalidad 10 por cuenta propia.
   negativaLey97: () =>
     waLink(
-      'Hola, vi en app.trol.mx que con mis semanas actuales el IMSS me negaría la pensión (Ley 97). Quiero revisar mi caso: cuántas semanas me faltan, si hay periodos que no me están contando y cómo completarlas con Modalidad 10 o 40.',
+      'Hola, vi en app.trol.mx que con mis semanas actuales el IMSS me negaría la pensión (Ley 97). Quiero revisar mi caso: cuántas semanas me faltan, si hay periodos que no me están contando y cómo completarlas cotizando con un empleador o con Modalidad 10.',
     ),
   // Negativa Ley 73: casi siempre es conservación de derechos (Art. 150/151),
   // que se resuelve reactivando. Requiere asesor para armar la ruta.

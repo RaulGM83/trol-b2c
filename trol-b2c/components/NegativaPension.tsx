@@ -120,7 +120,7 @@ export function NegativaPension({
         <div className="text-[11px] font-bold uppercase tracking-wide text-lime">Cómo se revierte</div>
         <p className="mt-1 text-sm text-white/80">
           {reversibleCotizando
-            ? `Cotizando de nuevo —por tu empleo o por tu cuenta con Modalidad 10 o 40— completas las semanas que faltan y sí te pensionas. Si sigues cotizando hasta los ${edadProyecto}, tu caso cambia.`
+            ? `Cotizando de nuevo —con un empleador o pagando tu Modalidad 10 por tu cuenta— completas las semanas que faltan y sí te pensionas. Si sigues cotizando hasta los ${edadProyecto}, tu caso cambia.`
             : 'Cotizar de nuevo suma semanas, aunque con tu horizonte actual todavía no bastaría. Puede haber semanas no reconocidas o periodos que sí cuentan: vale la pena revisarlo con un asesor.'}
         </p>
         <a

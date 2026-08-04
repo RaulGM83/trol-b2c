@@ -246,7 +246,12 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         )}
 
         {recuperables > 0 && <Toggle label={`Recuperar ${recuperables} semanas descontadas`} checked={recuperar} onChange={setRecuperar} />}
-        {perfil.aplica_mod40 && <Toggle label="Modalidad 40 retroactiva" checked={mod40retro} onChange={setMod40retro} />}
+        {/* La Modalidad 40 es continuación voluntaria de la fórmula de Ley 73:
+            no aplica a Ley 97. Hoy ningún perfil Ley 97 trae aplica_mod40, pero
+            la regla debe depender de la ley, no de lo que traiga la semilla. */}
+        {esLey73 && perfil.aplica_mod40 && (
+          <Toggle label="Modalidad 40 retroactiva" checked={mod40retro} onChange={setMod40retro} />
+        )}
       </section>
 
       {/* Ley 97: AFORE + Infonavit, hoy y proyectado (con dato real opcional) */}
@@ -335,7 +340,8 @@ export function CalculadoraPro({ semilla }: { semilla: SemillaV2 }) {
         <div className="text-[11px] font-bold uppercase tracking-wide text-lime">Lleva tu plan más lejos</div>
         <div className="mt-1 text-lg font-extrabold">¿Quieres tu plan pensional completo?</div>
         <p className="mt-1 text-sm text-white/70">
-          Un experto en pensiones arma tu estrategia paso a paso: gestorías, Modalidad 40, Infonavit y ahorro.
+          Un experto en pensiones arma tu estrategia paso a paso:{' '}
+          {esLey73 ? 'gestorías, Modalidad 40, Infonavit y ahorro' : 'semanas, Modalidad 10, Infonavit y ahorro'}.
           Con opción de videollamada 1:1.
         </p>
         <a href="/asesoria" className="mt-3 block rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">

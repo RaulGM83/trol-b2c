@@ -61,7 +61,7 @@ export function MejorJugadaFull({ vm, producto, saldoPuntos, yaTiene = false }: 
       )}
 
       {/* Con negativa el "de X a Y" no aplica, pero la jugada sí: es el único
-          lugar donde se explica POR QUÉ es Modalidad 10/40 y no aportar más. */}
+          lugar donde se explica POR QUÉ la vía es cotizar y no aportar más. */}
       {j && vm.status !== 'viable' && (
         <section className="mb-5 rounded-2xl bg-lime p-5">
           <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Tu mejor jugada</div>
