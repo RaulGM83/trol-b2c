@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
 import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc } from '@/components/trol3/MiAcciones';
+import { CalculadoraPro } from '@/components/CalculadoraPro';
+import { getSemillaV2Cliente } from '@/lib/cliente';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi expediente · Trol' };
@@ -24,7 +26,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const [{ data: x, error }, { data: mis }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones')]);
   if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}.</main>;
   const e = x as Any;
-  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'hoy';
+  const tab = TABS.some(([t]) => t === searchParams.tab) || searchParams.tab === 'calculadora' ? (searchParams.tab as string) : 'hoy';
   const misiones: Any[] = (mis as Any[]) ?? [];
   const ck: Any[] = e.checklist ?? [];
   const alertas = ck.filter((c) => c.estado === 'alerta');
@@ -165,7 +167,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">¿Y si…?</h2>
             {beneficios.includes('calculadora') && e.tiene_semilla ? (
-              <><p className="mb-2 text-xs text-muted">Tienes la calculadora habilitada: prueba edad de retiro, semanas y saldos con tus datos oficiales.</p><Link href="/calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link></>
+              <><p className="mb-2 text-xs text-muted">Tienes la calculadora habilitada: prueba edad de retiro, semanas y saldos con tus datos oficiales.</p><Link href="/mi?tab=calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link></>
             ) : (
               <><p className="mb-2 text-xs text-muted">La calculadora completa te deja probar escenarios (edad de retiro, Modalidad 40, semanas por recuperar). Se habilita con la asesoría avanzada, con {fmtMXN(100)} o con 100 puntos.</p><div className="flex flex-wrap gap-2"><CanjearBoton producto="calculadora" precio={100} saldo={e.puntos} /><Link href="/checkout?p=CALCULADORA_ADDON" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">Pagar {fmtMXN(100)}</Link></div></>
             )}
@@ -200,6 +202,17 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </section>
       )}
 
+      {tab === 'calculadora' && (
+        <div className="space-y-3">
+          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi expediente</Link>
+          {beneficios.includes('calculadora') && e.tiene_semilla ? (
+            <CalculadoraEmbed />
+          ) : (
+            <section className="rounded-2xl border border-line bg-white p-5 text-sm">{e.tiene_semilla ? 'La calculadora se habilita con la asesoría avanzada, con $100 o con 100 puntos.' : 'Necesitamos tu información oficial del IMSS para habilitar la calculadora.'} <Link href={href('expediente')} className="underline">Volver</Link></section>
+          )}
+        </div>
+      )}
+
       {tab === 'puntos' && (
         <div className="space-y-4">
           <section className="rounded-2xl bg-ink p-5 text-white"><div className="text-xs text-white/60">Tu saldo</div><div className="text-3xl font-extrabold">{e.puntos} <span className="text-base font-normal text-white/60">puntos</span></div><div className="mt-1 text-xs text-white/60">1 punto = 1 peso al usarlos en Trol · 10 puntos = 1 peso enviado a tu ahorro para el retiro. Caducan a los 6 meses.</div></section>
@@ -230,7 +243,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               <p className="mt-1 text-xs text-muted">Incluye: {(p.beneficios ?? []).map((b: string) => (BEN_LABEL[b] ?? b).toLowerCase()).join(', ') || 'asesoría'}. Hasta {p.max_pct_puntos}% con puntos.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {yaCubierto(p) ? (
-                  <>{p.codigo === 'calculadora' && e.tiene_semilla ? <Link href="/calculadora" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link> : <span className="rounded-xl bg-green-50 px-4 py-2.5 text-sm font-bold text-green-800">Ya lo tienes</span>}<HablarBoton texto="Hablar con mi experto" /></>
+                  <>{p.codigo === 'calculadora' && e.tiene_semilla ? <Link href="/mi?tab=calculadora" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link> : <span className="rounded-xl bg-green-50 px-4 py-2.5 text-sm font-bold text-green-800">Ya lo tienes</span>}<HablarBoton texto="Hablar con mi experto" /></>
                 ) : (
                   <>
                     <Link href={`/checkout?p=${LEGACY_CODE[p.codigo] ?? p.codigo}`} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Pagar</Link>
@@ -252,4 +265,10 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
       </nav>
     </main>
   );
+}
+
+async function CalculadoraEmbed() {
+  const semilla = await getSemillaV2Cliente();
+  if (!semilla) return <section className="rounded-2xl border border-line bg-white p-5 text-sm">Tu semilla de cálculo aún no está lista; pide a tu experto que actualice tu información.</section>;
+  return <CalculadoraPro semilla={semilla} embed />;
 }
