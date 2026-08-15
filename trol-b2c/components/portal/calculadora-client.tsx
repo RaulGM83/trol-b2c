@@ -1277,7 +1277,7 @@ function Mod40Panel({
               step={1}
               value={umas}
               onChange={(e) => setUmas(Number(e.target.value))}
-              className="w-full accent-lime-600"
+              className="w-full accent-ink"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>5</span>
@@ -1461,7 +1461,7 @@ function Mod40Panel({
             </span>
             <span
               className={`font-heading font-bold text-2xl tabular-nums ${
-                r.efectivo.resultado >= 0 ? "text-lime-700" : "text-red-700"
+                r.efectivo.resultado >= 0 ? "text-green-700" : "text-red-700"
               }`}
             >
               {fmt(Math.abs(r.efectivo.resultado))}
@@ -1491,7 +1491,7 @@ function FilaFlujo({
       <span className={subtotal ? "" : "text-muted-foreground"}>{label}</span>
       <span
         className={`tabular-nums ${
-          valor < 0 ? "text-red-600" : "text-lime-700"
+          valor < 0 ? "text-red-600" : "text-green-700"
         } ${subtotal ? "font-semibold" : ""}`}
       >
         {valor < 0 ? "−" : "+"}
@@ -1788,7 +1788,7 @@ function SelectorEdad({
         step={1}
         value={idx}
         onChange={(e) => onChange(edades[Number(e.target.value)])}
-        className="w-full accent-lime-600"
+        className="w-full accent-ink"
       />
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>{edades[0]}</span>
@@ -1848,7 +1848,7 @@ function SliderSalario({
         step={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-lime-600"
+        className="w-full accent-ink"
       />
       <div className="flex justify-between text-xs text-muted-foreground">
         <button type="button" className="hover:underline" onClick={() => onChange(SAL_MIN)}>
@@ -1918,7 +1918,7 @@ function Stat({
   return (
     <div className="flex flex-col">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`tabular-nums ${destacado ? "font-bold text-lime-700" : "font-medium"}`}>
+      <span className={`tabular-nums ${destacado ? "font-bold text-green-700" : "font-medium"}`}>
         {value}
       </span>
     </div>
