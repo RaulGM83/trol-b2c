@@ -197,3 +197,51 @@ export function CanjearBoton({ producto, precio, saldo }: { producto: string; pr
     </span>
   );
 }
+
+export function AhorrarPuntos({ saldo }: { saldo: number }) {
+  const supabase = createClient();
+  const router = useRouter();
+  const [pts, setPts] = useState(String(Math.max(100, Math.floor(saldo / 10) * 10)));
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const n = Number(pts) || 0;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <input type="number" step={10} min={100} value={pts} onChange={(e) => setPts(e.target.value)} className="w-28 rounded-lg border border-line px-2 py-1.5" />
+      <span className="text-xs text-muted">= {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n / 10)}</span>
+      <button disabled={pending || n < 100 || n > saldo || n % 10 !== 0} className={btnDark} onClick={() => start(async () => {
+        const { data, error } = await supabase.schema('trol3').rpc('solicitar_ahorro_puntos', { p_puntos: n });
+        const r = data as { ok?: boolean; motivo?: string; pesos?: number } | null;
+        setMsg(error ? error.message : r?.ok ? `Listo: enviaremos ${r.pesos} MXN a tu ahorro.` : r?.motivo ?? 'No se pudo'); router.refresh();
+      })}>Enviar a mi ahorro</button>
+      {msg && <span className="text-xs text-green-700">{msg}</span>}
+    </div>
+  );
+}
+
+export function SolicitarDoc({ tipo, precio }: { tipo: string; precio: number | null }) {
+  const supabase = createClient();
+  const router = useRouter();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <button disabled={pending || !!msg} className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-50" onClick={() => start(async () => {
+        const { error } = await supabase.schema('trol3').rpc('mi_solicitar_documento', { p_tipo: tipo });
+        setMsg(error ? error.message : 'Solicitado. Te avisamos cuando esté.'); router.refresh();
+      })}>{precio ? `Solicitar · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(precio)}` : 'Solicitar (gratis)'}</button>
+      {msg && <span className="text-[11px] text-green-700">{msg}</span>}
+    </span>
+  );
+}
+
+export function DesbloquearDoc({ tipo, precio, maxPct, saldo }: { tipo: string; precio: number | null; maxPct: number; saldo: number }) {
+  const p = precio ?? 0;
+  const conPuntos = Math.min(saldo, Math.floor((p * maxPct) / 100));
+  return (
+    <span className="inline-flex flex-col items-end gap-1 text-[11px] text-muted">
+      <HablarBoton texto={`Desbloquear · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(p)}`} mensaje={`Hola, quiero desbloquear mi documento "${tipo}" (${p} MXN${conPuntos ? `, usando ${conPuntos} puntos` : ''}). ¿Me pasan los datos de pago? Vengo de mi expediente en app.trol.mx.`} compacto oscuro />
+      {conPuntos > 0 ? <span>hasta {conPuntos} pts ({maxPct}%)</span> : null}
+    </span>
+  );
+}

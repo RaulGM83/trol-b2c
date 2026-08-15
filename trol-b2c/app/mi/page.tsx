@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton } from '@/components/trol3/MiAcciones';
+import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc } from '@/components/trol3/MiAcciones';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi expediente · Trol' };
@@ -174,29 +174,46 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
       {tab === 'documentos' && (
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="text-sm font-bold">Tus documentos</h2>
-          <p className="mb-2 text-xs text-muted">Todo lo que nos compartes o extraemos por ti, en un solo lugar.</p>
-          <ul className="space-y-1 text-sm">
-            {(e.documentos ?? []).map((d: Any) => (
-              <li key={d.id} className="flex items-center justify-between gap-2 border-t border-line/70 py-2">
-                <span>{d.nombre ?? d.tipo} <span className="text-xs text-muted">· {fmtFecha(d.fecha)}</span></span>
-                {d.url ? <a href={d.url} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold">Abrir</a> : <span className="text-xs text-muted">{beneficios.includes('docs_premium') ? 'incluido · pídelo a tu experto' : d.gating === 'pago' ? `Desbloquear ${d.precio ? fmtMXN(d.precio) : ''} (hasta 50% con puntos)` : 'con puntos'}</span>}
-              </li>
-            ))}
-            {!(e.documentos ?? []).length && <li className="text-muted">Aún no hay documentos. Cuando obtengamos tu información oficial aparecerá aquí.</li>}
+          <p className="mb-3 text-xs text-muted">Todo en un solo lugar: lo que ya tenemos, lo que puedes desbloquear y lo que podemos conseguir por ti.</p>
+          <ul className="space-y-2 text-sm">
+            {(e.catalogo_documentos ?? []).map((c: Any) => {
+              const tengo = (e.documentos ?? []).filter((d: Any) => d.tipo === c.tipo);
+              const ultimo = tengo[0];
+              const desbloqueado = c.gating === 'gratis' || (c.beneficio && beneficios.includes(c.beneficio));
+              return (
+                <li key={c.tipo} className="rounded-xl border border-line p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div><div className="font-semibold">{c.nombre}</div><div className="text-xs text-muted">{c.descripcion}</div>{ultimo ? <div className="mt-0.5 text-[11px] text-muted">Última versión: {fmtFecha(ultimo.fecha)}{tengo.length > 1 ? ` · ${tengo.length} versiones` : ''}</div> : null}</div>
+                    <div className="shrink-0 text-right">
+                      {ultimo && (ultimo.url || desbloqueado) ? <a href={ultimo.url ?? '#'} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a>
+                       : ultimo ? <DesbloquearDoc tipo={c.tipo} precio={c.precio} maxPct={c.max_pct_puntos} saldo={e.puntos} />
+                       : c.solicitable ? <SolicitarDoc tipo={c.tipo} precio={c.precio} /> : <span className="text-[11px] text-muted">Compártelo por WhatsApp</span>}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+          <p className="mt-3 text-[11px] text-muted">¿Tienes un documento que quieras guardar aquí (constancia de semanas, estado de cuenta)? Mándalo por WhatsApp y lo agregamos a tu expediente (+50 pts).</p>
         </section>
       )}
 
       {tab === 'puntos' && (
         <div className="space-y-4">
-          <section className="rounded-2xl bg-ink p-5 text-white"><div className="text-xs text-white/60">Tu saldo</div><div className="text-3xl font-extrabold">{e.puntos} <span className="text-base font-normal text-white/60">puntos</span></div><div className="mt-1 text-xs text-white/60">1 punto = 1 peso al usarlos. Caducan a los 6 meses.</div></section>
+          <section className="rounded-2xl bg-ink p-5 text-white"><div className="text-xs text-white/60">Tu saldo</div><div className="text-3xl font-extrabold">{e.puntos} <span className="text-base font-normal text-white/60">puntos</span></div><div className="mt-1 text-xs text-white/60">1 punto = 1 peso al usarlos en Trol · 10 puntos = 1 peso enviado a tu ahorro para el retiro. Caducan a los 6 meses.</div></section>
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">Cómo ganar</h2>
             <ul className="mt-2 divide-y divide-line text-sm">{(e.catalogo_puntos ?? []).map((c: Any) => <li key={c.accion} className="flex justify-between py-1.5"><span>{c.nombre}</span><b>+{c.puntos}</b></li>)}</ul>
             <Link href="/referidos" className="mt-3 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Invitar a alguien</Link>
           </section>
           <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="text-sm font-bold">Cómo usarlos</h2>
+            <h2 className="text-sm font-bold">Enviar a tu ahorro para el retiro</h2>
+            <p className="mb-2 text-xs text-muted">10 puntos = 1 peso a tu cuenta AFORE vía Millas para el Retiro (mínimo 100 puntos). Lo procesamos en lotes; te avisamos cuando se aplique.</p>
+            {e.puede_ahorrar ? <AhorrarPuntos saldo={e.puntos} /> : <p className="text-xs text-amber-700">Primero validamos con la CONSAR que tu cuenta pueda recibir ahorro (misión "Tener tu cuenta AFORE registrada").</p>}
+            {(e.solicitudes_ahorro ?? []).length ? <ul className="mt-2 text-xs text-muted">{(e.solicitudes_ahorro ?? []).map((s: Any, k: number) => <li key={k}>{fmtFecha(s.fecha)} · {s.puntos} pts → {fmtMXN(s.pesos)} · {s.estado}</li>)}</ul> : null}
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Usarlos en Trol</h2>
             <ul className="mt-2 divide-y divide-line text-sm">{(e.productos ?? []).map((p: Any) => <li key={p.codigo} className="flex items-center justify-between gap-2 py-1.5"><span>{p.nombre} <span className="text-xs text-muted">· {p.max_pct_puntos}% con puntos</span></span>{p.max_pct_puntos === 100 && p.precio > 0 ? <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} /> : <span className="text-xs text-muted">{p.precio ? fmtMXN(p.precio) : 'gratis'}</span>}</li>)}</ul>
           </section>
         </div>
