@@ -47,6 +47,8 @@ export function LoginForm({
     }
     // Vincula este login con su ficha de cliente por teléfono (idempotente).
     await supabase.rpc('vincular_cliente_actual');
+    // Trol 3.0: vincula/crea la persona en el expediente nuevo (idempotente).
+    try { await supabase.schema('trol3').rpc('vincular_sesion', { p_canal: 'organico' }); } catch {}
     setCargando(false);
     router.push(next.startsWith('/') ? next : '/diagnostico');
     router.refresh();
