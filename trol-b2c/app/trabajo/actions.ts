@@ -47,8 +47,13 @@ export async function pedirConsulta(personaId: string, tipo: string, notificar: 
     p_persona: personaId, p_tipo: tipo, p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol', p_notificar: notificar, p_motivo: motivo || null, p_forzar: forzar, p_proveedor: proveedor || null,
   });
   if (error) return fail(error);
+  const res = data as { ok?: boolean; consulta_id?: string; motivo?: string; proveedor?: string; costo?: number };
+  if (res?.consulta_id) {
+    const { data: c } = await t3().from('consultas').select('estado,error').eq('id', res.consulta_id).maybeSingle();
+    if (c) Object.assign(res, { estado: c.estado, error: c.error });
+  }
   revalidatePath(`/trabajo/p/${personaId}`);
-  return ok({ resultado: data });
+  return ok({ resultado: res });
 }
 
 export async function agregarNota(personaId: string, contenido: string, canal: string, visibleCliente: boolean) {
@@ -73,7 +78,7 @@ export async function marcarEtapa(personaId: string, etapa: string) {
   await requireMiembro();
   const { error } = await t3().from('personas').update({ etapa }).eq('id', personaId);
   if (error) return fail(error);
-  await t3().rpc('evaluar_persona', { p_id: personaId });
+  await t3().rpc('evaluar_persona_seguro', { p_id: personaId });
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
@@ -88,7 +93,7 @@ export async function crearCita(personaId: string, inicioISO: string, notas: str
 
 export async function reevaluar(personaId: string) {
   await requireMiembro();
-  const { error } = await t3().rpc('evaluar_persona', { p_id: personaId });
+  const { error } = await t3().rpc('evaluar_persona_seguro', { p_id: personaId });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();

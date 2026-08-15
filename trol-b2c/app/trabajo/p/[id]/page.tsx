@@ -1,25 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CAPA_LABEL, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
-import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, DeclararForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
+import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
+import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
+import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
+import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
 
-const GRUPOS: [string, string][] = [['identidad', 'Identidad'], ['imss', 'IMSS'], ['afore', 'AFORE'], ['infonavit', 'Infonavit'], ['issste', 'ISSSTE'], ['contexto', 'Contexto personal'], ['calculo', 'Cálculos Trol']];
+const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
 
-function Valor({ campo, tipo, v }: { campo: string; tipo: string; v: Any }) {
-  if (v == null) return <span className="text-muted">—</span>;
-  if (tipo === 'bool') return <>{v === true ? 'Sí' : v === false ? 'No' : String(v)}</>;
-  if (tipo === 'number') return <>{/saldo|pension|costo|ingreso|infonavit|salario|expectativa/.test(campo) ? fmtMXN(Number(v)) : fmtNum(Number(v))}</>;
-  if (tipo === 'date') return <>{fmtFecha(String(v))}</>;
-  if (tipo === 'json') return <span className="text-muted">json</span>;
-  return <>{String(v)}</>;
-}
-
-export default async function Expediente({ params }: { params: { id: string } }) {
+export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
+  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'resumen';
   const db = t3();
-  const [{ data: e }, { data: campos }, { data: datos }, { data: ck }, { data: ops }, { data: cat }, { data: consultas }, { data: docs }, { data: inter }, { data: contactos }, { data: citas }, { data: miembros }, { data: puntos }, { data: escenarios }] = await Promise.all([
+  const [{ data: e }, { data: campos }, { data: datos }, { data: ck }, { data: ops }, { data: cat }, { data: consultas }, { data: docs }, { data: inter }, { data: contactos }, { data: citas }, { data: miembros }, { data: puntos }] = await Promise.all([
     db.from('v_expediente').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('catalogo_campos').select('*').order('orden'),
     db.from('v_mejor_dato').select('*').eq('persona_id', params.id),
@@ -33,11 +29,11 @@ export default async function Expediente({ params }: { params: { id: string } })
     db.from('citas').select('*').eq('persona_id', params.id).order('inicio', { ascending: false }).limit(5),
     db.from('miembros').select('id,nombre,email,roles').eq('activo', true),
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
-    db.from('escenarios').select('*').eq('persona_id', params.id).order('updated_at', { ascending: false }),
   ]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
+  const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
   const cabecera = (miembros ?? []).find((x: Any) => x.id === e.cabecera_id);
   const saldoPuntos = (puntos ?? []).reduce((s: number, p: Any) => s + (p.tipo === 'abono' ? p.puntos : -p.puntos), 0);
   const tel = (contactos ?? []).find((c: Any) => c.tipo === 'telefono' && c.principal) ?? (contactos ?? []).find((c: Any) => c.tipo === 'telefono');
@@ -45,110 +41,173 @@ export default async function Expediente({ params }: { params: { id: string } })
   const alertas = (ck ?? []).filter((c: Any) => c.estado === 'alerta');
   const opsAbiertas = (ops ?? []).filter((o: Any) => !['no_aplica', 'perdida', 'ganada'].includes(o.estado));
   const opsCerradas = (ops ?? []).filter((o: Any) => ['no_aplica', 'perdida', 'ganada'].includes(o.estado));
-  const semilla = datosMap.get('semilla');
+  const semilla = parseSemillaV2(datosMap.get('semilla')?.valor);
+  // Saldos corregidos por el asesor (portal) viven en public.clientes.saldos_corregidos
+  let saldosCorregidos: SaldosCorregidos | null = null;
+  let mod40AplicaLegacy: boolean | null = null;
+  if (e.legacy_cliente_id) {
+    const { data: cl } = await createAdminClient().from('clientes').select('saldos_corregidos, mod40_retro_hoy, mod40_retro_futuro').eq('id', e.legacy_cliente_id).maybeSingle();
+    saldosCorregidos = (cl?.saldos_corregidos as SaldosCorregidos | null) ?? null;
+    mod40AplicaLegacy = cl ? cl.mod40_retro_hoy === 'true' || cl.mod40_retro_futuro === 'true' : null;
+  }
+  const rawFechaSisec = (datosMap.get('semilla')?.valor as { meta?: { fecha_sisec?: string } } | undefined)?.meta?.fecha_sisec;
+  const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;
+  const semillaAt = datosMap.get('semilla')?.obtenido_en ? fmtFecha(datosMap.get('semilla')?.obtenido_en) : null;
+  const ultimaConsulta = (consultas ?? [])[0];
+  const href = (t: string) => `/trabajo/p/${e.persona_id}?tab=${t}`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="rounded-2xl border border-line bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs text-muted">Expediente · etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'}{e.hubspot_id ? ` · HS ${e.hubspot_id}` : ''}</div>
             <h1 className="text-2xl font-extrabold">{e.nombre ?? '(sin nombre)'} {e.apellidos ?? ''}</h1>
             <div className="mt-1 text-sm text-muted">
-              {e.edad ? `${e.edad} años` : 'edad desconocida'} · {e.curp ?? 'sin CURP'} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
+              {e.edad ? `${e.edad} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-cream px-2 py-0.5">{e.ley ?? 'Ley ?'}</span>
-              <span className="rounded-full bg-cream px-2 py-0.5">{e.semanas ? `${fmtNum(e.semanas)} semanas (${CAPA_LABEL[e.semanas_capa] ?? ''})` : 'semanas ?'}</span>
-              <span className="rounded-full bg-cream px-2 py-0.5">{e.status_empleo ?? 'empleo ?'}</span>
-              {e.pension_base ? <span className="rounded-full bg-lime/40 px-2 py-0.5">Base {fmtMXN(e.pension_base)} · Máx {fmtMXN(e.pension_maxima)}</span> : null}
-              <span className="rounded-full bg-cream px-2 py-0.5">{saldoPuntos} pts</span>
-            </div>
-            {e.dolor_principal && <p className="mt-2 text-sm">“{e.dolor_principal}”</p>}
+            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'}{e.hubspot_id ? ` · HubSpot ${e.hubspot_id}` : ''} · {saldoPuntos} pts · Cabecera: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
           </div>
-          <div className="text-right text-sm">
-            <div className="text-xs text-muted">Cabecera</div>
-            <div className="font-semibold">{cabecera ? cabecera.nombre ?? cabecera.email : 'Sin asignar'}</div>
+          <div className="text-right text-xs">
+            <div className="flex flex-wrap justify-end gap-2">
+              {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://wa.me/52${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp</a>}
+              {e.hubspot_id && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://app.hubspot.com/contacts/8/record/0-1/${e.hubspot_id}`} target="_blank" rel="noreferrer">HubSpot</a>}
+            </div>
             <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
-            {tel && <a className="mt-2 inline-block text-xs underline" href={`https://wa.me/52${tel.normalizado}`} target="_blank" rel="noreferrer">Abrir WhatsApp</a>}
-            {semilla && <Link href={`/calculadora?persona=${e.persona_id}`} className="ml-3 inline-block text-xs underline">Calculadora pro</Link>}
           </div>
         </div>
+        <nav className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3 text-sm">
+          {TABS.map(([t, l]) => (
+            <Link key={t} href={href(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? 'bg-ink font-semibold text-white' : 'hover:bg-cream'}`}>
+              {l}{t === 'oportunidades' && opsAbiertas.length ? <span className="ml-1 rounded-full bg-lime px-1.5 text-[10px] text-ink">{opsAbiertas.length}</span> : null}{t === 'resumen' && alertas.length ? <span className="ml-1 rounded-full bg-amber-200 px-1.5 text-[10px] text-ink">{alertas.length}</span> : null}
+            </Link>
+          ))}
+        </nav>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-6">
-          {/* Checklist */}
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Orden de situación {alertas.length ? <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] text-red-700">{alertas.length} alertas</span> : null}</h2>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {(ck ?? []).map((c: Any) => (
-                <li key={c.item} className="flex items-start gap-2 text-sm">
-                  <span className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : c.estado === 'no_aplica' ? 'bg-gray-300' : 'bg-gray-200'}`} />
-                  <span><b>{CHECK_LABEL[c.item] ?? c.item}</b>{c.detalle ? <span className="text-muted"> · {c.detalle}</span> : null}{c.estado === 'sin_dato' ? <span className="text-muted"> · sin dato</span> : null}</span>
+      {tab === 'resumen' && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Kpi label="Régimen" v={e.ley ?? '—'} sub={e.ley_capa === 'validado' ? `oficial · ${fmtFecha(e.ley_en)}${e.ley_vigente === false ? ' (antiguo)' : ''}` : e.ley_capa ?? ''} />
+                <Kpi label="Semanas" v={e.semanas ? fmtNum(e.semanas) : '—'} sub={e.semanas_capa === 'validado' ? 'oficial' : e.semanas_capa === 'declarado' ? 'declaradas' : ''} />
+                <Kpi label="Pensión base" v={e.pension_base ? fmtMXN(e.pension_base) : '—'} sub={e.edad_base ? `a los ${e.edad_base}` : ''} />
+                <Kpi label="Pensión máxima" v={e.pension_maxima ? fmtMXN(e.pension_maxima) : '—'} sub={e.edad_maxima ? `a los ${e.edad_maxima}` : ''} green />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+                <Mini label="Cotiza" v={e.status_empleo ?? '—'} />
+                <Mini label="Derechos Ley 73" v={e.ley === 'Ley97' ? 'n/a' : e.conserva_derechos == null ? '—' : e.conserva_derechos ? 'Vigentes' : 'No vigentes'} />
+                <Mini label="Mod 40 retro hoy" v={e.mod40_retro_aplica == null ? '—' : e.mod40_retro_aplica ? `Sí · ${e.pension_mod40_retro ? fmtMXN(e.pension_mod40_retro) : ''}` : 'No'} />
+                <Mini label="Saldo Infonavit" v={e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} />
+              </div>
+              {e.dolor_principal && <p className="mt-4 rounded-xl bg-cream p-3 text-sm">“{e.dolor_principal}”</p>}
+              <div className="mt-3 text-xs text-muted">Última consulta: {ultimaConsulta ? `${ultimaConsulta.tipo} · ${ultimaConsulta.proveedor ?? ''} · ${ultimaConsulta.estado} · ${fmtFecha(ultimaConsulta.created_at)}${ultimaConsulta.error ? ` · ${ultimaConsulta.error}` : ''}` : 'ninguna'}</div>
+            </section>
+
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-3 text-sm font-bold">Orden de situación {alertas.length ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} alertas</span> : null}</h2>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {(ck ?? []).map((c: Any) => (
+                  <li key={c.item} className="flex items-start gap-2 text-sm">
+                    <span className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : c.estado === 'no_aplica' ? 'bg-gray-300' : 'bg-gray-200'}`} />
+                    <span>{CHECK_LABEL[c.item] ?? c.item}{c.detalle ? <span className="text-muted"> · {c.detalle}</span> : null}{c.estado === 'sin_dato' ? <span className="text-muted"> · sin dato</span> : null}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
+              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} />
+            </section>
+          </div>
+          <aside className="space-y-4">
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-2 text-sm font-bold">Pedir información</h2>
+              <ConsultaForm personaId={e.persona_id} />
+            </section>
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-2 text-sm font-bold">Contexto</h2>
+              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => r.grupo === 'contexto')} grupos={['contexto']} compacto />
+            </section>
+            {opsAbiertas.length ? (
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <h2 className="mb-2 text-sm font-bold">Oportunidades <Link href={href('oportunidades')} className="ml-1 text-xs font-normal underline">ver</Link></h2>
+                <ul className="space-y-1 text-xs">{opsAbiertas.slice(0, 5).map((o: Any) => <li key={o.id} className="flex justify-between gap-2"><span>{catMap.get(o.codigo)?.nombre ?? o.codigo}</span><span className="font-semibold">{o.valor_estimado ? fmtMXN(o.valor_estimado) : ESTADO_OP_LABEL[o.estado]}</span></li>)}</ul>
+              </section>
+            ) : null}
+          </aside>
+        </div>
+      )}
+
+      {tab === 'calculadoras' && (
+        <section className="rounded-2xl border border-line bg-white p-2 sm:p-5">
+          {semilla ? (
+            <>
+              <CalculadoraClient
+                consultaId={e.legacy_cliente_id ?? e.persona_id}
+                clienteNombre={[e.nombre, e.apellidos].filter(Boolean).join(' ') || semilla.perfil.nombre}
+                semilla={semilla}
+                backHref={href('resumen')}
+                backLabel="← Volver al resumen"
+                fechaSisec={fechaSisecTxt}
+                calculoGeneradoAt={semillaAt}
+                mod40Aplica={mod40AplicaLegacy ?? !!(e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
+                calculoPensional={datosMap.get('semilla')?.valor}
+                saldosCorregidos={saldosCorregidos}
+                guardarScope={e.legacy_cliente_id ? 'cliente' : null}
+              />
+              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>.</p>
+            </>
+          ) : (
+            <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
+          )}
+        </section>
+      )}
+
+      {tab === 'datos' && (
+        <section className="rounded-2xl border border-line bg-white p-5">
+          <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
+          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'issste', 'contexto', 'calculo']} />
+          <div className="mt-5 border-t border-line pt-4">
+            <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
+            <ul className="space-y-1 text-xs">
+              {(consultas ?? []).map((c: Any) => (
+                <li key={c.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
+                  <span>{c.tipo} · {c.proveedor ?? '—'} <span className="text-muted">· {c.solicitante_tipo}{c.motivo ? ` · ${c.motivo}` : ''}</span></span>
+                  <span className={c.estado === 'completada' ? 'text-green-700' : c.estado === 'error' || c.estado === 'sin_resultado' ? 'text-red-600' : 'text-amber-700'}>{c.estado} · {fmtFecha(c.created_at)}{c.error ? ` · ${c.error}` : ''}</span>
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
+        </section>
+      )}
 
-          {/* Oportunidades */}
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Oportunidades</h2>
-            {!opsAbiertas.length && <p className="text-sm text-muted">Sin oportunidades abiertas.</p>}
-            <ul className="space-y-3">
-              {opsAbiertas.map((o: Any) => (
-                <li key={o.id} className="rounded-xl border border-line p-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div><span className="rounded-full bg-cream px-2 py-0.5 text-[11px]">N{catMap.get(o.codigo)?.nivel}</span> <b>{catMap.get(o.codigo)?.nombre ?? o.codigo}</b> <span className="text-xs text-muted">· {ESTADO_OP_LABEL[o.estado]}</span></div>
-                    <div className="text-sm font-bold">{o.valor_estimado ? fmtMXN(o.valor_estimado) : ''}{o.urgencia_fecha ? <span className="ml-2 text-xs font-normal text-amber-700">límite {fmtFecha(o.urgencia_fecha)}</span> : null}</div>
-                  </div>
-                  <p className="mt-1 text-xs text-muted">{o.motivo}{o.datos_faltantes?.length ? ` · falta: ${o.datos_faltantes.join(', ')}` : ''}{catMap.get(o.codigo)?.proveedor_externo ? ` · vía ${catMap.get(o.codigo)?.proveedor_externo}` : ''}</p>
-                  {o.valor_detalle && Object.keys(o.valor_detalle).length ? <p className="mt-1 text-[11px] text-muted">{Object.entries(o.valor_detalle).map(([k, v]) => `${k}: ${typeof v === 'number' ? fmtNum(v) : String(v)}`).join(' · ')}</p> : null}
-                  <OportunidadAcciones op={{ id: o.id, estado: o.estado, especialista_id: o.especialista_id }} personaId={e.persona_id} miembros={(miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }))} />
-                </li>
-              ))}
-            </ul>
-            {opsCerradas.length ? <details className="mt-3 text-xs text-muted"><summary>Cerradas / no aplican ({opsCerradas.length})</summary><ul className="mt-1 list-disc pl-4">{opsCerradas.map((o: Any) => <li key={o.id}>{catMap.get(o.codigo)?.nombre ?? o.codigo} · {ESTADO_OP_LABEL[o.estado]}{o.resultado ? ` · ${o.resultado}` : ''}</li>)}</ul></details> : null}
-          </section>
+      {tab === 'oportunidades' && (
+        <section className="rounded-2xl border border-line bg-white p-5">
+          {!opsAbiertas.length && <p className="text-sm text-muted">Sin oportunidades abiertas.</p>}
+          <ul className="space-y-3">
+            {opsAbiertas.map((o: Any) => (
+              <li key={o.id} className="rounded-xl border border-line p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div><span className="rounded-full bg-cream px-2 py-0.5 text-[11px]">N{catMap.get(o.codigo)?.nivel}</span> <b>{catMap.get(o.codigo)?.nombre ?? o.codigo}</b> <span className="text-xs text-muted">· {ESTADO_OP_LABEL[o.estado]}</span></div>
+                  <div className="text-sm font-bold">{o.valor_estimado ? fmtMXN(o.valor_estimado) : ''}{o.urgencia_fecha ? <span className="ml-2 text-xs font-normal text-amber-700">límite {fmtFecha(o.urgencia_fecha)}</span> : null}</div>
+                </div>
+                <p className="mt-1 text-xs text-muted">{o.motivo}{o.datos_faltantes?.length ? ` · falta: ${o.datos_faltantes.join(', ')}` : ''}{catMap.get(o.codigo)?.proveedor_externo ? ` · vía ${catMap.get(o.codigo)?.proveedor_externo}` : ''}</p>
+                {o.valor_detalle && Object.keys(o.valor_detalle).length ? <p className="mt-1 text-[11px] text-muted">{Object.entries(o.valor_detalle).map(([k, v]) => `${k}: ${typeof v === 'number' ? fmtNum(v) : String(v)}`).join(' · ')}</p> : null}
+                <OportunidadAcciones op={{ id: o.id, estado: o.estado, especialista_id: o.especialista_id }} personaId={e.persona_id} miembros={(miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }))} />
+              </li>
+            ))}
+          </ul>
+          {opsCerradas.length ? <details className="mt-3 text-xs text-muted"><summary>Cerradas / no aplican ({opsCerradas.length})</summary><ul className="mt-1 list-disc pl-4">{opsCerradas.map((o: Any) => <li key={o.id}>{catMap.get(o.codigo)?.nombre ?? o.codigo} · {ESTADO_OP_LABEL[o.estado]}{o.resultado ? ` · ${o.resultado}` : ''}</li>)}</ul></details> : null}
+        </section>
+      )}
 
-          {/* Datos por grupo */}
+      {tab === 'bitacora' && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Expediente · mejor dato por campo</h2>
-            <div className="grid gap-5 md:grid-cols-2">
-              {GRUPOS.map(([g, label]) => {
-                const cs = (campos ?? []).filter((c: Any) => c.grupo === g && c.campo !== 'semilla');
-                if (!cs.length) return null;
-                return (
-                  <div key={g}>
-                    <h3 className="mb-1 text-xs font-bold uppercase text-muted">{label}</h3>
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {cs.map((c: Any) => {
-                          const d = datosMap.get(c.campo);
-                          return (
-                            <tr key={c.campo} className="border-t border-line/70">
-                              <td className="py-1 pr-2 text-xs text-muted">{c.nombre}</td>
-                              <td className="py-1 text-right font-medium"><Valor campo={c.campo} tipo={c.tipo} v={d?.valor} /></td>
-                              <td className="py-1 pl-2 text-right text-[10px] text-muted">
-                                {d ? <span title={`${CAPA_LABEL[d.capa]} · ${d.proveedor ?? d.origen_tipo} · ${fmtFecha(d.obtenido_en)}`} className={`rounded px-1 ${d.capa === 'validado' ? 'bg-green-50 text-green-700' : d.capa === 'calculado' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'} ${d.vigente ? '' : 'line-through'}`}>{d.capa[0].toUpperCase()}</span> : null}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="mt-3 text-[11px] text-muted">V = validado (instituto/proveedor), C = calculado por Trol, D = declarado. Tachado = vencido.</p>
-            <DeclararForm personaId={e.persona_id} campos={(campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo }))} />
-          </section>
-
-          {/* Bitácora */}
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Bitácora</h2>
+            <h2 className="mb-3 text-sm font-bold">Bitácora</h2>
             <NotaForm personaId={e.persona_id} />
             <ul className="mt-3 space-y-2 text-sm">
               {(inter ?? []).map((i: Any) => (
@@ -160,49 +219,34 @@ export default async function Expediente({ params }: { params: { id: string } })
               {!inter?.length && <li className="text-muted">Sin interacciones.</li>}
             </ul>
           </section>
-        </div>
-
-        <aside className="space-y-6">
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Pedir información</h2>
-            <ConsultaForm personaId={e.persona_id} />
-            <ul className="mt-3 space-y-1 text-xs">
-              {(consultas ?? []).map((c: Any) => (
-                <li key={c.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
-                  <span>{c.tipo} · {c.proveedor ?? '—'} <span className="text-muted">· {c.solicitante_tipo}</span></span>
-                  <span className={c.estado === 'completada' ? 'text-green-700' : c.estado === 'error' || c.estado === 'sin_resultado' ? 'text-red-600' : 'text-amber-700'}>{c.estado} · {fmtFecha(c.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Documentos</h2>
-            <ul className="space-y-1 text-xs">
-              {(docs ?? []).map((d: Any) => (
-                <li key={d.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
-                  <span>{d.nombre ?? d.tipo} <span className="text-muted">· {d.gating}{d.precio_mxn ? ` ${fmtMXN(d.precio_mxn)}` : ''}</span></span>
-                  {d.url_externa ? <a href={d.url_externa} target="_blank" rel="noreferrer" className="underline">abrir</a> : <span className="text-muted">{d.storage_path ? 'bóveda' : ''}</span>}
-                </li>
-              ))}
-              {!docs?.length && <li className="text-muted">Sin documentos.</li>}
-            </ul>
-          </section>
-
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Citas</h2>
-            <CitaForm personaId={e.persona_id} />
-            <ul className="mt-2 space-y-1 text-xs">{(citas ?? []).map((c: Any) => <li key={c.id}>{new Date(c.inicio).toLocaleString('es-MX')} · {c.estado} · {c.origen}{c.notas ? ` · ${c.notas}` : ''}</li>)}</ul>
-          </section>
-
-          {escenarios?.length ? (
+          <aside className="space-y-4">
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Escenarios</h2>
-              <ul className="space-y-1 text-xs">{escenarios.map((s: Any) => <li key={s.id}>{s.nombre} · {s.dueno_tipo}{s.compartido_con_cliente ? ' · compartido' : ''} · {fmtFecha(s.updated_at)}</li>)}</ul>
+              <h2 className="mb-2 text-sm font-bold">Documentos</h2>
+              <ul className="space-y-1 text-xs">
+                {(docs ?? []).map((d: Any) => (
+                  <li key={d.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
+                    <span>{d.nombre ?? d.tipo} <span className="text-muted">· {d.gating}{d.precio_mxn ? ` ${fmtMXN(d.precio_mxn)}` : ''}</span></span>
+                    {d.url_externa ? <a href={d.url_externa} target="_blank" rel="noreferrer" className="underline">abrir</a> : <span className="text-muted">{d.storage_path ? 'bóveda' : ''}</span>}
+                  </li>
+                ))}
+                {!docs?.length && <li className="text-muted">Sin documentos.</li>}
+              </ul>
             </section>
-          ) : null}
-        </aside>
-      </div>
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-2 text-sm font-bold">Citas</h2>
+              <CitaForm personaId={e.persona_id} />
+              <ul className="mt-2 space-y-1 text-xs">{(citas ?? []).map((c: Any) => <li key={c.id}>{new Date(c.inicio).toLocaleString('es-MX')} · {c.estado} · {c.origen}{c.notas ? ` · ${c.notas}` : ''}</li>)}</ul>
+            </section>
+          </aside>
+        </div>
+      )}
     </div>
   );
+}
+
+function Kpi({ label, v, sub, green }: { label: string; v: string; sub?: string; green?: boolean }) {
+  return <div><div className="text-[11px] uppercase tracking-wide text-muted">{label}</div><div className={`text-xl font-extrabold ${green ? 'text-green-700' : ''}`}>{v}</div>{sub ? <div className="text-[11px] text-muted">{sub}</div> : null}</div>;
+}
+function Mini({ label, v }: { label: string; v: string }) {
+  return <div><div className="text-[11px] text-muted">{label}</div><div className="font-semibold">{v}</div></div>;
 }

@@ -68,8 +68,8 @@ export function ConsultaForm({ personaId }: { personaId: string }) {
       <label className="flex items-center gap-2"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Forzar aunque haya dato vigente</label>
       <button disabled={pending} className={btnDark + ' w-full py-2'} onClick={() => start(async () => {
         const r = await pedirConsulta(personaId, tipo, notificar, motivo, forzar, prov || undefined);
-        const res = (r as R).resultado as { ok?: boolean; motivo?: string; proveedor?: string; costo?: number } | undefined;
-        setMsg(!r.ok ? (r as R).error ?? 'error' : res?.ok ? `Solicitada vía ${res.proveedor} (${res.costo ?? 0} MXN)` : `No enviada: ${res?.motivo}`);
+        const res = (r as R).resultado as { ok?: boolean; motivo?: string; proveedor?: string; costo?: number; estado?: string; error?: string } | undefined;
+        setMsg(!r.ok ? (r as R).error ?? 'error' : !res?.ok ? `No enviada: ${res?.motivo === 'validado_vigente' ? 'ya hay dato oficial de menos de 90 días (marca "forzar")' : res?.motivo === 'consulta_en_curso' ? 'ya hay una consulta en curso' : res?.motivo}` : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : `Solicitada vía ${res.proveedor} (${res.costo ?? 0} MXN)`);
       })}>{pending ? 'Enviando…' : 'Solicitar'}</button>
       {msg && <p className="text-muted">{msg}</p>}
     </div>
