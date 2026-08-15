@@ -100,7 +100,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
           <div className="space-y-4">
             <section className="rounded-2xl border border-line bg-white p-5">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Kpi label="Régimen" v={e.ley ?? '—'} sub={e.ley_capa === 'validado' ? `oficial · ${fmtFecha(e.ley_en)}${e.ley_vigente === false ? ' (antiguo)' : ''}` : e.ley_capa ?? ''} />
+                <Kpi label="Régimen" v={e.ley ?? '—'} sub={e.ley_capa === 'validado' ? `SISEC al ${fmtFecha(e.ley_en)}${e.ley_vigente === false ? ' · conviene actualizar' : ''}` : e.ley_capa ?? ''} />
                 <Kpi label="Semanas" v={e.semanas ? fmtNum(e.semanas) : '—'} sub={e.semanas_capa === 'validado' ? 'oficial' : e.semanas_capa === 'declarado' ? 'declaradas' : ''} />
                 <Kpi label="Pensión base" v={e.pension_base ? fmtMXN(e.pension_base) : '—'} sub={e.edad_base ? `a los ${e.edad_base}` : ''} />
                 <Kpi label="Pensión máxima" v={e.pension_maxima ? fmtMXN(e.pension_maxima) : '—'} sub={e.edad_maxima ? `a los ${e.edad_maxima}` : ''} green />
@@ -112,7 +112,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 <Mini label="Saldo Infonavit" v={e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} />
               </div>
               {e.dolor_principal && <p className="mt-4 rounded-xl bg-cream p-3 text-sm">“{e.dolor_principal}”</p>}
-              <div className="mt-3 text-xs text-muted">Última consulta: {ultimaConsulta ? `${ultimaConsulta.tipo} · ${ultimaConsulta.proveedor ?? ''} · ${ultimaConsulta.estado} · ${fmtFecha(ultimaConsulta.created_at)}${ultimaConsulta.error ? ` · ${ultimaConsulta.error}` : ''}` : 'ninguna'}</div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                <span><b className={e.ley_vigente === false ? 'text-amber-700' : 'text-ink'}>Datos del IMSS (SISEC) al {e.ley_en ? fmtFecha(e.ley_en) : '—'}</b>{e.ley_en ? ` · hace ${Math.floor((Date.now() - new Date(e.ley_en).getTime()) / 86400000)} días` : ''}</span>
+                {ultimaConsulta && ['solicitada', 'en_proceso'].includes(ultimaConsulta.estado) ? <span className="text-amber-700">Actualización en proceso ({ultimaConsulta.proveedor}) desde {fmtFecha(ultimaConsulta.created_at)}</span> : ultimaConsulta?.estado === 'error' ? <span className="text-red-600">Última solicitud falló: {ultimaConsulta.error}</span> : null}
+              </div>
             </section>
 
             <section className="rounded-2xl border border-line bg-white p-5">
@@ -129,7 +132,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
-              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} />
+              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} fechas={{ imss: e.ley_en }} />
             </section>
           </div>
           <aside className="space-y-4">
@@ -180,7 +183,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       {tab === 'datos' && (
         <section className="rounded-2xl border border-line bg-white p-5">
           <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
-          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'issste', 'contexto', 'calculo']} />
+          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
           <div className="mt-5 border-t border-line pt-4">
             <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
             <ul className="space-y-1 text-xs">

@@ -24,26 +24,26 @@ function show(r: DatoRow) {
 const CONSULTA_POR_GRUPO: Record<string, [string, string]> = { imss: ['imss_historial', 'Actualizar del IMSS'], afore: ['cda', 'Consultar AFORE (CDA)'], infonavit: ['infonavit', 'Consultar Infonavit'], issste: ['issste', 'Consultar ISSSTE'] };
 const GRUPO_LABEL: Record<string, string> = { identidad: 'Identidad', imss: 'IMSS', afore: 'AFORE', infonavit: 'Infonavit', issste: 'ISSSTE', contexto: 'Contexto personal', calculo: 'Cálculos Trol' };
 
-export function DatosTabla({ personaId, rows, grupos, compacto = false }: { personaId: string; rows: DatoRow[]; grupos: string[]; compacto?: boolean }) {
+export function DatosTabla({ personaId, rows, grupos, compacto = false, fechas = {} }: { personaId: string; rows: DatoRow[]; grupos: string[]; compacto?: boolean; fechas?: Record<string, string | null | undefined> }) {
   return (
     <div className={`grid gap-5 ${compacto ? '' : 'md:grid-cols-2'}`}>
       {grupos.map((g) => {
         const rs = rows.filter((r) => r.grupo === g && r.campo !== 'semilla');
         if (!rs.length) return null;
-        return <Grupo key={g} g={g} rows={rs} personaId={personaId} />;
+        return <Grupo key={g} g={g} rows={rs} personaId={personaId} fecha={fechas[g] ?? null} />;
       })}
     </div>
   );
 }
 
-function Grupo({ g, rows, personaId }: { g: string; rows: DatoRow[]; personaId: string }) {
+function Grupo({ g, rows, personaId, fecha }: { g: string; rows: DatoRow[]; personaId: string; fecha: string | null }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const cq = CONSULTA_POR_GRUPO[g];
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-xs font-bold uppercase text-muted">{GRUPO_LABEL[g] ?? g}</h3>
+        <h3 className="text-xs font-bold uppercase text-muted">{GRUPO_LABEL[g] ?? g}{fecha ? <span className="ml-2 font-normal normal-case">· datos al {fmtFecha(fecha)}</span> : null}</h3>
         {cq && (
           <button disabled={pending} className="rounded-lg border border-line bg-white px-2 py-0.5 text-[11px] font-semibold hover:bg-cream disabled:opacity-50" onClick={() => start(async () => {
             const r = (await pedirConsulta(personaId, cq[0], false, 'desde expediente', false)) as R;
