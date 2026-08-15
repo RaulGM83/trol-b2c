@@ -28,7 +28,7 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [] }: {
           setMsg(error ? error.message : r?.ok ? 'Pedimos tu información oficial al IMSS. Te avisamos cuando llegue.' : r?.motivo === 'validado_vigente' ? 'Tu información oficial ya está actualizada.' : 'Ya hay una consulta en curso.');
           router.refresh();
         })}>Actualizar mi información del IMSS</button>
-        {tieneSemilla && beneficios.includes('calculadora') && <Link href="/calculadora" className={btn}>Probar escenarios (calculadora)</Link>}
+        {tieneSemilla && beneficios.includes('calculadora') && <Link href="/calculadora" className={btn}>Abrir mi calculadora</Link>}
         <Link href="/mi?tab=asesorias" className={btn}>Ver asesorías y precios</Link>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">

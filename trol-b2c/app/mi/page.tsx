@@ -37,6 +37,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const hechas = misiones.filter((m) => m.estado === 'hecho').length;
   const progreso = Math.round((100 * hechas) / Math.max(1, misiones.length));
   const href = (t: string) => `/mi?tab=${t}`;
+  const yaCubierto = (p: Any) => Array.isArray(p.beneficios) && p.beneficios.length > 0 && p.beneficios.every((b: string) => beneficios.includes(b));
+  const leyTxt = e.ley === 'Ley97' ? 'Ley 97' : e.ley === 'Ley73' ? 'Ley 73' : '';
   const semanasTxt = e.semanas ? `${fmtNum(e.semanas)} semanas ${e.semanas_capa === 'validado' ? 'oficiales' : 'que nos dijiste'}` : null;
 
   return (
@@ -163,7 +165,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">¿Y si…?</h2>
             {beneficios.includes('calculadora') && e.tiene_semilla ? (
-              <><p className="mb-2 text-xs text-muted">Tienes la calculadora completa habilitada: mueve edad, semanas, Modalidad 40 y saldos.</p><Link href="/calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora</Link></>
+              <><p className="mb-2 text-xs text-muted">Tienes la calculadora habilitada: prueba edad de retiro, semanas y saldos con tus datos oficiales.</p><Link href="/calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link></>
             ) : (
               <><p className="mb-2 text-xs text-muted">La calculadora completa te deja probar escenarios (edad de retiro, Modalidad 40, semanas por recuperar). Se habilita con la asesoría avanzada, con {fmtMXN(100)} o con 100 puntos.</p><div className="flex flex-wrap gap-2"><CanjearBoton producto="calculadora" precio={100} saldo={e.puntos} /><Link href="/checkout?p=CALCULADORA_ADDON" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">Pagar {fmtMXN(100)}</Link></div></>
             )}
@@ -214,7 +216,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           </section>
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">Usarlos en Trol</h2>
-            <ul className="mt-2 divide-y divide-line text-sm">{(e.productos ?? []).map((p: Any) => <li key={p.codigo} className="flex items-center justify-between gap-2 py-1.5"><span>{p.nombre} <span className="text-xs text-muted">· {p.max_pct_puntos}% con puntos</span></span>{p.max_pct_puntos === 100 && p.precio > 0 ? <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} /> : <span className="text-xs text-muted">{p.precio ? fmtMXN(p.precio) : 'gratis'}</span>}</li>)}</ul>
+            <ul className="mt-2 divide-y divide-line text-sm">{(e.productos ?? []).map((p: Any) => <li key={p.codigo} className="flex items-center justify-between gap-2 py-1.5"><span>{p.nombre} <span className="text-xs text-muted">· {p.max_pct_puntos}% con puntos</span></span>{yaCubierto(p) ? <span className="text-xs font-semibold text-green-700">Ya lo tienes</span> : p.max_pct_puntos === 100 && p.precio > 0 ? <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} /> : <span className="text-xs text-muted">{p.precio ? fmtMXN(p.precio) : 'gratis'}</span>}</li>)}</ul>
           </section>
         </div>
       )}
@@ -227,9 +229,15 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               <div className="flex items-baseline justify-between"><h2 className="text-base font-extrabold">{p.nombre}</h2><span className="font-bold">{fmtMXN(p.precio)}</span></div>
               <p className="mt-1 text-xs text-muted">Incluye: {(p.beneficios ?? []).map((b: string) => (BEN_LABEL[b] ?? b).toLowerCase()).join(', ') || 'asesoría'}. Hasta {p.max_pct_puntos}% con puntos.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href={`/checkout?p=${LEGACY_CODE[p.codigo] ?? p.codigo}`} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Pagar</Link>
-                {p.max_pct_puntos === 100 && <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} />}
-                <HablarBoton texto="Prefiero que me expliquen" />
+                {yaCubierto(p) ? (
+                  <>{p.codigo === 'calculadora' && e.tiene_semilla ? <Link href="/calculadora" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link> : <span className="rounded-xl bg-green-50 px-4 py-2.5 text-sm font-bold text-green-800">Ya lo tienes</span>}<HablarBoton texto="Hablar con mi experto" /></>
+                ) : (
+                  <>
+                    <Link href={`/checkout?p=${LEGACY_CODE[p.codigo] ?? p.codigo}`} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Pagar</Link>
+                    {p.max_pct_puntos === 100 && <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} />}
+                    <HablarBoton texto="Prefiero que me expliquen" />
+                  </>
+                )}
               </div>
             </section>
           ))}
