@@ -6,6 +6,7 @@ import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LA
 import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
+import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
+const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -40,6 +41,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
   ]);
   const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
+  const [{ data: bens }, { data: catBen }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden')]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
@@ -198,7 +200,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'documentos' && <DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} />}
+      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} /></div>)}
 
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">

@@ -115,3 +115,18 @@ export async function solicitarDiagnosticoAvanzado(personaId: string) {
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ resultado: data });
 }
+
+export async function otorgarBeneficio(personaId: string, codigo: string, motivo: string, origen: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('otorgar_beneficio', { p_persona: personaId, p_codigo: codigo, p_origen: origen || 'asesor', p_motivo: motivo || null, p_referencia: null, p_expira: null });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+export async function revocarBeneficio(personaId: string, id: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('revocar_beneficio', { p_id: id });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}

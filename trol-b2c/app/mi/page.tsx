@@ -2,153 +2,229 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos } from '@/components/trol3/MiAcciones';
+import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton } from '@/components/trol3/MiAcciones';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi expediente · Trol' };
 
-const NIVEL_TXT: Record<number, string> = { 1: 'Poner en orden', 2: 'Aprovechar hoy', 3: 'Crecer y proteger' };
+const TABS: [string, string][] = [['hoy', 'Hoy'], ['misiones', 'Misiones'], ['expediente', 'Mi expediente'], ['documentos', 'Documentos'], ['puntos', 'Puntos'], ['asesorias', 'Asesorías']];
+const NIVEL: Record<number, [string, string]> = { 1: ['Poner en orden', 'Lo básico para que nada te reste pensión.'], 2: ['Aprovechar hoy', 'Lo que puedes ganar ahora mismo.'], 3: ['Crecer y proteger', 'Para llegar más lejos.'] };
+const ESTADO_MISION: Record<string, [string, string]> = { hecho: ['Hecho', 'bg-green-100 text-green-800'], pendiente: ['Pendiente', 'bg-cream text-ink'], en_proceso: ['En proceso', 'bg-amber-100 text-amber-800'], atencion: ['Requiere atención', 'bg-red-100 text-red-700'], bloqueado: ['Después', 'bg-gray-100 text-muted'], recomendada: ['Tu experto la recomienda', 'bg-lime text-ink'] };
+const BEN_LABEL: Record<string, string> = { calculadora: 'Calculadora completa', diagnostico_avanzado: 'Diagnóstico avanzado', sesion_experto: 'Sesión con experto', docs_premium: 'Documentos premium', seguimiento: 'Seguimiento de trámite' };
+const LEGACY_CODE: Record<string, string> = { calculadora: 'CALCULADORA_ADDON', diagnostico_avanzado: 'DIAGNOSTICO_AVANZADO', diagnostico_avanzado_sesion: 'DIAGNOSTICO_AVANZADO_SESION' };
 
-export default async function MiExpediente() {
+export default async function MiExpediente({ searchParams }: { searchParams: { tab?: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login?next=/mi');
   const pid = await getPersonaMia();
   if (!pid) return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
-  const { data: x, error } = await t3().rpc('mi_expediente');
-  if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}. ¿Está expuesto el esquema trol3?</main>;
+  const db = t3();
+  await db.rpc('mi_bienvenida');
+  const [{ data: x, error }, { data: mis }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones')]);
+  if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}.</main>;
   const e = x as Any;
+  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'hoy';
+  const misiones: Any[] = (mis as Any[]) ?? [];
   const ck: Any[] = e.checklist ?? [];
   const alertas = ck.filter((c) => c.estado === 'alerta');
-  const ops: Any[] = e.oportunidades ?? [];
-  const presentadas = ops.filter((o) => ['presentada', 'en_proceso', 'ganada'].includes(o.estado));
-  const detectadas = ops.filter((o) => o.estado === 'detectada');
   const datos: Any[] = e.datos ?? [];
-  const porGrupo = (g: string) => datos.filter((d) => d.grupo === g);
   const faltan: Any[] = e.campos_por_completar ?? [];
-  const progreso = Math.round((100 * datos.length) / Math.max(1, datos.length + faltan.length));
+  const beneficios: string[] = e.beneficios ?? [];
+  const nombre = (e.persona?.nombre ?? '').split(' ')[0];
+  const brecha = e.pension_base && e.pension_maxima ? Number(e.pension_maxima) - Number(e.pension_base) : null;
+  const siguiente = misiones.find((m) => m.estado === 'atencion') ?? misiones.find((m) => m.estado === 'recomendada') ?? misiones.find((m) => m.estado === 'pendiente' && m.nivel === 1) ?? misiones.find((m) => m.estado === 'pendiente');
+  const hechas = misiones.filter((m) => m.estado === 'hecho').length;
+  const progreso = Math.round((100 * hechas) / Math.max(1, misiones.length));
+  const href = (t: string) => `/mi?tab=${t}`;
+  const semanasTxt = e.semanas ? `${fmtNum(e.semanas)} semanas ${e.semanas_capa === 'validado' ? 'oficiales' : 'que nos dijiste'}` : null;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
-      <header className="mb-5 flex items-center justify-between">
+    <main className="mx-auto max-w-2xl px-4 pb-28 pt-5">
+      <header className="mb-4 flex items-center justify-between">
         <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span>
-        <div className="text-right text-xs text-muted">
-          <div>{e.persona?.nombre ?? 'Tu expediente'}</div>
-          <div>{e.puntos} puntos · <Link href="/referidos" className="underline">ganar más</Link></div>
-        </div>
+        <Link href={href('puntos')} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{e.puntos} pts</Link>
       </header>
 
-      {/* Resumen */}
-      <section className="rounded-2xl border border-line bg-white p-5">
-        <div className="text-xs uppercase tracking-wide text-muted">Tu situación hoy</div>
-        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div><div className="text-[11px] text-muted">Régimen</div><div className="text-lg font-extrabold">{e.ley ?? '—'}</div></div>
-          <div><div className="text-[11px] text-muted">Semanas</div><div className="text-lg font-extrabold">{e.semanas ? fmtNum(e.semanas) : '—'}</div><div className="text-[10px] text-muted">{e.semanas_capa === 'validado' ? 'oficial' : e.semanas_capa === 'declarado' ? 'lo que nos dijiste' : ''}</div></div>
-          <div><div className="text-[11px] text-muted">Pensión estimada hoy</div><div className="text-lg font-extrabold">{e.pension_base ? fmtMXN(e.pension_base) : '—'}</div></div>
-          <div><div className="text-[11px] text-muted">Pensión máxima posible</div><div className="text-lg font-extrabold text-green-700">{e.pension_maxima ? fmtMXN(e.pension_maxima) : '—'}</div></div>
+      {tab === 'hoy' && (
+        <div className="space-y-4">
+          <section className="rounded-3xl bg-ink p-5 text-white">
+            <div className="text-sm text-white/70">Hola{nombre ? `, ${nombre}` : ''}. Tu pensión, en claro:</div>
+            {e.pension_base ? (
+              <>
+                <div className="mt-2 flex items-end gap-3">
+                  <div><div className="text-[11px] uppercase tracking-wide text-white/60">Hoy</div><div className="text-3xl font-extrabold">{fmtMXN(e.pension_base)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
+                  <div className="pb-1 text-white/50">→</div>
+                  <div><div className="text-[11px] uppercase tracking-wide text-lime">Máxima posible</div><div className="text-3xl font-extrabold text-lime">{fmtMXN(e.pension_maxima)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
+                </div>
+                {brecha && brecha > 0 ? <p className="mt-2 text-sm text-white/80">Hay <b className="text-lime">{fmtMXN(brecha)}</b> al mes de diferencia entre lo que te tocaría hoy y lo que podrías lograr. Las misiones te llevan hacia allá.</p> : null}
+                <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
+              </>
+            ) : (
+              <p className="mt-2 text-sm">{e.persona?.curp ? 'Estamos por obtener tu información oficial del IMSS. En cuanto llegue verás aquí tu pensión estimada hoy y la máxima posible.' : 'Comparte tu CURP y buscamos tu información oficial en el IMSS sin costo. Con eso verás aquí tu pensión estimada hoy y la máxima posible.'}</p>
+            )}
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/15"><div className="h-1.5 bg-lime" style={{ width: `${progreso}%` }} /></div>
+            <div className="mt-1 text-[11px] text-white/60">{hechas} de {misiones.length} misiones · {progreso}%</div>
+          </section>
+
+          {siguiente && (
+            <section className="rounded-2xl border-2 border-lime bg-white p-5">
+              <div className="text-[11px] uppercase tracking-wide text-muted">Tu siguiente paso</div>
+              <h2 className="mt-1 text-lg font-extrabold">{siguiente.titulo}</h2>
+              <p className="mt-1 text-sm text-muted">{siguiente.detalle ?? siguiente.por_que}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted"><span>{siguiente.esfuerzo}</span>{siguiente.puntos ? <span>· +{siguiente.puntos} pts</span> : null}{siguiente.valor ? <span>· hasta {fmtMXN(siguiente.valor)}/año</span> : null}</div>
+              <div className="mt-3"><MisionCta mision={siguiente} campos={faltan} /></div>
+            </section>
+          )}
+
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <div className="flex items-center justify-between"><h2 className="text-sm font-bold">Orden de tu situación</h2>{alertas.length ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} por atender</span> : <span className="text-[11px] text-muted">{ck.filter((c) => c.estado === 'ok').length}/{ck.length} en orden</span>}</div>
+            <ul className="mt-2 grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+              {ck.map((c) => (
+                <li key={c.item} className="flex items-start gap-2">
+                  <span className={`mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : 'bg-gray-200'}`} />
+                  <span>{CHECK_LABEL[c.item] ?? c.item}{c.estado === 'alerta' && c.detalle ? <span className="text-muted"> · {c.detalle}</span> : c.estado === 'sin_dato' ? <span className="text-muted"> · pendiente</span> : null}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} />
+
+          {(e.interacciones ?? []).length ? (
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-bold">Novedades</h2>
+              <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).slice(0, 5).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}</div>{i.contenido}</li>)}</ul>
+            </section>
+          ) : null}
         </div>
-        {!e.ley && <p className="mt-3 rounded-xl bg-cream p-3 text-sm">Aún no tenemos tu información oficial del IMSS. Comparte tu CURP con tu asesor o pide que la busquemos y en minutos verás tus semanas y tu régimen aquí.</p>}
-        {e.ley && e.ley_vigente === false && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs">Tu información oficial es de {fmtFecha(e.ley_en)}. Puedes pedir una actualización.</p>}
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-cream"><div className="h-2 bg-lime" style={{ width: `${progreso}%` }} /></div>
-        <div className="mt-1 text-[11px] text-muted">Expediente {progreso}% completo</div>
-      </section>
+      )}
 
-      {/* Checklist */}
-      <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-bold">Orden de tu situación {alertas.length ? <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} por atender</span> : null}</h2>
-        <ul className="mt-2 space-y-1.5 text-sm">
-          {ck.map((c) => (
-            <li key={c.item} className="flex items-start gap-2">
-              <span className={`mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : 'bg-gray-200'}`} />
-              <span>{CHECK_LABEL[c.item] ?? c.item}{c.estado === 'alerta' && c.detalle ? <span className="text-muted"> · {c.detalle}</span> : c.estado === 'sin_dato' ? <span className="text-muted"> · pendiente</span> : null}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {tab === 'misiones' && (
+        <div className="space-y-5">
+          {[1, 2, 3].map((n) => {
+            const ms = misiones.filter((m) => m.nivel === n);
+            if (!ms.length) return null;
+            return (
+              <section key={n}>
+                <h2 className="text-base font-extrabold">Nivel {n} · {NIVEL[n][0]}</h2>
+                <p className="mb-2 text-xs text-muted">{NIVEL[n][1]}</p>
+                <ul className="space-y-2">
+                  {ms.map((m) => {
+                    const st = ESTADO_MISION[m.estado] ?? ESTADO_MISION.pendiente;
+                    return (
+                      <li key={m.codigo} className={`rounded-2xl border bg-white p-4 ${m.estado === 'recomendada' ? 'border-lime' : m.estado === 'atencion' ? 'border-red-200' : 'border-line'} ${m.estado === 'bloqueado' ? 'opacity-60' : ''}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div><div className="font-bold">{m.titulo}</div><p className="mt-0.5 text-xs text-muted">{m.detalle ?? m.por_que}</p></div>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st[1]}`}>{st[0]}</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                          <span>{m.esfuerzo}{m.puntos ? ` · +${m.puntos} pts` : ''}{m.valor ? ` · hasta ${fmtMXN(m.valor)}/año` : ''}{m.urgencia ? ` · antes del ${fmtFecha(m.urgencia)}` : ''}</span>
+                          {m.estado !== 'hecho' && m.estado !== 'bloqueado' && <MisionCta mision={m} campos={faltan} compacto />}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Oportunidades */}
-      <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-bold">Tus oportunidades</h2>
-        {!ops.length && <p className="mt-2 text-sm text-muted">Cuando tengamos tu información oficial, aquí verás qué puedes hacer para mejorar tu pensión.</p>}
-        {presentadas.length ? <div className="mt-2 text-[11px] uppercase tracking-wide text-muted">Recomendadas por tu asesor</div> : null}
-        <ul className="mt-1 space-y-2">
-          {presentadas.map((o) => <OpCard key={o.id} o={o} destacada />)}
-        </ul>
-        {detectadas.length ? <div className="mt-3 text-[11px] uppercase tracking-wide text-muted">Detectadas con tu información</div> : null}
-        <ul className="mt-1 space-y-2">
-          {detectadas.map((o) => <OpCard key={o.id} o={o} />)}
-        </ul>
-      </section>
+      {tab === 'expediente' && (
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Completa tu expediente {faltan.length ? <span className="ml-1 rounded-full bg-lime px-2 py-0.5 text-[11px]">+{5 * Math.min(faltan.length, 8)} pts</span> : null}</h2>
+            <p className="mb-3 text-xs text-muted">Lo que declares se guarda como “tu versión”; cuando tenemos el dato oficial, ese manda. Cada dato suma puntos.</p>
+            <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Lo que sabemos de ti</h2>
+            {[['identidad', 'Identidad'], ['imss', 'IMSS'], ['afore', 'AFORE'], ['infonavit', 'Infonavit'], ['issste', 'ISSSTE'], ['contexto', 'Sobre ti'], ['calculo', 'Cálculos de Trol']].map(([g, l]) => {
+              const rows = datos.filter((d) => d.grupo === g);
+              if (!rows.length) return null;
+              return (
+                <div key={g} className="mt-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted">{l}</div>
+                  <table className="w-full text-sm"><tbody>
+                    {rows.map((d) => (
+                      <tr key={d.campo} className="border-t border-line/70">
+                        <td className="py-1 text-muted">{d.nombre}</td>
+                        <td className="py-1 text-right font-medium">{d.tipo === 'bool' ? (d.valor === true ? 'Sí' : d.valor === false ? 'No' : String(d.valor)) : d.tipo === 'number' ? (/saldo|pension|costo|ingreso|infonavit|salario|expectativa|disponible/.test(d.campo) ? fmtMXN(Number(d.valor)) : fmtNum(Number(d.valor))) : d.tipo === 'date' ? fmtFecha(String(d.valor)) : String(d.valor)}</td>
+                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'oficial' : d.capa === 'calculado' ? 'Trol' : 'tú'}{d.vigente === false ? ' · antiguo' : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody></table>
+                </div>
+              );
+            })}
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">¿Y si…?</h2>
+            {beneficios.includes('calculadora') && e.tiene_semilla ? (
+              <><p className="mb-2 text-xs text-muted">Tienes la calculadora completa habilitada: mueve edad, semanas, Modalidad 40 y saldos.</p><Link href="/calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora</Link></>
+            ) : (
+              <><p className="mb-2 text-xs text-muted">La calculadora completa te deja probar escenarios (edad de retiro, Modalidad 40, semanas por recuperar). Se habilita con la asesoría avanzada, con {fmtMXN(100)} o con 100 puntos.</p><div className="flex flex-wrap gap-2"><CanjearBoton producto="calculadora" precio={100} saldo={e.puntos} /><Link href="/checkout?p=CALCULADORA_ADDON" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">Pagar {fmtMXN(100)}</Link></div></>
+            )}
+          </section>
+        </div>
+      )}
 
-      {/* Acciones */}
-      <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} />
-
-      {/* Completar datos */}
-      <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-bold">Completa tu expediente</h2>
-        <p className="mb-3 text-xs text-muted">Entre más sepamos, mejor te podemos ayudar. Lo que declares se guarda como “tu versión”; si ya tenemos el dato oficial, prevalece el oficial y puedes usar la calculadora para probar escenarios.</p>
-        <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
-      </section>
-
-      {/* Datos */}
-      <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-bold">Lo que sabemos de ti</h2>
-        {[['identidad', 'Identidad'], ['imss', 'IMSS'], ['afore', 'AFORE'], ['infonavit', 'Infonavit'], ['issste', 'ISSSTE'], ['contexto', 'Sobre ti'], ['calculo', 'Cálculos de Trol']].map(([g, l]) => {
-          const rows = porGrupo(g);
-          if (!rows.length) return null;
-          return (
-            <div key={g} className="mt-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted">{l}</div>
-              <table className="w-full text-sm"><tbody>
-                {rows.map((d) => (
-                  <tr key={d.campo} className="border-t border-line/70">
-                    <td className="py-1 text-muted">{d.nombre}</td>
-                    <td className="py-1 text-right font-medium">{d.tipo === 'bool' ? (d.valor === true ? 'Sí' : d.valor === false ? 'No' : String(d.valor)) : d.tipo === 'number' ? (/saldo|pension|costo|ingreso|infonavit|salario|expectativa/.test(d.campo) ? fmtMXN(Number(d.valor)) : fmtNum(Number(d.valor))) : d.tipo === 'date' ? fmtFecha(String(d.valor)) : String(d.valor)}</td>
-                    <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'oficial' : d.capa === 'calculado' ? 'Trol' : 'tú'}{d.vigente === false ? ' · antiguo' : ''}</td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
-          );
-        })}
-      </section>
-
-      {/* Documentos */}
-      <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-bold">Tus documentos</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {(e.documentos ?? []).map((d: Any) => (
-            <li key={d.id} className="flex items-center justify-between border-t border-line/70 py-1.5">
-              <span>{d.nombre ?? d.tipo} <span className="text-xs text-muted">· {fmtFecha(d.fecha)}</span></span>
-              {d.url ? <a href={d.url} target="_blank" rel="noreferrer" className="text-xs underline">abrir</a> : <span className="text-xs text-muted">{d.gating === 'pago' ? `Desbloquear ${d.precio ? fmtMXN(d.precio) : ''} (hasta 50% con puntos)` : 'con puntos'}</span>}
-            </li>
-          ))}
-          {!(e.documentos ?? []).length && <li className="text-muted">Aún no hay documentos.</li>}
-        </ul>
-      </section>
-
-      {(e.interacciones ?? []).length ? (
-        <section className="mt-5 rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-bold">Mensajes de tu asesor</h2>
-          <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}</div>{i.contenido}</li>)}</ul>
+      {tab === 'documentos' && (
+        <section className="rounded-2xl border border-line bg-white p-5">
+          <h2 className="text-sm font-bold">Tus documentos</h2>
+          <p className="mb-2 text-xs text-muted">Todo lo que nos compartes o extraemos por ti, en un solo lugar.</p>
+          <ul className="space-y-1 text-sm">
+            {(e.documentos ?? []).map((d: Any) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 border-t border-line/70 py-2">
+                <span>{d.nombre ?? d.tipo} <span className="text-xs text-muted">· {fmtFecha(d.fecha)}</span></span>
+                {d.url ? <a href={d.url} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold">Abrir</a> : <span className="text-xs text-muted">{beneficios.includes('docs_premium') ? 'incluido · pídelo a tu experto' : d.gating === 'pago' ? `Desbloquear ${d.precio ? fmtMXN(d.precio) : ''} (hasta 50% con puntos)` : 'con puntos'}</span>}
+              </li>
+            ))}
+            {!(e.documentos ?? []).length && <li className="text-muted">Aún no hay documentos. Cuando obtengamos tu información oficial aparecerá aquí.</li>}
+          </ul>
         </section>
-      ) : null}
-    </main>
-  );
-}
+      )}
 
-function OpCard({ o, destacada }: { o: Any; destacada?: boolean }) {
-  return (
-    <li className={`rounded-xl border p-3 ${destacada ? 'border-lime bg-lime/10' : 'border-line'}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <div><span className="mr-1 rounded-full bg-white px-2 py-0.5 text-[10px] text-muted">{NIVEL_TXT[o.nivel] ?? ''}</span><b>{o.nombre}</b></div>
-        {o.valor ? <span className="text-sm font-extrabold">{fmtMXN(o.valor)}<span className="text-[10px] font-normal text-muted">/año est.</span></span> : null}
-      </div>
-      <p className="mt-1 text-xs text-muted">{o.descripcion}</p>
-      {o.motivo && <p className="mt-1 text-xs">{o.motivo}</p>}
-      {o.faltan?.length ? <p className="mt-1 text-[11px] text-amber-700">Falta: {o.faltan.join(', ')}</p> : null}
-      {o.urgencia && <p className="mt-1 text-[11px] text-red-700">Fecha límite: {fmtFecha(o.urgencia)}</p>}
-      <div className="mt-2 text-[11px] text-muted">{o.estado === 'presentada' ? 'Tu asesor te la recomendó' : o.estado === 'en_proceso' ? 'En proceso' : o.estado === 'ganada' ? 'Lograda' : 'Habla con tu asesor para confirmarla'}</div>
-    </li>
+      {tab === 'puntos' && (
+        <div className="space-y-4">
+          <section className="rounded-2xl bg-ink p-5 text-white"><div className="text-xs text-white/60">Tu saldo</div><div className="text-3xl font-extrabold">{e.puntos} <span className="text-base font-normal text-white/60">puntos</span></div><div className="mt-1 text-xs text-white/60">1 punto = 1 peso al usarlos. Caducan a los 6 meses.</div></section>
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Cómo ganar</h2>
+            <ul className="mt-2 divide-y divide-line text-sm">{(e.catalogo_puntos ?? []).map((c: Any) => <li key={c.accion} className="flex justify-between py-1.5"><span>{c.nombre}</span><b>+{c.puntos}</b></li>)}</ul>
+            <Link href="/referidos" className="mt-3 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Invitar a alguien</Link>
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Cómo usarlos</h2>
+            <ul className="mt-2 divide-y divide-line text-sm">{(e.productos ?? []).map((p: Any) => <li key={p.codigo} className="flex items-center justify-between gap-2 py-1.5"><span>{p.nombre} <span className="text-xs text-muted">· {p.max_pct_puntos}% con puntos</span></span>{p.max_pct_puntos === 100 && p.precio > 0 ? <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} /> : <span className="text-xs text-muted">{p.precio ? fmtMXN(p.precio) : 'gratis'}</span>}</li>)}</ul>
+          </section>
+        </div>
+      )}
+
+      {tab === 'asesorias' && (
+        <div className="space-y-4">
+          {beneficios.length ? <section className="rounded-2xl border border-lime bg-lime/10 p-5 text-sm"><b>Ya tienes habilitado:</b> {beneficios.map((b) => BEN_LABEL[b] ?? b).join(', ')}.</section> : null}
+          {(e.productos ?? []).filter((p: Any) => p.precio > 0).map((p: Any) => (
+            <section key={p.codigo} className="rounded-2xl border border-line bg-white p-5">
+              <div className="flex items-baseline justify-between"><h2 className="text-base font-extrabold">{p.nombre}</h2><span className="font-bold">{fmtMXN(p.precio)}</span></div>
+              <p className="mt-1 text-xs text-muted">Incluye: {(p.beneficios ?? []).map((b: string) => (BEN_LABEL[b] ?? b).toLowerCase()).join(', ') || 'asesoría'}. Hasta {p.max_pct_puntos}% con puntos.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link href={`/checkout?p=${LEGACY_CODE[p.codigo] ?? p.codigo}`} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Pagar</Link>
+                {p.max_pct_puntos === 100 && <CanjearBoton producto={p.codigo} precio={p.precio} saldo={e.puntos} />}
+                <HablarBoton texto="Prefiero que me expliquen" />
+              </div>
+            </section>
+          ))}
+          <p className="text-xs text-muted">¿Ya pagaste por otro medio? Tu experto puede habilitarte los beneficios desde su lado; escríbele.</p>
+        </div>
+      )}
+
+      <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-2xl justify-around px-2 py-2 text-[11px]">
+          {TABS.map(([t, l]) => <Link key={t} href={href(t)} className={`rounded-lg px-2 py-1 ${tab === t ? 'bg-ink font-semibold text-white' : 'text-muted'}`}>{l}</Link>)}
+        </div>
+      </nav>
+    </main>
   );
 }
