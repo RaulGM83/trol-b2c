@@ -107,3 +107,11 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
   await t3().from('personas').update({ cabecera_id: m.id }).eq('id', pid).is('cabecera_id', null);
   return ok({ persona_id: pid });
 }
+
+export async function solicitarDiagnosticoAvanzado(personaId: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('solicitar_diagnostico_avanzado', { p_persona: personaId });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ resultado: data });
+}

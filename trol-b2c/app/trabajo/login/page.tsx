@@ -10,7 +10,7 @@ export default async function TrabajoLogin() {
   if (user) redirect('/trabajo');
   return (
     <main className="mx-auto max-w-md px-5 py-12">
-      <div className="mb-6 text-2xl font-extrabold tracking-tight">tr<span className="text-lime">o</span>l · equipo</div>
+      <div className="mb-6"><span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span> <span className="ml-2 text-sm text-muted">equipo</span></div>
       <h1 className="mb-1 text-xl font-extrabold">Entrar al espacio de trabajo</h1>
       <p className="mb-6 text-sm text-muted">Te mandamos un enlace de acceso a tu correo @trol.mx.</p>
       <LoginEmailForm />

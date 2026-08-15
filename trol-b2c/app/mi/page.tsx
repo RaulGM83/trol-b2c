@@ -31,7 +31,7 @@ export default async function MiExpediente() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
       <header className="mb-5 flex items-center justify-between">
-        <span className="text-2xl font-extrabold tracking-tight">tr<span className="text-lime">o</span>l</span>
+        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span>
         <div className="text-right text-xs text-muted">
           <div>{e.persona?.nombre ?? 'Tu expediente'}</div>
           <div>{e.puntos} puntos · <Link href="/referidos" className="underline">ganar más</Link></div>

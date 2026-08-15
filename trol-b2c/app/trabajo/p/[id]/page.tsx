@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
 import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
+import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
+const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -38,6 +39,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('miembros').select('id,nombre,email,roles').eq('activo', true),
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
   ]);
+  const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
@@ -193,6 +195,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
+      {tab === 'documentos' && <DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} />}
+
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">
           {!opsAbiertas.length && <p className="text-sm text-muted">Sin oportunidades abiertas.</p>}
@@ -229,18 +233,6 @@ export default async function Expediente({ params, searchParams }: { params: { i
             </ul>
           </section>
           <aside className="space-y-4">
-            <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="mb-2 text-sm font-bold">Documentos</h2>
-              <ul className="space-y-1 text-xs">
-                {(docs ?? []).map((d: Any) => (
-                  <li key={d.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
-                    <span>{d.nombre ?? d.tipo} <span className="text-muted">· {d.gating}{d.precio_mxn ? ` ${fmtMXN(d.precio_mxn)}` : ''}</span></span>
-                    {d.url_externa ? <a href={d.url_externa} target="_blank" rel="noreferrer" className="underline">abrir</a> : <span className="text-muted">{d.storage_path ? 'bóveda' : ''}</span>}
-                  </li>
-                ))}
-                {!docs?.length && <li className="text-muted">Sin documentos.</li>}
-              </ul>
-            </section>
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Citas</h2>
               <CitaForm personaId={e.persona_id} />
