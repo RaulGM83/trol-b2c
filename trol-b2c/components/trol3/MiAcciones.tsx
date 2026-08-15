@@ -191,7 +191,7 @@ export function CanjearBoton({ producto, precio, saldo }: { producto: string; pr
       <button disabled={pending || !alcanza} title={alcanza ? '' : `Te faltan ${precio - saldo} puntos`} className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50" onClick={() => start(async () => {
         const { data, error } = await supabase.schema('trol3').rpc('canjear_puntos', { p_producto: producto });
         const r = data as { ok?: boolean; motivo?: string } | null;
-        setMsg(error ? error.message : r?.ok ? '¡Listo! Ya está habilitado.' : r?.motivo ?? 'No se pudo'); router.refresh();
+        setMsg(error ? error.message : r?.ok ? '¡Listo! Ya está habilitado.' : r?.motivo ?? 'No se pudo'); if (r?.ok) { setTimeout(() => window.location.reload(), 600); } else router.refresh();
       })}>{alcanza ? `Usar ${precio} puntos` : `${precio} pts (tienes ${saldo})`}</button>
       {msg && <span className="text-xs text-green-700">{msg}</span>}
     </span>
