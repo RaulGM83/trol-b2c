@@ -102,7 +102,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
                   <tr key={o.id} className="border-t border-line align-top hover:bg-cream/60">
                     <td className="px-3 py-2">
                       <Link href={`/trabajo/p/${o.persona_id}`} className="font-semibold hover:underline">{p?.nombre ?? '(sin nombre)'} {p?.apellidos ?? ''}</Link>
-                      <div className="text-xs text-muted">{edad ? `${edad} años · ` : ''}{p?.etapa}{p?.cabecera_id === m.id ? ' · tuyo' : p?.cabecera_id ? '' : ' · sin cabecera'}</div>
+                      <div className="text-xs text-muted">{edad ? `${edad} años · ` : ''}{p?.etapa}{p?.cabecera_id === m.id ? ' · tuyo' : p?.cabecera_id ? '' : ' · sin experto'}</div>
                     </td>
                     <td className="px-3 py-2"><span className="rounded-full bg-cream px-2 py-0.5 text-xs">N{catMap.get(o.codigo)?.nivel}</span> {catMap.get(o.codigo)?.nombre ?? o.codigo}</td>
                     <td className="px-3 py-2 text-right font-semibold">{o.valor_estimado ? fmtMXN(o.valor_estimado) : '—'}</td>

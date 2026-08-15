@@ -5,6 +5,7 @@ import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } fr
 import { MiAcciones, CompletarDatos } from '@/components/trol3/MiAcciones';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Mi expediente · Trol' };
 
 const NIVEL_TXT: Record<number, string> = { 1: 'Poner en orden', 2: 'Aprovechar hoy', 3: 'Crecer y proteger' };
 

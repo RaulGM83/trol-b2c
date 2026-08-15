@@ -12,7 +12,7 @@ export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa }: { p
   const run = (fn: () => Promise<R>) => start(async () => { const r = (await fn()) as R; setMsg(r.ok ? null : r.error ?? 'error'); });
   return (
     <div className="mt-2 flex flex-wrap justify-end gap-2">
-      {sinCabecera && <button disabled={pending} className={btnDark} onClick={() => run(() => tomarCabecera(personaId))}>Tomar como cabecera</button>}
+      {sinCabecera && <button disabled={pending} className={btnDark} onClick={() => run(() => tomarCabecera(personaId))}>Tomarlo como mi cliente</button>}
       {etapa !== 'asesorado' && etapa !== 'cliente' && <button disabled={pending} className={btn} onClick={() => run(() => marcarEtapa(personaId, 'asesorado'))}>Marcar “situación entendida”</button>}
       {etapa !== 'cliente' && <button disabled={pending} className={btn} onClick={() => run(() => marcarEtapa(personaId, 'cliente'))}>Marcar cliente</button>}
       <button disabled={pending} className={btn} onClick={() => run(() => reevaluar(personaId))}>Re-evaluar</button>

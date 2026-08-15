@@ -670,7 +670,7 @@ export function ResumenCliente({
                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
                   mod40?.aplica === true
                     ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300"
-                    : "bg-muted text-muted-foreground"
+                    : "bg-secondary text-muted-foreground"
                 }`}
               >
                 Aplica MOD40: {mod40?.aplica === true ? "SÍ" : "NO"}
@@ -870,7 +870,7 @@ function EscenarioCard({
       className={`rounded-2xl p-5 flex flex-col gap-3 ${
         highlight
           ? "bg-zinc-900 text-zinc-100 dark:bg-zinc-950 dark:border dark:border-green-500/40"
-          : "bg-muted/40"
+          : "bg-secondary/40"
       }`}
     >
       <div>
@@ -983,7 +983,7 @@ function SubOp({
         className={`inline-flex items-center justify-center size-5 rounded-full text-xs font-bold ${
           active
             ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400"
-            : "bg-muted text-muted-foreground"
+            : "bg-secondary text-muted-foreground"
         }`}
       >
         {active ? "✓" : "—"}

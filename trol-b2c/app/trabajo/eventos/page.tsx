@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 const LABEL: Record<string, string> = {
   persona_alta: 'Alta', persona_reingreso: 'Reingreso', dato_nuevo: 'Dato nuevo', consulta_solicitada: 'Consulta solicitada', consulta_completada: 'Consulta completada', consulta_sin_resultado: 'Consulta sin resultado', consulta_error: 'Consulta con error',
-  oportunidad_detectada: 'Oportunidad detectada', oportunidad_presentada: 'Oportunidad presentada', oportunidad_en_proceso: 'Oportunidad en proceso', oportunidad_ganada: 'Oportunidad ganada', oportunidad_perdida: 'Oportunidad perdida', handoff: 'Pide humano', cabecera_asignada: 'Cabecera asignada', orden_pagada: 'Pago', orden_cumplida: 'Orden cumplida', cita_creada: 'Cita',
+  oportunidad_detectada: 'Oportunidad detectada', oportunidad_presentada: 'Oportunidad presentada', oportunidad_en_proceso: 'Oportunidad en proceso', oportunidad_ganada: 'Oportunidad ganada', oportunidad_perdida: 'Oportunidad perdida', handoff: 'Pide humano', cabecera_asignada: 'Experto asignado', orden_pagada: 'Pago', orden_cumplida: 'Orden cumplida', cita_creada: 'Cita',
 };
 
 export default async function Actividad({ searchParams }: { searchParams: { tipo?: string } }) {

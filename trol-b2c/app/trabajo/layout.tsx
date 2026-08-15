@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Toaster } from '@/components/ui/sonner';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: { default: 'Trol · equipo', template: '%s' } };
 
 export default async function TrabajoLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();

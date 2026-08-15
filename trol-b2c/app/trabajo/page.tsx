@@ -45,7 +45,7 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
       <aside>
         <div className="rounded-2xl border border-line bg-white p-4">
           <h2 className="mb-2 text-sm font-bold">Dar de alta (recepción)</h2>
-          <p className="mb-3 text-xs text-muted">Solo teléfono confirmado. Tú quedas como cabecera.</p>
+          <p className="mb-3 text-xs text-muted">Solo teléfono confirmado. Tú quedas como experto asignado.</p>
           <AltaPersonaForm />
         </div>
       </aside>

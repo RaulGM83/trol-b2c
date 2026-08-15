@@ -1973,7 +1973,7 @@ function Toggle({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-[var(--brand-primary)]" : "bg-muted"
+          checked ? "bg-[var(--brand-primary)]" : "bg-secondary"
         }`}
       >
         <span

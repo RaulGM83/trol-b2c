@@ -18,7 +18,7 @@ export function MiAcciones({ tieneSemilla, cabecera, citas }: { tieneSemilla: bo
   return (
     <section className={card}>
       <h2 className="text-sm font-bold">Siguiente paso</h2>
-      <p className="mt-1 text-xs text-muted">{cabecera ? `Tu asesor es ${cabecera}.` : 'Todavía no tienes asesor asignado; el primero que te atienda será tu asesor de cabecera.'}</p>
+      <p className="mt-1 text-xs text-muted">{cabecera ? `Tu experto asignado es ${cabecera}.` : 'Todavía no tienes asesor asignado; el primer experto que te atienda quedará asignado a tu caso.'}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button disabled={pending} className={btnDark} onClick={() => start(async () => {
           const { error } = await supabase.schema('trol3').rpc('pedir_humano', { p_motivo: 'Solicitud desde mi expediente' });

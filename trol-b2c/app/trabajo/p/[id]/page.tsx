@@ -9,6 +9,14 @@ import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/ca
 
 export const dynamic = 'force-dynamic';
 
+export async function generateMetadata({ params }: { params: { id: string } }) {
+  try {
+    const { data } = await t3().from('personas').select('nombre,apellidos').eq('id', params.id).maybeSingle();
+    const n = [data?.nombre, data?.apellidos].filter(Boolean).join(' ');
+    return { title: n ? `${n} · Trol` : 'Expediente · Trol' };
+  } catch { return { title: 'Expediente · Trol' }; }
+}
+
 const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
@@ -66,12 +74,12 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <div className="mt-1 text-sm text-muted">
               {e.edad ? `${e.edad} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
-            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'}{e.hubspot_id ? ` · HubSpot ${e.hubspot_id}` : ''} · {saldoPuntos} pts · Cabecera: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
+            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'}{e.hubspot_id ? ` · HubSpot ${e.hubspot_id}` : ''} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
           </div>
           <div className="text-right text-xs">
             <div className="flex flex-wrap justify-end gap-2">
-              {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://wa.me/52${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp</a>}
-              {e.hubspot_id && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://app.hubspot.com/contacts/8/record/0-1/${e.hubspot_id}`} target="_blank" rel="noreferrer">HubSpot</a>}
+              {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp (Tako)</a>}
+              {e.hubspot_id && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://app.hubspot.com/contacts/47582826/record/0-1/${e.hubspot_id}`} target="_blank" rel="noreferrer">HubSpot</a>}
             </div>
             <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
           </div>
@@ -149,6 +157,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 consultaId={e.legacy_cliente_id ?? e.persona_id}
                 clienteNombre={[e.nombre, e.apellidos].filter(Boolean).join(' ') || semilla.perfil.nombre}
                 semilla={semilla}
+                branding={{ colorPrimario: '#26282b', colorAcento: '#d1f069', logoUrl: null }}
                 backHref={href('resumen')}
                 backLabel="← Volver al resumen"
                 fechaSisec={fechaSisecTxt}
