@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { declararAsesor, pedirConsulta } from '@/app/trabajo/actions';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export interface DatoRow { campo: string; nombre: string; tipo: string; grupo: string; valor: any; capa?: string; proveedor?: string | null; origen_tipo?: string; obtenido_en?: string | null; vigente?: boolean | null; }
+export interface DatoRow { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null; valor: any; capa?: string; proveedor?: string | null; origen_tipo?: string; obtenido_en?: string | null; vigente?: boolean | null; }
 type R = { ok: boolean; error?: string; resultado?: unknown };
 
 const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
@@ -74,6 +74,8 @@ function Fila({ r, personaId }: { r: DatoRow; personaId: string }) {
           <span className="inline-flex flex-wrap items-center justify-end gap-1">
             {r.tipo === 'bool' ? (
               <select value={val} onChange={(e) => setVal(e.target.value)} className="rounded border border-line px-1 py-0.5 text-xs"><option value="">—</option><option value="si">Sí</option><option value="no">No</option></select>
+            ) : r.opciones?.length ? (
+              <select autoFocus value={val} onChange={(e) => setVal(e.target.value)} className="rounded border border-line px-1 py-0.5 text-xs"><option value="">—</option>{r.opciones.map((o) => <option key={o} value={o}>{o}</option>)}</select>
             ) : (
               <input autoFocus type={r.tipo === 'number' ? 'number' : r.tipo === 'date' ? 'date' : 'text'} value={val} onChange={(e) => setVal(e.target.value)} className="w-32 rounded border border-line px-1 py-0.5 text-xs" />
             )}

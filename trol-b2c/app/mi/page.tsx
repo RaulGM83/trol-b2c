@@ -87,7 +87,7 @@ export default async function MiExpediente() {
       <section className="mt-5 rounded-2xl border border-line bg-white p-5">
         <h2 className="text-sm font-bold">Completa tu expediente</h2>
         <p className="mb-3 text-xs text-muted">Entre más sepamos, mejor te podemos ayudar. Lo que declares se guarda como “tu versión”; si ya tenemos el dato oficial, prevalece el oficial y puedes usar la calculadora para probar escenarios.</p>
-        <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo }))} />
+        <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
       </section>
 
       {/* Datos */}

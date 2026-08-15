@@ -43,7 +43,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
-  const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
+  const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
   const cabecera = (miembros ?? []).find((x: Any) => x.id === e.cabecera_id);
   const saldoPuntos = (puntos ?? []).reduce((s: number, p: Any) => s + (p.tipo === 'abono' ? p.puntos : -p.puntos), 0);
   const tel = (contactos ?? []).find((c: Any) => c.tipo === 'telefono' && c.principal) ?? (contactos ?? []).find((c: Any) => c.tipo === 'telefono');

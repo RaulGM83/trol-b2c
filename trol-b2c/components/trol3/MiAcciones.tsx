@@ -51,7 +51,7 @@ export function MiAcciones({ tieneSemilla, cabecera, citas }: { tieneSemilla: bo
 
 const PLACEHOLDER: Record<string, string> = { dolor_principal: '¿Qué es lo que más te preocupa de tu pensión?', expectativa: '¿Qué te gustaría lograr?', empleo_actual: 'Empresa o actividad' };
 
-export function CompletarDatos({ campos }: { campos: { campo: string; nombre: string; tipo: string; grupo: string }[] }) {
+export function CompletarDatos({ campos }: { campos: { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null }[] }) {
   const supabase = createClient();
   const router = useRouter();
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -68,6 +68,8 @@ export function CompletarDatos({ campos }: { campos: { campo: string; nombre: st
           <label className="w-full sm:w-56 text-xs text-muted">{c.nombre}</label>
           {c.tipo === 'bool' ? (
             <select value={vals[c.campo] ?? ''} onChange={(e) => setVals({ ...vals, [c.campo]: e.target.value })} className="flex-1 rounded-lg border border-line px-2 py-1.5"><option value="">—</option><option value="si">Sí</option><option value="no">No</option></select>
+          ) : c.opciones?.length ? (
+            <select value={vals[c.campo] ?? ''} onChange={(e) => setVals({ ...vals, [c.campo]: e.target.value })} className="flex-1 rounded-lg border border-line px-2 py-1.5"><option value="">—</option>{c.opciones.map((o) => <option key={o} value={o}>{o}</option>)}</select>
           ) : (
             <input type={c.tipo === 'number' ? 'number' : c.tipo === 'date' ? 'date' : 'text'} value={vals[c.campo] ?? ''} onChange={(e) => setVals({ ...vals, [c.campo]: e.target.value })} placeholder={PLACEHOLDER[c.campo] ?? ''} className="flex-1 rounded-lg border border-line px-2 py-1.5" />
           )}
