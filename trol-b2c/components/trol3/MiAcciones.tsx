@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { waLink } from '@/lib/whatsapp';
 
 const card = 'mt-5 rounded-2xl border border-line bg-white p-5';
 const btnDark = 'rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50';
@@ -20,10 +21,7 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [] }: {
       <h2 className="text-sm font-bold">Tu experto</h2>
       <p className="mt-1 text-xs text-muted">{cabecera ? `Tu experto asignado es ${cabecera}.` : 'Todavía no tienes asesor asignado; el primer experto que te atienda quedará asignado a tu caso.'}</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button disabled={pending} className={btnDark} onClick={() => start(async () => {
-          const { error } = await supabase.schema('trol3').rpc('pedir_humano', { p_motivo: 'Solicitud desde mi expediente' });
-          setMsg(error ? error.message : 'Listo, un asesor te contacta por WhatsApp.');
-        })}>Quiero hablar con un asesor</button>
+        <HablarBoton texto="Hablar con mi experto por WhatsApp" mensaje="Hola, soy cliente de Trol y quiero hablar con mi experto sobre mi pensión. Vengo de mi expediente en app.trol.mx." oscuro />
         <button disabled={pending} className={btn} onClick={() => start(async () => {
           const { data, error } = await supabase.schema('trol3').rpc('pedir_consulta_mia', { p_tipo: 'imss_historial' });
           const r = data as { ok?: boolean; motivo?: string } | null;
@@ -34,15 +32,8 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [] }: {
         <Link href="/mi?tab=asesorias" className={btn}>Ver asesorías y precios</Link>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-xs text-muted">{proxima ? `Tu próxima cita: ${new Date(proxima.inicio).toLocaleString('es-MX')}` : 'Agenda una llamada:'}</span>
-        {!proxima && <>
-          <input type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-xs" />
-          <button disabled={pending || !dt} className={btn} onClick={() => start(async () => {
-            const { error } = await supabase.schema('trol3').rpc('agendar_mio', { p_inicio: new Date(dt).toISOString(), p_notas: 'Agendada desde mi expediente' });
-            setMsg(error ? error.message : 'Cita agendada. Te confirmamos por WhatsApp.');
-            router.refresh();
-          })}>Agendar</button>
-        </>}
+        <span className="text-xs text-muted">{proxima ? `Tu próxima sesión: ${new Date(proxima.inicio).toLocaleString('es-MX')}` : 'Programa una sesión con tu experto:'}</span>
+        {!proxima && <HablarBoton texto="Programar sesión" mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto />}
       </div>
       {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
     </section>
@@ -97,7 +88,7 @@ export function CompletarDatos({ campos }: { campos: { campo: string; nombre: st
 
 
 /* ---------- CTA por misión ---------- */
-export function MisionCta({ mision, campos, compacto = false }: { mision: { codigo: string; cta?: string | null; estado: string }; campos: { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null }[]; compacto?: boolean }) {
+export function MisionCta({ mision, campos, compacto = false }: { mision: { codigo: string; cta?: string | null; estado: string; titulo?: string; detalle?: string; clabe?: string | null }; campos: { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null }[]; compacto?: boolean }) {
   const supabase = createClient();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -154,37 +145,38 @@ export function MisionCta({ mision, campos, compacto = false }: { mision: { codi
     );
   }
   if (cta === 'agendar') {
+    return <HablarBoton texto="Programar sesión por WhatsApp" mensaje="Hola, quiero programar una sesión con mi experto de Trol para entender mi situación de pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro />;
+  }
+  if (cta === 'infonavit') {
+    if (compacto) return <Link href="/mi?tab=expediente" className={cls}>Contestar</Link>;
+    return <CompletarDatos campos={campos.filter((c) => ['credito_infonavit_vigente', 'saldo_infonavit'].includes(c.campo))} />;
+  }
+  if (cta === 'ahorrar') {
+    const m = mision as { detalle?: string; clabe?: string | null };
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        {!open && <button className={cls} onClick={() => setOpen(true)}>Agendar llamada</button>}
-        {open && <>
-          <input type="datetime-local" value={val} onChange={(e) => setVal(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-xs" />
-          <button disabled={pending || !val} className={cls} onClick={() => start(async () => {
-            const { error } = await supabase.schema('trol3').rpc('agendar_mio', { p_inicio: new Date(val).toISOString(), p_notas: 'Agendada desde misiones' });
-            setMsg(error ? error.message : 'Cita agendada. Te confirmamos por WhatsApp.'); router.refresh();
-          })}>Confirmar</button>
-        </>}
-        <HablarBoton texto="Mejor escríbanme" compacto={compacto} />
-        {msg && <span className="text-xs text-green-700">{msg}</span>}
+      <div className="w-full text-xs">
+        {m.clabe ? <div className="rounded-lg bg-cream p-2 font-mono text-sm">CLABE: {m.clabe}</div> : <p className="text-muted">Tu experto te comparte la CLABE y los pasos por WhatsApp.</p>}
+        <div className="mt-2 flex flex-wrap gap-2"><HablarBoton texto="Quiero ahorrar" mensaje="Hola, quiero empezar a ahorrar para mi retiro con Millas para el Retiro. ¿Me comparten la CLABE y los pasos? Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro /></div>
       </div>
     );
   }
   if (cta === 'referir') return <Link href="/referidos" className={cls}>Invitar</Link>;
-  return <HablarBoton texto="Hablar con mi experto" compacto={compacto} />;
+  return <HablarBoton texto="Hablar con mi experto" mensaje={`Hola, quiero hablar con mi experto de Trol sobre: ${(mision as { titulo?: string }).titulo ?? 'mi pensión'}. Vengo de mi expediente en app.trol.mx.`} compacto={compacto} oscuro />;
 }
 
-export function HablarBoton({ texto = 'Hablar con mi experto', compacto = false }: { texto?: string; compacto?: boolean }) {
+/** Registra el handoff y abre WhatsApp con el mensaje listo: la conversación la inicia el cliente. */
+export function HablarBoton({ texto = 'Hablar con mi experto', mensaje, compacto = false, oscuro = false }: { texto?: string; mensaje?: string; compacto?: boolean; oscuro?: boolean }) {
   const supabase = createClient();
-  const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const cls = oscuro ? (compacto ? 'rounded-lg bg-ink px-3 py-1 text-xs font-bold text-white disabled:opacity-50' : btnDark) : (compacto ? 'rounded-lg border border-line bg-white px-3 py-1 text-xs font-bold disabled:opacity-50' : btn);
+  const texto_wa = mensaje ?? `Hola, soy cliente de Trol y quiero hablar con mi experto: ${texto}. Vengo de mi expediente en app.trol.mx.`;
   return (
-    <span className="inline-flex items-center gap-2">
-      <button disabled={pending || !!msg} className={compacto ? 'rounded-lg border border-line bg-white px-3 py-1 text-xs font-bold disabled:opacity-50' : btn} onClick={() => start(async () => {
-        const { error } = await supabase.schema('trol3').rpc('pedir_humano', { p_motivo: texto });
-        setMsg(error ? error.message : 'Listo, te contactamos por WhatsApp.');
-      })}>{texto}</button>
-      {msg && <span className="text-xs text-green-700">{msg}</span>}
-    </span>
+    <button disabled={pending} className={cls} onClick={() => start(async () => {
+      const url = waLink(texto_wa);
+      const w = window.open(url, '_blank');
+      try { await supabase.schema('trol3').rpc('pedir_humano', { p_motivo: texto }); } catch {}
+      if (!w) window.location.href = url;
+    })}>{texto}</button>
   );
 }
 
