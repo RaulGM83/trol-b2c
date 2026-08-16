@@ -30,6 +30,13 @@ export default async function ReferidosPage() {
     .eq('auth_user_id', user.id)
     .maybeSingle();
 
+  // Código corto y reconocible (<nombre>-<4>); se genera la primera vez.
+  let codigo = cli?.id as string | undefined;
+  if (cli) {
+    const { data: cod } = await supabase.schema('trol3').rpc('codigo_referido', { p_cliente: cli.id });
+    if (cod) codigo = cod as string;
+  }
+
   if (!cli) {
     return (
       <main className="mx-auto max-w-xl px-5 py-10 text-center">
@@ -50,6 +57,6 @@ export default async function ReferidosPage() {
   const confirmados = (refs ?? []).filter((r) => r.puntos_etapa1_otorgados).length;
 
   return (
-    <ReferidosView url={`${SITE}/i/${cli.id}`} invitados={invitados} confirmados={confirmados} puntos={confirmados * 100} />
+    <ReferidosView url={`${SITE}/i/${codigo}`} invitados={invitados} confirmados={confirmados} puntos={confirmados * 100} />
   );
 }
