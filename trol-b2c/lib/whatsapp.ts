@@ -10,6 +10,16 @@ export const WA = {
   agendar: () => waLink('Hola, quiero agendar una asesoría de pensión con El Trol.'),
   hoja: () =>
     waLink('Hola, no pudieron traer mi historial del IMSS. Les envío mi Reporte de Semanas Cotizadas para mi diagnóstico de pensión.'),
+  // Alta manual: el cliente descarga su Reporte de Semanas (constancia) del IMSS
+  // y nos lo manda por WhatsApp para armar su diagnóstico.
+  altaConstancia: () =>
+    waLink('Hola, les mando mi Reporte de Semanas Cotizadas (constancia) del IMSS para mi diagnóstico de pensión.'),
+  // Negativa de pensión: el cliente vio que aún no cumple requisitos y quiere
+  // revisar opciones (recuperar semanas, Modalidad 40, etc.) con un experto.
+  negativaLey73: () =>
+    waLink('Hola, vi mi diagnóstico Ley 73 y todavía no cumplo los requisitos de pensión. Quiero revisar mis opciones con un experto.'),
+  negativaLey97: () =>
+    waLink('Hola, vi mi diagnóstico Ley 97 y todavía no cumplo los requisitos de pensión. Quiero revisar mis opciones con un experto.'),
   // Tras pagar la sesión 1:1: el cliente nos pide el horario por WhatsApp.
   agendarSesion: () =>
     waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
