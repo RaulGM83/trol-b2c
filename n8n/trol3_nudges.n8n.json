@@ -1,5 +1,5 @@
 {
-  "name": "Trol3 — nudges ventana 24h",
+  "name": "Trol3 — nudges 24h + cola de envíos (8–21 CDMX)",
   "nodes": [
     {
       "parameters": {
@@ -237,6 +237,223 @@
         300
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "hz",
+              "leftValue": "={{ (() => { const h = $now.setZone('America/Mexico_City').hour; return h >= 8 && h < 21; })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-horario",
+      "name": "¿Horario 8–21 CDMX?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/rpc/cola_envios_pendientes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Accept-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_limit: 200 }) }}",
+        "options": {}
+      },
+      "id": "cola",
+      "name": "Supabase RPC: cola_envios_pendientes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split2",
+      "name": "Uno por envío",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.insuranceboosters.com/api/v1/whatsapp/{{ $('Config (edita aquí)').item.json.tako_phone_number_id }}/template",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ to: '521' + String($json.telefono).replace(/\\D/g,'').slice(-10), name: $json.plantilla, language: 'es', components: [ { type: 'body', parameters: [ { type: 'text', parameter_name: 'nombre', text: (($json.nombre || 'Hola').split(' ')[0]) } ] }, { type: 'button', sub_type: 'url', index: '0', parameters: [ { type: 'text', text: $json.sufijo_url } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "tako-cola",
+      "name": "Tako: enviar de la cola",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZpH9oZH41ozAipds",
+          "name": "Tako_API_Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/rpc/marcar_envio",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Accept-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_id: $('Uno por envío').item.json.id, p_error: ($json.statusCode && $json.statusCode >= 300) ? ('HTTP ' + $json.statusCode) : null }) }}",
+        "options": {}
+      },
+      "id": "marcar",
+      "name": "Marcar enviado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        600
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/rpc/registrar_salida",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Accept-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_persona: $('Uno por envío').item.json.persona_id, p_contenido: 'Trol envió plantilla ' + $('Uno por envío').item.json.plantilla + ' (programada) por: ' + $('Uno por envío').item.json.motivo, p_meta: { plantilla: $('Uno por envío').item.json.plantilla, motivo: $('Uno por envío').item.json.motivo, cola: '1' } }) }}",
+        "options": {}
+      },
+      "id": "reg-cola",
+      "name": "Registrar salida (cola)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        600
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -255,7 +472,7 @@
       "main": [
         [
           {
-            "node": "Supabase RPC: pendientes_nudge",
+            "node": "¿Horario 8–21 CDMX?",
             "type": "main",
             "index": 0
           }
@@ -301,6 +518,67 @@
         [
           {
             "node": "Registrar salida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Horario 8–21 CDMX?": {
+      "main": [
+        [
+          {
+            "node": "Supabase RPC: pendientes_nudge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase RPC: cola_envios_pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Supabase RPC: cola_envios_pendientes": {
+      "main": [
+        [
+          {
+            "node": "Uno por envío",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uno por envío": {
+      "main": [
+        [
+          {
+            "node": "Tako: enviar de la cola",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tako: enviar de la cola": {
+      "main": [
+        [
+          {
+            "node": "Marcar enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar enviado": {
+      "main": [
+        [
+          {
+            "node": "Registrar salida (cola)",
             "type": "main",
             "index": 0
           }

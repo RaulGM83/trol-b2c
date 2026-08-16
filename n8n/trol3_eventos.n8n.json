@@ -403,8 +403,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        980,
-        520
+        1160,
+        440
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -446,8 +446,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1240,
-        520
+        1420,
+        440
       ],
       "onError": "continueRegularOutput"
     },
@@ -487,8 +487,86 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1500,
+        1680,
+        440
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "hz",
+              "leftValue": "={{ (() => { const h = $now.setZone('America/Mexico_City').hour; return h >= 8 && h < 21; })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-horario",
+      "name": "¿Horario 8–21 CDMX?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
         520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/rpc/encolar_envio",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Accept-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_persona: $json.body.persona_id, p_plantilla: $('Config (edita aquí)').item.json.tako_template_cliente, p_motivo: $json.body.tipo, p_sufijo: $json.body.persona_id + '?c=' + $json.body.tipo, p_payload: $json.body.payload }) }}",
+        "options": {}
+      },
+      "id": "encolar",
+      "name": "Encolar para mañana 8am",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        700
       ],
       "onError": "continueRegularOutput"
     }
@@ -565,7 +643,7 @@
       "main": [
         [
           {
-            "node": "Tako: plantilla al cliente",
+            "node": "¿Horario 8–21 CDMX?",
             "type": "main",
             "index": 0
           }
@@ -600,6 +678,24 @@
         [
           {
             "node": "Registrar salida en expediente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Horario 8–21 CDMX?": {
+      "main": [
+        [
+          {
+            "node": "Tako: plantilla al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Encolar para mañana 8am",
             "type": "main",
             "index": 0
           }
