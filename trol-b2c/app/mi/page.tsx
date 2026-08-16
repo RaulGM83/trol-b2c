@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
 import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc } from '@/components/trol3/MiAcciones';
 import { CalculadoraPro } from '@/components/CalculadoraPro';
+import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { getSemillaV2Cliente } from '@/lib/cliente';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   if (!pid) return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
   const db = t3();
   await db.rpc('mi_bienvenida');
-  const [{ data: x, error }, { data: mis }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones')]);
+  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas')]);
   if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}.</main>;
   const e = x as Any;
   const tab = TABS.some(([t]) => t === searchParams.tab) || searchParams.tab === 'calculadora' ? (searchParams.tab as string) : 'hoy';
@@ -71,6 +72,16 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             <div className="mt-1 text-[11px] text-white/60">{hechas} de {misiones.length} misiones · {progreso}%</div>
           </section>
 
+          {jugada ? (
+            <section className="rounded-2xl bg-lime p-5 text-ink">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">{(jugada as Any).recomendada ? `Tu mejor jugada · la recomienda ${(jugada as Any).experto ?? 'tu experto'}` : 'Tu mejor jugada (por confirmar con tu experto)'}</div>
+              <h2 className="mt-1 text-xl font-extrabold">{(jugada as Any).titulo}</h2>
+              <p className="mt-1 text-sm">{(jugada as Any).texto}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/70">{(jugada as Any).valor ? <span>hasta {fmtMXN((jugada as Any).valor)} al año</span> : null}{(jugada as Any).urgencia ? <span>· antes del {fmtFecha((jugada as Any).urgencia)}</span> : null}</div>
+              <div className="mt-3"><HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi expediente mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro /></div>
+            </section>
+          ) : null}
+
           {siguiente && (
             <section className="rounded-2xl border-2 border-lime bg-white p-5">
               <div className="text-[11px] uppercase tracking-wide text-muted">Tu siguiente paso</div>
@@ -94,6 +105,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           </section>
 
           <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} />
+
+          <Explicaciones items={(expl ?? []).filter((x: Any) => e.ley !== 'Ley97' || !['conservacion', 'mod40'].includes(x.clave)).slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
 
           {(e.interacciones ?? []).length ? (
             <section className="rounded-2xl border border-line bg-white p-5">
@@ -164,6 +177,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               );
             })}
           </section>
+          <Explicaciones items={expl ?? []} leidas={(leidas as string[]) ?? []} titulo="Glosario: por qué importa cada dato" />
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">¿Y si…?</h2>
             {beneficios.includes('calculadora') && e.tiene_semilla ? (

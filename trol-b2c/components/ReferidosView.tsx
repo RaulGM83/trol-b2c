@@ -30,11 +30,11 @@ export function ReferidosView({
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
       <header className="mb-6 flex items-center gap-2">
-        <span className="text-xl font-extrabold tracking-tight">
+        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">
           tr<span className="text-lime">o</span>l
         </span>
-        <Link href="/diagnostico" className="text-xs text-muted hover:underline">
-          ← volver
+        <Link href="/mi?tab=puntos" className="text-xs text-muted hover:underline">
+          ← mi expediente
         </Link>
       </header>
 

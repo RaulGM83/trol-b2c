@@ -11,7 +11,7 @@ export default async function EncuestaPage({
   searchParams: { volver?: string };
 }) {
   // Regreso contextual: quien llega desde el comparativo vuelve a él al terminar.
-  const volverHref = searchParams.volver === 'comparativo' ? '/comparativo' : '/diagnostico';
+  const volverHref = searchParams.volver === 'comparativo' ? '/comparativo' : '/mi?tab=misiones';
   const supabase = createClient();
   const {
     data: { user },

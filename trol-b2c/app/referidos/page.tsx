@@ -34,8 +34,8 @@ export default async function ReferidosPage() {
     return (
       <main className="mx-auto max-w-xl px-5 py-10 text-center">
         <p className="text-sm text-muted">Tu ficha aún no está lista; en cuanto tengas tu diagnóstico podrás invitar.</p>
-        <Link href="/diagnostico" className="mt-4 inline-block rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white">
-          Ir a mi diagnóstico
+        <Link href="/mi" className="mt-4 inline-block rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white">
+          Ir a mi expediente
         </Link>
       </main>
     );

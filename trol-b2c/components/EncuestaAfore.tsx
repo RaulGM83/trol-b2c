@@ -38,7 +38,7 @@ type Prefill = {
 
 export function EncuestaAfore({
   prefill,
-  volverHref = '/diagnostico',
+  volverHref = '/mi?tab=misiones',
 }: {
   prefill?: Prefill;
   /** A dónde regresar al terminar (p.ej. '/comparativo' si vino del comparativo). */
@@ -152,11 +152,11 @@ export function EncuestaAfore({
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
       <header className="mb-6 flex items-center gap-2">
-        <span className="text-xl font-extrabold tracking-tight">
+        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">
           tr<span className="text-lime">o</span>l
         </span>
         <Link href={volverHref} className="text-xs text-muted hover:underline">
-          ← volver
+          ← mi expediente
         </Link>
       </header>
 
