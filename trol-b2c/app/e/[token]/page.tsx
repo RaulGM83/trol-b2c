@@ -3,7 +3,6 @@
 // Prellena el celular del lado servidor, registra la apertura y manda al OTP.
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { PersistRef } from '@/components/PersistRef';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { LoginForm } from '@/app/login/login-form';
 
@@ -16,17 +15,13 @@ export default async function EntradaCampania({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { c?: string; ref?: string };
+  searchParams: { c?: string };
 }) {
   const campania = (searchParams.c ?? 'reactivacion').slice(0, 40);
-  // Un link de campaña puede traer también quién lo refirió (?ref=<cliente_id>).
-  // Se re-siembra la cookie para que la atribución sobreviva al salto por el
-  // OTP (ver web/ATRIBUCION_DISENO.md). La escritura la hace <PersistRef/> en
-  // cliente: desde un Server Component, cookies().set() lanza en Next 14.
-  const rc = (searchParams.ref ?? '').slice(0, 64);
   // Campaña Compara Afore → la experiencia aterriza en /comparativo.
   const esComparaAfore = campania.startsWith('comparaafore');
-  const destino = esComparaAfore ? '/comparativo' : '/diagnostico';
+  // Trol 3.0: el destino por defecto es el expediente del cliente (/mi).
+  const destino = esComparaAfore ? '/comparativo' : '/mi';
 
   // Si ya hay sesión en este dispositivo, directo a su destino.
   const supabase = createClient();
@@ -40,15 +35,24 @@ export default async function EntradaCampania({
   let nombre = '';
   try {
     const admin = createAdminClient();
-    const { data: cli } = await admin
+    let { data: cli } = await admin
       .from('clientes')
       .select('id, nombre, telefono')
       .eq('id', params.token)
       .maybeSingle();
+    if (!cli) {
+      // token = persona trol3 (clientes nuevos que nacieron en el bot)
+      const { data: per } = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('id', params.token).maybeSingle();
+      if (per) {
+        const { data: tel } = await admin.schema('trol3').from('contactos').select('valor').eq('persona_id', per.id).eq('tipo', 'telefono').order('principal', { ascending: false }).limit(1).maybeSingle();
+        cli = { id: per.legacy_cliente_id ?? per.id, nombre: per.nombre, telefono: tel?.valor ?? '' } as { id: string; nombre: string | null; telefono: string | null };
+        await admin.schema('trol3').rpc('emitir_evento', { p_persona: per.id, p_tipo: 'link_abierto', p_actor: 'cliente', p_actor_id: per.id, p_payload: { campania } });
+      }
+    }
     if (cli) {
       telPrefill = soloDigitos(cli.telefono ?? '').slice(-10);
       nombre = (cli.nombre ?? '').trim().split(/\s+/)[0] ?? '';
-      await admin.from('links_campania').insert({ cliente_id: cli.id, campania, evento: 'apertura' });
+      try { await admin.from('links_campania').insert({ cliente_id: cli.id, campania, evento: 'apertura' }); } catch {}
     }
   } catch {
     // Atribución/prefill best-effort: si falla, igual mostramos el login.
@@ -56,9 +60,8 @@ export default async function EntradaCampania({
 
   return (
     <main className="mx-auto max-w-md px-5 py-10">
-      {rc && <PersistRef codigo={rc} />}
       <header className="mb-6 flex items-center gap-2">
-        <span className="text-2xl font-extrabold tracking-tight">
+        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">
           tr<span className="text-lime">o</span>l
         </span>
       </header>
@@ -77,13 +80,12 @@ export default async function EntradaCampania({
         </div>
       ) : (
         <div className="mb-5 rounded-2xl bg-lime p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Nuevo en El Trol</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">Tu expediente en El Trol</div>
           <h1 className="mt-1 text-xl font-extrabold leading-tight text-ink">
-            {nombre ? `${nombre}, ya puedes ver tu pensión en vivo` : 'Ya puedes ver tu pensión en vivo'}
+            {nombre ? `${nombre}, tu pensión, en claro` : 'Tu pensión, en claro'}
           </h1>
           <p className="mt-1 text-sm text-ink/80">
-            Estrenamos una calculadora interactiva: mueve las palancas (edad, semanas, Modalidad 40, ahorro) y mira
-            cómo cambia tu pensión. Entra con tu celular para ver tu caso actualizado.
+            Aquí ves lo que te tocaría hoy, lo máximo que podrías lograr y los pasos para llegar, con tu experto a un mensaje de distancia. Entra con tu celular.
           </p>
         </div>
       )}

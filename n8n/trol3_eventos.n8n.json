@@ -1,0 +1,614 @@
+{
+  "name": "Trol3 — eventos (webhook_eventos)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trol3-eventos",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-trol3-eventos",
+      "name": "Webhook trol3-eventos",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "trol3-eventos"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "supabase_url",
+              "value": "https://orgagfdxygtjiwqvgckw.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "service_role_key",
+              "value": "REEMPLAZA_SERVICE_ROLE_KEY",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "tako_phone_number_id",
+              "value": "933742489812669",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "tako_template_cliente",
+              "value": "reactivacion_calculadora3",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "emails_asesores",
+              "value": "lacoachmoni@trol.mx,veronica@trol.mx,andrea@trol.mx,lorena@trol.mx,raul@trol.mx",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "app_url",
+              "value": "https://app.trol.mx",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "cfg",
+      "name": "Config (edita aquí)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.body.tipo }}",
+                    "rightValue": "persona_alta",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "persona_alta"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.body.tipo }}",
+                    "rightValue": "consulta_pendiente_reflejo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pendiente_reflejo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ ['handoff','documento_solicitado','ahorro_puntos_solicitado','cita_creada','link_abierto'].includes($json.body.tipo) }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "aviso_asesor"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "leftValue": "={{ ($json.body.tipo === 'consulta_completada' && ($json.body.payload.notificar_cliente === true || $json.body.payload.solicitante_tipo === 'cliente')) || $json.body.tipo === 'oportunidad_presentada' || $json.body.tipo === 'beneficio_otorgado' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "aviso_cliente"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "sw",
+      "name": "Switch por tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json.body.persona.hubspot_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "h2",
+              "leftValue": "={{ $json.body.persona.legacy_cliente_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "h3",
+              "leftValue": "={{ $json.body.persona.telefono }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-sin-hs",
+      "name": "¿Sin espejo en HubSpot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ properties: { firstname: ($json.body.persona.nombre || 'Sin nombre'), lastname: ($json.body.persona.apellidos || ''), phone: '+52' + $json.body.persona.telefono, mobilephone: '+52' + $json.body.persona.telefono, curp: ($json.body.persona.curp || ''), fuente_registro: 'trol3:' + ($json.body.persona.canal || 'bot'), trol3_persona_id: $json.body.persona_id } }) }}",
+        "options": {}
+      },
+      "id": "hs-upsert",
+      "name": "HubSpot: crear contacto (API v3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZA_CRED_HUBSPOT_BEARER",
+          "name": "HubSpot Bearer (Authorization: Bearer pat-...)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/personas?id=eq.{{ $('Switch por tipo').item.json.body.persona_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Accept-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ hubspot_id: String($json.id || $json.vid || '') }) }}",
+        "options": {}
+      },
+      "id": "sb-hsid",
+      "name": "Guardar hubspot_id en persona",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        60
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config (edita aquí)').item.json.emails_asesores }}",
+        "subject": "={{ ({ handoff: '🔴 Cliente pide hablar con experto', documento_solicitado: '📄 Solicitud de documento', ahorro_puntos_solicitado: '💰 Solicitud de ahorro con puntos (Millas)', cita_creada: '📅 Cita agendada', link_abierto: '👀 Abrió su expediente' })[$json.body.tipo] + ': ' + (($json.body.persona.nombre || '') + ' ' + ($json.body.persona.apellidos || '')).trim() }}",
+        "emailType": "text",
+        "message": "={{ 'Evento: ' + $json.body.tipo + '\\nPersona: ' + (($json.body.persona.nombre || '') + ' ' + ($json.body.persona.apellidos || '')).trim() + '\\nTeléfono: ' + ($json.body.persona.telefono || '—') + '\\nCURP: ' + ($json.body.persona.curp || '—') + '\\nEtapa: ' + ($json.body.persona.etapa || '') + ' · Canal: ' + ($json.body.persona.canal || '') + '\\nDetalle: ' + JSON.stringify($json.body.payload) + '\\n\\nExpediente: ' + $('Config (edita aquí)').item.json.app_url + '/trabajo/p/' + $json.body.persona_id + '\\nTako: https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521' + ($json.body.persona.telefono || '') }}",
+        "options": {}
+      },
+      "id": "gmail-asesor",
+      "name": "Email a asesoras",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        320
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZA_CRED_GMAIL",
+          "name": "Gmail Trol"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "t1",
+              "leftValue": "={{ $json.body.persona.telefono }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-tel",
+      "name": "¿Tiene teléfono?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.insuranceboosters.com/api/v1/whatsapp/{{ $('Config (edita aquí)').item.json.tako_phone_number_id }}/template",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ to: '521' + String($json.body.persona.telefono).replace(/\\D/g,'').slice(-10), name: $('Config (edita aquí)').item.json.tako_template_cliente, language: 'es', components: [ { type: 'body', parameters: [ { type: 'text', parameter_name: 'nombre', text: (($json.body.persona.nombre || 'Hola').split(' ')[0]) } ] }, { type: 'button', sub_type: 'url', index: '0', parameters: [ { type: 'text', text: $json.body.persona_id + '?c=' + $json.body.tipo } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "tako-cliente",
+      "name": "Tako: plantilla al cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZpH9oZH41ozAipds",
+          "name": "Tako_API_Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/envios_wa",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ telefono: '521' + String($('Switch por tipo').item.json.body.persona.telefono).replace(/\\D/g,'').slice(-10), plantilla: $('Config (edita aquí)').item.json.tako_template_cliente, campania: 'trol3:' + $('Switch por tipo').item.json.body.tipo, response_status: $json.statusCode || 200, cliente_id: $('Switch por tipo').item.json.body.persona.legacy_cliente_id || null }) }}",
+        "options": {}
+      },
+      "id": "log-wa",
+      "name": "Log envios_wa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config (edita aquí)').item.json.supabase_url }}/rest/v1/rpc/registrar_salida",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config (edita aquí)').item.json.service_role_key }}"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "trol3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ p_persona: $('Switch por tipo').item.json.body.persona_id, p_contenido: 'Trol envió plantilla ' + $('Config (edita aquí)').item.json.tako_template_cliente + ' por: ' + $('Switch por tipo').item.json.body.tipo + ' — ' + JSON.stringify($('Switch por tipo').item.json.body.payload), p_meta: { plantilla: $('Config (edita aquí)').item.json.tako_template_cliente, motivo: $('Switch por tipo').item.json.body.tipo, evento_id: $('Switch por tipo').item.json.body.evento_id } }) }}",
+        "options": {}
+      },
+      "id": "reg-salida",
+      "name": "Registrar salida en expediente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook trol3-eventos": {
+      "main": [
+        [
+          {
+            "node": "Config (edita aquí)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config (edita aquí)": {
+      "main": [
+        [
+          {
+            "node": "Switch por tipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch por tipo": {
+      "main": [
+        [
+          {
+            "node": "¿Sin espejo en HubSpot?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Sin espejo en HubSpot?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email a asesoras",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Tiene teléfono?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "¿Sin espejo en HubSpot?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: crear contacto (API v3)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "¿Tiene teléfono?": {
+      "main": [
+        [
+          {
+            "node": "Tako: plantilla al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Tako: plantilla al cliente": {
+      "main": [
+        [
+          {
+            "node": "Log envios_wa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: crear contacto (API v3)": {
+      "main": [
+        [
+          {
+            "node": "Guardar hubspot_id en persona",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log envios_wa": {
+      "main": [
+        [
+          {
+            "node": "Registrar salida en expediente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
