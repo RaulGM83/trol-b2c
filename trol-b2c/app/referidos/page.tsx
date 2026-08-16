@@ -2,10 +2,9 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { ReferidosView } from '@/components/ReferidosView';
+import { waInvitacionBot } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
-
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
 
 export default async function ReferidosPage() {
   const supabase = createClient();
@@ -50,6 +49,6 @@ export default async function ReferidosPage() {
   const confirmados = (refs ?? []).filter((r) => r.puntos_etapa1_otorgados).length;
 
   return (
-    <ReferidosView url={`${SITE}/r/${cli.id}`} invitados={invitados} confirmados={confirmados} puntos={confirmados * 100} />
+    <ReferidosView url={waInvitacionBot(cli.id)} invitados={invitados} confirmados={confirmados} puntos={confirmados * 100} />
   );
 }

@@ -169,6 +169,30 @@
               },
               "renameOutput": true,
               "outputKey": "aviso_cliente"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "r5",
+                    "leftValue": "={{ $json.body.tipo }}",
+                    "rightValue": "curp_capturada",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "curp_capturada"
             }
           ]
         },
@@ -256,8 +280,15 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ properties: { firstname: ($json.body.persona.nombre || 'Sin nombre'), lastname: ($json.body.persona.apellidos || ''), email: ($json.body.persona.email || ($json.body.persona.telefono + '@trol.mx')), phone: '+52' + $json.body.persona.telefono, mobilephone: '+52' + $json.body.persona.telefono, curp: ($json.body.persona.curp || ''), fuente_registro: 'trol3:' + ($json.body.persona.canal || 'bot'), trol3_persona_id: $json.body.persona_id } }) }}",
-        "options": {}
+        "body": "={{ JSON.stringify({ properties: Object.assign({ firstname: ($json.body.persona.nombre || 'Sin nombre'), lastname: ($json.body.persona.apellidos || ''), email: ($json.body.persona.email || ($json.body.persona.telefono + '@trol.mx')), phone: '+52' + $json.body.persona.telefono, mobilephone: '+52' + $json.body.persona.telefono, supabase_record_id: $json.body.persona_id }, $json.body.persona.curp ? { curp: $json.body.persona.curp } : {}) }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
       },
       "id": "hs-upsert",
       "name": "HubSpot: crear contacto (API v3)",
@@ -307,7 +338,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ hubspot_id: String($json.id || $json.vid || '') }) }}",
+        "body": "={{ JSON.stringify({ hubspot_id: String($json.hs_id) }) }}",
         "options": {}
       },
       "id": "sb-hsid",
@@ -315,7 +346,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1240,
+        1580,
         60
       ],
       "onError": "continueRegularOutput"
@@ -569,6 +600,149 @@
         700
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "hs_id",
+              "value": "={{ String($json.id || ((($json.message||'').match(/Existing ID: (\\d+)/)||[])[1]) || '') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "hs-set-id",
+      "name": "Extraer hubspot_id",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1180,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "hs1",
+              "leftValue": "={{ $json.hs_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "hs-if-created",
+      "name": "¿Se creó en HubSpot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1380,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cc1",
+              "leftValue": "={{ $json.body.persona.hubspot_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cc2",
+              "leftValue": "={{ $json.body.persona.curp }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-curp-hs",
+      "name": "¿Tiene hubspot_id?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $json.body.persona.hubspot_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ properties: { curp: $json.body.persona.curp } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "patch-curp-hs",
+      "name": "HubSpot: actualizar CURP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZA_CRED_HUBSPOT_BEARER",
+          "name": "HubSpot Bearer (Authorization: Bearer pat-...)"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -624,6 +798,13 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "¿Tiene hubspot_id?",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
@@ -666,7 +847,7 @@
       "main": [
         [
           {
-            "node": "Guardar hubspot_id en persona",
+            "node": "Extraer hubspot_id",
             "type": "main",
             "index": 0
           }
@@ -700,6 +881,41 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Extraer hubspot_id": {
+      "main": [
+        [
+          {
+            "node": "¿Se creó en HubSpot?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se creó en HubSpot?": {
+      "main": [
+        [
+          {
+            "node": "Guardar hubspot_id en persona",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "¿Tiene hubspot_id?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: actualizar CURP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },

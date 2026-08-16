@@ -10,27 +10,9 @@ export const WA = {
   agendar: () => waLink('Hola, quiero agendar una asesoría de pensión con El Trol.'),
   hoja: () =>
     waLink('Hola, no pudieron traer mi historial del IMSS. Les envío mi Reporte de Semanas Cotizadas para mi diagnóstico de pensión.'),
-  // Alta de prospecto nuevo (/alta): no hubo búsqueda fallida que reportar,
-  // simplemente prefiere mandar su constancia en vez de dar su CURP.
-  altaConstancia: () =>
-    waLink('Hola, me estoy registrando en El Trol y prefiero enviarles mi Reporte de Semanas Cotizadas en vez de mi CURP para que armen mi diagnóstico de pensión.'),
   // Tras pagar la sesión 1:1: el cliente nos pide el horario por WhatsApp.
   agendarSesion: () =>
     waLink('Hola, ya pagué mi Diagnóstico avanzado + sesión en El Trol y quiero agendar mi videollamada 1:1.'),
-  // Negativa de pensión Ley 97: el caso NO es autoservicio. Necesita asesor
-  // para revisar semanas no reconocidas y armar la ruta de cotización.
-  // En Ley 97 no aplica la Modalidad 40 (es de la fórmula de Ley 73): las vías
-  // son cotizar con un empleador o pagar la Modalidad 10 por cuenta propia.
-  negativaLey97: () =>
-    waLink(
-      'Hola, vi en app.trol.mx que con mis semanas actuales el IMSS me negaría la pensión (Ley 97). Quiero revisar mi caso: cuántas semanas me faltan, si hay periodos que no me están contando y cómo completarlas cotizando con un empleador o con Modalidad 10.',
-    ),
-  // Negativa Ley 73: casi siempre es conservación de derechos (Art. 150/151),
-  // que se resuelve reactivando. Requiere asesor para armar la ruta.
-  negativaLey73: () =>
-    waLink(
-      'Hola, vi en app.trol.mx que hoy no podría pensionarme por Ley 73. Quiero revisar mi caso: si es por semanas o por conservación de derechos, cuánto tengo que cotizar para reactivarlos y qué me conviene más.',
-    ),
   // Asesoría básica gratuita: el paso humano después del diagnóstico.
   asesoriaBasica: () =>
     waLink('Hola, ya vi mi diagnóstico en app.trol.mx y quiero mi asesoría básica gratuita para entender mi mejor siguiente paso.'),
@@ -71,10 +53,19 @@ export const WA = {
 // Configurable en .env.local; si no está, solo mostramos la opción de WhatsApp.
 export const BOOKING_URL = process.env.NEXT_PUBLIC_BOOKING_URL || '';
 
-// Mensaje para que el cliente comparta su link de referido por WhatsApp.
-export function waCompartirReferido(url: string): string {
+// Link de invitación que abre el WhatsApp del bot (Tako) con el código de
+// referido en el texto. El bot detecta "ref:<codigo>" en el primer mensaje y
+// registra la atribución. `codigo` = id legacy del cliente que refiere.
+export function waInvitacionBot(codigo: string): string {
+  const msg = `Hola, quiero ver mi pensión del IMSS con Trol 🧮 ref:${codigo}`;
+  return `https://wa.me/${WHATSAPP_TROL}?text=${encodeURIComponent(msg)}`;
+}
+
+// Mensaje para que el cliente comparta su invitación por WhatsApp. `invitacion`
+// es el link waInvitacionBot (abre el bot con el código).
+export function waCompartirReferido(invitacion: string): string {
   const msg =
-    `Te comparto El Trol para calcular tu pensión del IMSS 🧮 Yo ya vi la mía. ` +
-    `Entra con mi invitación y los dos ganamos puntos: ${url}`;
+    `Te comparto El Trol para ver y mejorar tu pensión del IMSS 🧮 Yo ya vi la mía. ` +
+    `Entra con mi invitación por WhatsApp y los dos ganamos puntos: ${invitacion}`;
   return `https://wa.me/?text=${encodeURIComponent(msg)}`;
 }

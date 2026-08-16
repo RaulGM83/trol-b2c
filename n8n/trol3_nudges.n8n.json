@@ -116,19 +116,6 @@
     },
     {
       "parameters": {
-        "options": {}
-      },
-      "id": "split",
-      "name": "Uno por persona",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
-      "position": [
-        700,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -317,19 +304,6 @@
     },
     {
       "parameters": {
-        "options": {}
-      },
-      "id": "split2",
-      "name": "Uno por envío",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
-      "position": [
-        700,
-        600
-      ]
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "=https://api.insuranceboosters.com/api/v1/whatsapp/{{ $('Config (edita aquí)').item.json.tako_phone_number_id }}/template",
         "authentication": "genericCredentialType",
@@ -483,17 +457,6 @@
       "main": [
         [
           {
-            "node": "Uno por persona",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Uno por persona": {
-      "main": [
-        [
-          {
             "node": "¿Con teléfono?",
             "type": "main",
             "index": 0
@@ -542,17 +505,6 @@
       ]
     },
     "Supabase RPC: cola_envios_pendientes": {
-      "main": [
-        [
-          {
-            "node": "Uno por envío",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Uno por envío": {
       "main": [
         [
           {
