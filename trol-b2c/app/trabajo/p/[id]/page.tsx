@@ -6,6 +6,8 @@ import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LA
 import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
+import { CompartirLinks } from '@/components/trol3/CompartirLinks';
+import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
@@ -57,11 +59,23 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // Saldos corregidos por el asesor (portal) viven en public.clientes.saldos_corregidos
   let saldosCorregidos: SaldosCorregidos | null = null;
   let mod40AplicaLegacy: boolean | null = null;
+  let historialLaboral: Any[] = [];
+  let codigoReferido: string | null = null;
   if (e.legacy_cliente_id) {
-    const { data: cl } = await createAdminClient().from('clientes').select('saldos_corregidos, mod40_retro_hoy, mod40_retro_futuro').eq('id', e.legacy_cliente_id).maybeSingle();
+    const admin = createAdminClient();
+    const { data: cl } = await admin.from('clientes').select('saldos_corregidos, mod40_retro_hoy, mod40_retro_futuro, calculo_pensional, codigo_referido').eq('id', e.legacy_cliente_id).maybeSingle();
     saldosCorregidos = (cl?.saldos_corregidos as SaldosCorregidos | null) ?? null;
     mod40AplicaLegacy = cl ? cl.mod40_retro_hoy === 'true' || cl.mod40_retro_futuro === 'true' : null;
+    historialLaboral = ((cl?.calculo_pensional as { historial?: Any[] } | null)?.historial as Any[]) ?? [];
+    codigoReferido = (cl?.codigo_referido as string | null) ?? null;
+    if (!codigoReferido) {
+      const { data: cod } = await admin.schema('trol3').rpc('codigo_referido', { p_cliente: e.legacy_cliente_id });
+      codigoReferido = (cod as string) ?? null;
+    }
   }
+  const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
+  const urlExpediente = `${SITE}/e/${e.persona_id}?c=bot`;
+  const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
   const rawFechaSisec = (datosMap.get('semilla')?.valor as { meta?: { fecha_sisec?: string } } | undefined)?.meta?.fecha_sisec;
   const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;
   const semillaAt = datosMap.get('semilla')?.obtenido_en ? fmtFecha(datosMap.get('semilla')?.obtenido_en) : null;
@@ -136,8 +150,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
               <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
               <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} fechas={{ imss: e.ley_en }} />
             </section>
+
+            <HistorialLaboral historial={historialLaboral} />
           </div>
           <aside className="space-y-4">
+            <CompartirLinks expediente={urlExpediente} referido={urlReferido} />
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Pedir información</h2>
               <ConsultaForm personaId={e.persona_id} />
