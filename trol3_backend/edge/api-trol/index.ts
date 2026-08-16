@@ -17,8 +17,19 @@ let API_KEY = Deno.env.get("TROL_API_KEY") ?? "";
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { db: { schema: "trol3" }, auth: { persistSession: false } });
 
+const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-trol-key", "access-control-allow-methods": "GET, POST, OPTIONS" };
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "access-control-allow-origin": "*" } });
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...CORS } });
+
+const AFORES = ["Azteca", "Banorte", "Citibanamex", "Coppel", "Inbursa", "Invercap", "PensionISSSTE", "Principal", "Profuturo", "SURA"];
+function normalizaAfore(v: string): string {
+  const k = v.toLowerCase().replace(/[^a-z]/g, "");
+  const hit = AFORES.find((a) => a.toLowerCase().replace(/[^a-z]/g, "") === k) ?? AFORES.find((a) => k.includes(a.toLowerCase().replace(/[^a-z]/g, "")));
+  if (hit) return hit;
+  if (k.includes("banamex") || k.includes("citi")) return "Citibanamex";
+  if (k.includes("issste")) return "PensionISSSTE";
+  return v;
+}
 
 async function personaId(b: Record<string, unknown>): Promise<string> {
   if (b.persona_id) return String(b.persona_id);
@@ -35,7 +46,7 @@ async function personaId(b: Record<string, unknown>): Promise<string> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return json({ ok: true });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/api-trol/, "") || "/";
   const key = req.headers.get("x-trol-key") ?? url.searchParams.get("key");
@@ -64,25 +75,51 @@ Deno.serve(async (req) => {
       return json({ eventos: data });
     }
     if (req.method !== "POST") return json({ error: "método" }, 405);
-    const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const bRaw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    // Tako deja "{{param}}" literal cuando el modelo no llena un parámetro: se trata como ausente
+    const b: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(bRaw)) b[k] = (typeof v === "string" && (/^\{\{.*\}\}$/.test(v.trim()) || v.trim() === "")) ? undefined : v;
 
     switch (path) {
       case "/alta": {
         const { data, error } = await db.rpc("alta_por_telefono", { p_tel: b.telefono, p_canal: b.canal ?? "organico", p_actor: b.actor ?? "bot", p_nombre: b.nombre ?? null, p_campania: b.campania ?? null, p_verificacion: b.verificacion ?? "wa" });
         if (error) throw error;
+        if (b.apellidos && (data as { persona_id?: string })?.persona_id) {
+          await db.from("personas").update({ apellidos: String(b.apellidos) }).eq("id", (data as { persona_id: string }).persona_id).is("apellidos", null);
+        }
         return json(data);
       }
       case "/declarar": {
         const pid = await personaId(b);
+        if (b.campo === "curp" && typeof b.valor === "string") b.valor = (b.valor as string).toUpperCase().replace(/[^A-Z0-9]/g, "");
         const { data, error } = await db.rpc("declarar", { p_persona: pid, p_campo: b.campo, p_valor: b.valor, p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_capa: "declarado" });
         if (error) return json({ ok: false, error: error.message, hint: (error as { hint?: string }).hint }, 400);
         return json({ ok: true, dato_id: data, persona_id: pid });
       }
       case "/declarar-varios": {
         const pid = await personaId(b);
-        const datos = (b.datos ?? {}) as Record<string, unknown>;
+        // Acepta: {datos:{...}}, {datos:"json string"} o campos planos junto a telefono/actor (formato Tako)
+        const RESERVADOS = new Set(["persona_id", "telefono", "actor", "actor_id", "canal", "nombre", "campania", "datos"]);
+        let datos: Record<string, unknown> = {};
+        if (typeof b.datos === "string") { try { datos = JSON.parse(b.datos as string); } catch { datos = {}; } }
+        else if (b.datos && typeof b.datos === "object") datos = b.datos as Record<string, unknown>;
+        for (const [k, v] of Object.entries(b)) if (!RESERVADOS.has(k) && !(k in datos)) datos[k] = v;
+        const esVacio = (v: unknown) => v === null || v === undefined || (typeof v === "string" && (v.trim() === "" || /^\{\{.*\}\}$/.test(v.trim()) || ["null", "undefined", "n/a", "na"].includes(v.trim().toLowerCase())));
         const out: Record<string, unknown> = {};
-        for (const [campo, valor] of Object.entries(datos)) {
+        const ALIAS: Record<string, string> = { credito_infonavit: "credito_infonavit_vigente", infonavit_usado: "credito_infonavit_vigente", afore: "afore_actual", semanas: "semanas_cotizadas" };
+        for (const [campoRaw, valorRaw] of Object.entries(datos)) {
+          if (esVacio(valorRaw)) continue;
+          const campo = ALIAS[campoRaw] ?? campoRaw;
+          let valor: unknown = valorRaw;
+          if (typeof valor === "string") {
+            const s = valor.trim();
+            if (/^-?\d+(\.\d+)?$/.test(s)) valor = Number(s);
+            else if (/^(true|false)$/i.test(s)) valor = s.toLowerCase() === "true";
+            else valor = s;
+          }
+          if (campo === "curp" && typeof valor === "string") valor = valor.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          if (campo === "afore_actual" && typeof valor === "string") valor = normalizaAfore(valor);
+          if (campo === "status_empleo" && typeof valor === "string") valor = valor.toLowerCase();
           const { data, error } = await db.rpc("declarar", { p_persona: pid, p_campo: campo, p_valor: valor, p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_capa: "declarado" });
           out[campo] = error ? { error: error.message } : { dato_id: data };
         }

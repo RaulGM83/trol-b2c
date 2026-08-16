@@ -42,7 +42,20 @@ export default async function EntradaCampania({
       .maybeSingle();
     if (!cli) {
       // token = persona trol3 (clientes nuevos que nacieron en el bot)
-      const { data: per } = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('id', params.token).maybeSingle();
+      const esUuid = /^[0-9a-f-]{36}$/i.test(params.token);
+      const telToken = soloDigitos(params.token);
+      let per: { id: string; nombre: string | null; legacy_cliente_id: string | null } | null = null;
+      if (esUuid) {
+        const r = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('id', params.token).maybeSingle();
+        per = r.data;
+      } else if (telToken.length >= 10) {
+        // Tolerancia: el bot armó el link con el teléfono en vez del persona_id → resolver por contacto
+        const { data: c } = await admin.schema('trol3').from('contactos').select('persona_id').eq('tipo', 'telefono').eq('normalizado', telToken.slice(-10)).order('principal', { ascending: false }).limit(1).maybeSingle();
+        if (c) {
+          const r = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('id', c.persona_id).maybeSingle();
+          per = r.data;
+        }
+      }
       if (per) {
         const { data: tel } = await admin.schema('trol3').from('contactos').select('valor').eq('persona_id', per.id).eq('tipo', 'telefono').order('principal', { ascending: false }).limit(1).maybeSingle();
         cli = { id: per.legacy_cliente_id ?? per.id, nombre: per.nombre, telefono: tel?.valor ?? '' } as { id: string; nombre: string | null; telefono: string | null };

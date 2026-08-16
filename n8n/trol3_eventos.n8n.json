@@ -256,7 +256,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ properties: { firstname: ($json.body.persona.nombre || 'Sin nombre'), lastname: ($json.body.persona.apellidos || ''), phone: '+52' + $json.body.persona.telefono, mobilephone: '+52' + $json.body.persona.telefono, curp: ($json.body.persona.curp || ''), fuente_registro: 'trol3:' + ($json.body.persona.canal || 'bot'), trol3_persona_id: $json.body.persona_id } }) }}",
+        "body": "={{ JSON.stringify({ properties: { firstname: ($json.body.persona.nombre || 'Sin nombre'), lastname: ($json.body.persona.apellidos || ''), email: ($json.body.persona.email || ($json.body.persona.telefono + '@trol.mx')), phone: '+52' + $json.body.persona.telefono, mobilephone: '+52' + $json.body.persona.telefono, curp: ($json.body.persona.curp || ''), fuente_registro: 'trol3:' + ($json.body.persona.canal || 'bot'), trol3_persona_id: $json.body.persona_id } }) }}",
         "options": {}
       },
       "id": "hs-upsert",
