@@ -1,0 +1,129 @@
+{
+  "name": "Trol3 — CDA Millas (webhook por CURP)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trol3-cda",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-cda",
+      "name": "Webhook trol3-cda",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1200, 320],
+      "webhookId": "trol3-cda"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api-core-production.millasparaelretiro.com/inquire/v1/token/generateToken",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "Content-Type", "value": "application/json" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user: $vars.CDA_USER, password: $vars.CDA_PASSWORD }) }}",
+        "options": { "timeout": 35000 }
+      },
+      "id": "token-cda",
+      "name": "Token CDA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-980, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api-core-production.millasparaelretiro.com/inquire/v1/contribution/validateCapacity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "authorization-pc", "value": "=Bearer-PC {{ $('Token CDA').first().json.model.token }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ curp: $('Webhook trol3-cda').first().json.body.curp }) }}",
+        "options": { "timeout": 35000 }
+      },
+      "id": "validar-cda",
+      "name": "Validar capacidad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-760, 320],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $('Webhook trol3-cda').first().json.body || {};\nconst j = $json || {};\nconst ok = j.status === 200 && j.model && typeof j.model.canReceiveContributions === 'boolean';\nconst puede = ok ? j.model.canReceiveContributions : null;\nreturn [{ json: {\n  row: {\n    cliente_id: b.cliente_id || null,\n    curp: b.curp,\n    can_receive: puede,\n    status: (j.status !== undefined && j.status !== null) ? j.status : null,\n    message: j.message || (j.error ? String(j.error.message || j.error) : null),\n    fuente: 'webhook'\n  },\n  consulta_id: b.trol3_consulta_id || null,\n  estado: ok ? 'completada' : 'error',\n  datos: puede === null ? {} : { puede_recibir_ahorro: puede, cuenta_registrada: true },\n  error_txt: ok ? null : ('CDA Millas: ' + (j.message || (j.status ? ('status ' + j.status) : 'sin respuesta')))\n} }];"
+      },
+      "id": "construir-cda",
+      "name": "Construir resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-540, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgagfdxygtjiwqvgckw.supabase.co/rest/v1/cda_validaciones",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $vars.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([$json.row]) }}",
+        "options": { "timeout": 35000 }
+      },
+      "id": "guardar-cda",
+      "name": "Guardar en cda_validaciones",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 320],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://orgagfdxygtjiwqvgckw.supabase.co/functions/v1/api-trol/consulta/resultado",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-trol-key", "value": "trol3_MjCeIHfkASbiofcVUvIdX464wQsdwBaDXjP_uWpFYeU" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ consulta_id: $('Construir resultado').first().json.consulta_id, estado: $('Construir resultado').first().json.estado, datos: $('Construir resultado').first().json.datos, error: $('Construir resultado').first().json.error_txt }) }}",
+        "options": { "timeout": 35000 }
+      },
+      "id": "devolver-trol3",
+      "name": "Devolver a trol3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-100, 320],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook trol3-cda": { "main": [[{ "node": "Token CDA", "type": "main", "index": 0 }]] },
+    "Token CDA": { "main": [[{ "node": "Validar capacidad", "type": "main", "index": 0 }]] },
+    "Validar capacidad": { "main": [[{ "node": "Construir resultado", "type": "main", "index": 0 }]] },
+    "Construir resultado": { "main": [[{ "node": "Guardar en cda_validaciones", "type": "main", "index": 0 }]] },
+    "Guardar en cda_validaciones": { "main": [[{ "node": "Devolver a trol3", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": { "instanceId": "5a3a31f3035b66c47c1d1dbba0bc9edea33f6009f5bdeadf4b64978cf207b067" }
+}

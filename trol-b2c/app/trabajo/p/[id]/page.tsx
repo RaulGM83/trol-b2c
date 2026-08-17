@@ -8,6 +8,7 @@ import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
+import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['bitacora', 'Bitácora']];
+const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -76,6 +77,13 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   const urlExpediente = `${SITE}/e/${e.persona_id}?c=bot`;
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
+  const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
+  const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
+  const viraalPrefill: Record<string, number | null> = {
+    imss: e.costo_retro ?? null,
+    pension: (e.pension_mod40_retro ?? e.pension_maxima) ?? null,
+    saldos: (Number(e.saldo_rcv97 ?? 0) + Number(e.saldo_infonavit ?? 0)) || null,
+  };
   const rawFechaSisec = (datosMap.get('semilla')?.valor as { meta?: { fecha_sisec?: string } } | undefined)?.meta?.fecha_sisec;
   const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;
   const semillaAt = datosMap.get('semilla')?.obtenido_en ? fmtFecha(datosMap.get('semilla')?.obtenido_en) : null;
@@ -238,6 +246,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
           {opsCerradas.length ? <details className="mt-3 text-xs text-muted"><summary>Cerradas / no aplican ({opsCerradas.length})</summary><ul className="mt-1 list-disc pl-4">{opsCerradas.map((o: Any) => <li key={o.id}>{catMap.get(o.codigo)?.nombre ?? o.codigo} · {ESTADO_OP_LABEL[o.estado]}{o.resultado ? ` · ${o.resultado}` : ''}</li>)}</ul></details> : null}
         </section>
       )}
+
+      {tab === 'viraal' && <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} />}
 
       {tab === 'bitacora' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

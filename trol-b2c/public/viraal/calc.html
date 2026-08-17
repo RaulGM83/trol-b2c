@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viraal · Mesa de autorización de proyectos</title>
+<style>
+  :root{
+    --paper:#E5EBF3; --copy-cliente:#FBFCFE; --copy-viraal:#D7E3F4;
+    --ink:#0F1D33; --ink-soft:#5A6B84; --rule:#C3CDDC; --rule-hard:#8A9AB2;
+    --azul:#2255A0; --azul-soft:#E9F0FA;
+    --go:#0D6B55; --hold:#96620F; --stop:#A72F26; --field:#FFFFFF;
+    --r:4px;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 20px 80px}
+
+  header{border-bottom:2px solid var(--azul);padding-bottom:14px;margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:6px 0 2px}
+  .sub{color:var(--ink-soft);font-size:13px;max-width:68ch}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .presets button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:transparent;border:1px solid var(--rule-hard);color:var(--azul);padding:7px 12px;cursor:pointer;border-radius:var(--r)}
+  .presets button:hover{background:var(--azul);border-color:var(--azul);color:#fff}
+  .presets button:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:26px;align-items:start}
+  @media(max-width:960px){.grid{grid-template-columns:1fr}}
+  .controls{position:sticky;top:20px}
+  @media(max-width:960px){.controls{position:static}}
+  fieldset{border:0;border-top:1px solid var(--rule-hard);margin:0 0 18px;padding:12px 0 0}
+  legend{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);padding:0 8px 0 0}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px}
+  .row label{font-size:12.5px;flex:1}
+  .row input[type=number]{width:94px;font-family:var(--mono);font-size:12.5px;text-align:right;padding:5px 7px;border:1px solid var(--rule-hard);background:var(--field);color:var(--ink);border-radius:var(--r)}
+  .row.pair input[type=number]{width:66px}
+  .row:focus-within input{outline:none}
+  .row input:focus{outline:2px solid var(--azul);outline-offset:1px}
+  .row input[readonly]{background:var(--azul-soft);color:var(--ink-soft)}
+  .colhead{display:flex;justify-content:flex-end;gap:10px;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px}
+  .colhead span{width:66px;text-align:center}
+  .hint{font-size:11px;color:var(--ink-soft);margin:-2px 0 9px;line-height:1.35}
+
+  .aporta{border:1px solid var(--azul);background:var(--copy-viraal);padding:12px;margin-bottom:18px;border-radius:var(--r)}
+  .aporta .row label{font-weight:600}
+  .aporta input[type=range]{width:100%;margin:6px 0 2px;accent-color:var(--azul)}
+  .aporta .hint{margin:0}
+
+  .escenarios{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:var(--r);overflow:hidden}
+  @media(max-width:780px){.escenarios{grid-template-columns:1fr}}
+  .esc{border:1px solid var(--rule-hard);background:var(--copy-cliente);padding:16px 18px}
+  .esc+.esc{border-left:none}
+  @media(max-width:780px){.esc+.esc{border-left:1px solid var(--rule-hard)}}
+  .esc h2{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:400;color:var(--ink-soft);margin:0 0 3px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .esc .params{font-size:11.5px;color:var(--ink-soft);margin:0 0 12px;line-height:1.4}
+
+  .line{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:13px}
+  .line span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .line.dim{color:var(--ink-soft);font-size:12px}
+  .line.sum{border-top:1px solid var(--rule);margin-top:5px;padding-top:6px;font-weight:600}
+  .line.total{border-top:2px solid var(--azul);margin-top:7px;padding-top:8px;font-weight:700;font-size:15px}
+  .line.neg span:last-child{color:var(--stop)}
+  .line.pos span:last-child{color:var(--go)}
+
+  .panel{border:1px solid var(--rule-hard);background:var(--copy-cliente);padding:16px 18px;margin-top:18px;border-radius:var(--r)}
+  .panel.dark{background:var(--copy-viraal);border-color:var(--azul)}
+  .panel h2{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:400;color:var(--ink-soft);margin:0 0 12px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:0 26px}
+  @media(max-width:780px){.two,.three{grid-template-columns:1fr}}
+  .metric{border-top:2px solid var(--azul);padding-top:8px}
+  .metric .lbl{font-size:11.5px;color:var(--ink-soft);line-height:1.3;min-height:2.6em}
+  .metric .num{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin-top:4px}
+  .metric .foot{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:2px}
+
+  .verdict{display:grid;grid-template-columns:228px 1fr;gap:24px;align-items:center;border:2px solid var(--azul);background:var(--copy-cliente);padding:20px;margin-top:18px;border-radius:var(--r)}
+  @media(max-width:780px){.verdict{grid-template-columns:1fr}}
+  .stamp{border:3px double currentColor;padding:12px 10px;text-align:center;transform:rotate(-3.5deg);color:var(--go)}
+  .stamp .lvl{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase}
+  .stamp .name{font-size:18px;font-weight:700;line-height:1.15;margin-top:3px;text-transform:uppercase}
+  @keyframes press{0%{transform:rotate(-3.5deg) scale(1.18);opacity:0}55%{transform:rotate(-3.5deg) scale(.97);opacity:1}100%{transform:rotate(-3.5deg) scale(1)}}
+  .stamp.press{animation:press .28s ease-out}
+  @media(prefers-reduced-motion:reduce){.stamp.press{animation:none}}
+  .verdict-body p{margin:0 0 9px;font-size:13.5px;max-width:68ch}
+  .verdict-body p:last-child{margin-bottom:0}
+  .verdict-body strong{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .actions button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--azul);color:#fff;border:1px solid var(--azul);padding:7px 12px;cursor:pointer;border-radius:var(--r)}
+  .actions button:hover{background:transparent;color:var(--azul)}
+  .actions button:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+
+  .flag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor;padding:2px 6px;display:inline-block}
+  .flag.ok{color:var(--go)}.flag.warn{color:var(--hold)}.flag.bad{color:var(--stop)}
+
+  table.bandas{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.bandas th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);font-weight:400;text-align:left;padding:0 10px 6px 0;border-bottom:1px solid var(--rule-hard)}
+  table.bandas td{padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+  table.bandas td:nth-child(2){font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.bandas tr.activa td{background:var(--copy-viraal);font-weight:600}
+  table.bandas tr.activa td:first-child::before{content:"▸ ";font-family:var(--mono)}
+
+  footer{margin-top:26px;border-top:1px solid var(--rule-hard);padding-top:12px;font-size:11.5px;color:var(--ink-soft);max-width:82ch}
+  code{font-family:var(--mono);font-size:11.5px;background:rgba(34,85,160,.09);padding:1px 4px;border-radius:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Viraal · uso interno</div>
+  <h1>Mesa de autorización de proyectos</h1>
+  <p class="sub">El escenario base corre con política. El estresado se sale de política: crédito DXN más barato y por tanto más grande, y seis meses de retroactivo en vez de cuatro. Si pasa cualquiera de los dos sin bajar los gastos de administración del piso, se autoriza solo.</p>
+  <div class="presets">
+    <button type="button" data-preset="lm">Luis Miguel</button>
+    <button type="button" data-preset="ej">Eduardo Jesús</button>
+    <button type="button" data-preset="blank">Expediente nuevo</button>
+  </div>
+</header>
+
+<div class="grid">
+  <form class="controls" id="ctl" autocomplete="off">
+
+    <div class="aporta">
+      <div class="row"><label for="aporta">Aportación día 1</label><input type="number" id="aporta" step="1000" min="0" value="0"></div>
+      <input type="range" id="aportaR" min="0" max="500000" step="1000" value="0" aria-label="Aportación día 1">
+      <p class="hint">Recursos frescos, fuera de Afore, Infonavit, retroactivo y DXN. Baja el crédito y con él la apertura y los intereses.</p>
+    </div>
+
+    <fieldset>
+      <legend>Proyecto</legend>
+      <div class="row"><label for="imss">Línea de captura IMSS</label><input type="number" id="imss" step="1000" value="659349"></div>
+      <div class="row"><label for="gest">Gestorías al cliente</label><input type="number" id="gest" step="1000" value="80000"></div>
+      <div class="row"><label for="pAdmin">Gastos admin. % <span id="tablaFlag"></span></label><input type="number" id="pAdmin" step="0.5" value="30" readonly></div>
+      <p class="hint" id="tablaHint"></p>
+      <div class="row"><label for="pApert">Comisión apertura %</label><input type="number" id="pApert" step="0.1" value="3"></div>
+      <div class="row"><label for="tasaCli">Tasa al cliente %/mes</label><input type="number" id="tasaCli" step="0.05" value="4.7"></div>
+      <div class="row"><label for="plazo">Plazo de fondeo (meses)</label><input type="number" id="plazo" step="1" value="6"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Crédito DXN</legend>
+      <div class="colhead"><span>Base</span><span>Estres.</span></div>
+      <div class="row pair"><label>Meses de pensión</label><input type="number" id="mDxnB" step="1" value="8"><input type="number" id="mDxnE" step="1" value="10"></div>
+      <div class="row pair"><label>Comisión Viraal %</label><input type="number" id="comB" step="0.5" value="14"><input type="number" id="comE" step="0.5" value="12"></div>
+      <div class="row pair"><label>Costo al canal %</label><input type="number" id="canB" step="0.5" value="11"><input type="number" id="canE" step="0.5" value="9"></div>
+      <p class="hint">La financiera paga esta comisión a Viraal por colocar el crédito. No toca al cliente: el DXN entra completo como fuente de pago. El diferencial contra el canal es margen.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Costos Viraal</legend>
+      <div class="row"><label for="pGest">Gestoría: % que es costo</label><input type="number" id="pGest" step="5" value="50"></div>
+      <div class="row"><label for="pAsesor">Comisión asesor % s/IMSS</label><input type="number" id="pAsesor" step="0.5" value="10"></div>
+      <div class="row"><label for="tasaFon">Tasa de fondeo %/mes</label><input type="number" id="tasaFon" step="0.05" value="2.35"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Otras fuentes</legend>
+      <div class="row"><label for="pension">Pensión mensual estimada</label><input type="number" id="pension" step="500" value="45500"></div>
+      <div class="row"><label for="saldos">Afore + Infonavit líquido</label><input type="number" id="saldos" step="1000" value="773000"></div>
+      <p class="hint">Saldo verificado y disponible, no el estimado del portal.</p>
+      <div class="row pair"><label>Meses de retroactivo</label><input type="number" id="mRetroB" step="1" value="4"><input type="number" id="mRetroE" step="1" value="6"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Umbrales</legend>
+      <div class="row"><label for="pisoAdmin">Piso gastos admin. %</label><input type="number" id="pisoAdmin" step="1" value="20"></div>
+      <div class="row"><label for="uAmbar">Comité mayoría ≥ % s/costo</label><input type="number" id="uAmbar" step="1" value="25"></div>
+      <div class="row"><label for="uNaranja">Comité unánime ≥ % s/costo</label><input type="number" id="uNaranja" step="1" value="20"></div>
+      <div class="row"><label for="pisoCred">Piso margen % s/crédito</label><input type="number" id="pisoCred" step="1" value="20"></div>
+    </fieldset>
+  </form>
+
+  <main>
+
+    <div class="escenarios">
+      <section class="esc" id="escB">
+        <h2>Escenario base · con política <span id="bB"></span></h2>
+        <p class="params" id="pB"></p>
+        <div class="line"><span>Crédito Finsus</span><span id="B_credito"></span></div>
+        <div class="line"><span>Financiamiento</span><span id="B_fin"></span></div>
+        <div class="line total"><span>Total a pagar</span><span id="B_precio"></span></div>
+        <div class="line"><span>Crédito DXN</span><span id="B_dxnB"></span></div>
+        <div class="line"><span>Retroactivo</span><span id="B_retro"></span></div>
+        <div class="line"><span>Afore + Infonavit</span><span id="B_saldos"></span></div>
+        <div class="line sum"><span>Recursos</span><span id="B_rec"></span></div>
+        <div class="line total" id="B_brechaRow"><span id="B_brechaLbl">Le sobra</span><span id="B_brecha"></span></div>
+        <div class="line dim"><span>Spread DXN para Viraal</span><span id="B_spread"></span></div>
+      </section>
+
+      <section class="esc" id="escE">
+        <h2>Escenario estresado · fuera de política <span id="bE"></span></h2>
+        <p class="params" id="pE"></p>
+        <div class="line"><span>Crédito Finsus</span><span id="E_credito"></span></div>
+        <div class="line"><span>Financiamiento</span><span id="E_fin"></span></div>
+        <div class="line total"><span>Total a pagar</span><span id="E_precio"></span></div>
+        <div class="line"><span>Crédito DXN</span><span id="E_dxnB"></span></div>
+        <div class="line"><span>Retroactivo</span><span id="E_retro"></span></div>
+        <div class="line"><span>Afore + Infonavit</span><span id="E_saldos"></span></div>
+        <div class="line sum"><span>Recursos</span><span id="E_rec"></span></div>
+        <div class="line total" id="E_brechaRow"><span id="E_brechaLbl">Le sobra</span><span id="E_brecha"></span></div>
+        <div class="line dim"><span>Spread DXN para Viraal</span><span id="E_spread"></span></div>
+      </section>
+    </div>
+
+    <section class="verdict">
+      <div class="stamp" id="stamp">
+        <div class="lvl" id="stampLvl">Nivel 1</div>
+        <div class="name" id="stampName">Automático</div>
+      </div>
+      <div class="verdict-body">
+        <p id="v_text"></p>
+        <p id="v_admin"></p>
+        <div class="actions">
+          <button type="button" id="btnAdmin">Aplicar admin. mínimo</button>
+          <button type="button" id="btnAporta">Aplicar aportación mínima</button>
+          <button type="button" id="btnReset">Volver a tabla y precio de lista</button>
+          <button type="button" id="btnAutorizar" style="background:var(--go);border-color:var(--go)">Autorizar / registrar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel dark">
+      <h2>Panel de comité · escenario que rige</h2>
+      <div class="three">
+        <div class="metric">
+          <div class="lbl">Margen total de Viraal</div>
+          <div class="num" id="k_abs"></div>
+          <div class="foot" id="k_absF"></div>
+        </div>
+        <div class="metric">
+          <div class="lbl">Sobre lo que le cuesta a Viraal</div>
+          <div class="num" id="k_costo"></div>
+          <div class="foot" id="k_costoF"></div>
+        </div>
+        <div class="metric">
+          <div class="lbl">Sobre el crédito que se pide a Finsus</div>
+          <div class="num" id="k_credito"></div>
+          <div class="foot" id="k_creditoF"></div>
+        </div>
+      </div>
+      <div style="margin-top:18px" class="two">
+        <div>
+          <div class="line dim" style="font-weight:600;color:var(--ink)"><span>Entra</span><span></span></div>
+          <div class="line"><span>Total a pagar del proyecto</span><span id="i_precio"></span></div>
+          <div class="line"><span>Comisión DXN de la financiera</span><span id="i_dxn"></span></div>
+          <div class="line sum"><span>Ingreso total</span><span id="i_total"></span></div>
+        </div>
+        <div>
+          <div class="line dim" style="font-weight:600;color:var(--ink)"><span>Sale</span><span></span></div>
+          <div class="line"><span>IMSS (traspaso)</span><span id="c_imss"></span></div>
+          <div class="line"><span>Gestoría</span><span id="c_gest"></span></div>
+          <div class="line"><span>Comisión al asesor</span><span id="c_asesor"></span></div>
+          <div class="line"><span>Fondeo Finsus</span><span id="c_fondeo"></span></div>
+          <div class="line"><span>Canal DXN</span><span id="c_canal"></span></div>
+          <div class="line sum"><span>Costo total</span><span id="c_total"></span></div>
+        </div>
+      </div>
+      <div class="line total" style="margin-top:14px"><span>Margen</span><span id="c_margen"></span></div>
+      <div class="line dim"><span>Aporta el proyecto / aporta el DXN</span><span id="c_split"></span></div>
+    </section>
+
+    <section class="panel">
+      <h2>Bandas de autorización</h2>
+      <table class="bandas">
+        <thead><tr><th>Banda</th><th>Margen s/costo</th><th>Quién autoriza y con qué condición</th></tr></thead>
+        <tbody>
+          <tr id="bandaV"><td>Verde</td><td id="tV"></td><td>Nadie. Pasa base o estresado con gastos de administración en el piso o arriba.</td></tr>
+          <tr id="bandaA"><td>Ámbar</td><td id="tA"></td><td>Comité por mayoría. Se documenta el motivo de la excepción.</td></tr>
+          <tr id="bandaN"><td>Naranja</td><td id="tN"></td><td>Comité unánime <em>y</em> aportación día 1 del cliente. Sin aportación, no procede.</td></tr>
+          <tr id="bandaR"><td>Rojo</td><td id="tR"></td><td>No autorizar. Rediseñar meses de retroactivo o salario de cotización.</td></tr>
+        </tbody>
+      </table>
+      <p class="hint" style="margin-top:12px" id="bandaNota"></p>
+    </section>
+
+    <footer>
+      Tabla de gastos de administración por línea de captura: 35% hasta $375,000 · 30% de $375,000 a $750,000 · 25% arriba de $1,000,000. El tramo de $750,000 a $1,000,000 no está definido; la calculadora aplica 25% y lo marca. Modelo: <code>base = IMSS + gestorías + IMSS×%admin</code> · <code>crédito = (base − aportación) × (1 + %apertura)</code> · <code>precio = aportación + crédito × (1 + tasa×plazo)</code> · <code>margen = precio + comisión DXN − IMSS − gestoría − asesor − fondeo − canal DXN</code>. Estimaciones internas: no constituyen resolución del IMSS ni promesa de pensión.
+    </footer>
+  </main>
+</div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const mx=n=>(n<0?'−':'')+'$'+Math.round(Math.abs(n)).toLocaleString('es-MX');
+  const pc=(n,d)=>isFinite(n)?(n*100).toFixed(d===undefined?1:d)+'%':'—';
+  const v=id=>{const x=parseFloat($(id).value);return isFinite(x)?x:0;};
+
+  const IDS=['imss','gest','pApert','tasaCli','plazo','mDxnB','mDxnE','comB','comE','canB','canE',
+             'pGest','pAsesor','tasaFon','pension','saldos','mRetroB','mRetroE',
+             'pisoAdmin','uAmbar','uNaranja','pisoCred','aporta'];
+
+  const PRESETS={
+    lm:{imss:659349,gest:80000,pApert:3,tasaCli:4.7,plazo:6,mDxnB:8,mDxnE:10,comB:14,comE:12,canB:11,canE:9,
+        pGest:50,pAsesor:10,tasaFon:2.35,pension:45500,saldos:773000,mRetroB:4,mRetroE:6,
+        pisoAdmin:20,uAmbar:25,uNaranja:20,pisoCred:20,aporta:0},
+    ej:{imss:188532,gest:80000,pApert:3,tasaCli:4.7,plazo:7,mDxnB:8,mDxnE:10,comB:14,comE:12,canB:11,canE:9,
+        pGest:50,pAsesor:10,tasaFon:2.35,pension:24000,saldos:120000,mRetroB:4,mRetroE:6,
+        pisoAdmin:20,uAmbar:25,uNaranja:20,pisoCred:20,aporta:0},
+    blank:{imss:0,gest:80000,pApert:3,tasaCli:4.7,plazo:6,mDxnB:8,mDxnE:10,comB:14,comE:12,canB:11,canE:9,
+        pGest:50,pAsesor:10,tasaFon:2.35,pension:0,saldos:0,mRetroB:4,mRetroE:6,
+        pisoAdmin:20,uAmbar:25,uNaranja:20,pisoCred:20,aporta:0}
+  };
+
+  function tabla(I){
+    if(I<=375000) return {p:35,hueco:false};
+    if(I<=750000) return {p:30,hueco:false};
+    if(I<=1000000) return {p:25,hueco:true};
+    return {p:25,hueco:false};
+  }
+  let adminManual=null;
+
+  function corre(a,mRetro,mDxn,com,can){
+    const I=v('imss'),G=v('gest'),pAp=v('pApert')/100,tC=v('tasaCli')/100,n=v('plazo'),
+          pG=v('pGest')/100,pA=v('pAsesor')/100,tF=v('tasaFon')/100,P=v('pension'),S=v('saldos');
+    const admin=I*a, base=I+G+admin;
+    const X=Math.min(Math.max(0,v('aporta')),base);
+    const baseFin=base-X, apert=baseFin*pAp, credito=baseFin+apert;
+    const finCli=credito*tC*n, precio=X+credito+finCli;
+
+    const dxnBruto=P*mDxn, dxnCom=dxnBruto*com, dxnCanal=dxnBruto*can, dxnNeto=dxnBruto;
+    const retro=P*mRetro, recursos=dxnBruto+retro+S;
+
+    const cGest=G*pG, cAses=I*pA, cFon=credito*tF*n;
+    const costo=I+cGest+cAses+cFon+dxnCanal;
+    const ingreso=precio+dxnCom;
+    const margen=ingreso-costo;
+    const margenProy=precio-(I+cGest+cAses+cFon);
+    const margenDxn=dxnCom-dxnCanal;
+
+    const pend=precio-X, brecha=recursos-pend;
+    return {I,G,admin,base,X,apert,credito,finCli,precio,dxnBruto,dxnCom,dxnCanal,dxnNeto,retro,saldos:S,
+            recursos,pend,brecha,cGest,cAses,cFon,costo,ingreso,margen,margenProy,margenDxn,
+            mCosto:costo?margen/costo:0, mCred:credito?margen/credito:0};
+  }
+
+  // admin mínimo (fracción) para cubrir en un escenario
+  function adminMin(mRetro,mDxn,com){
+    const I=v('imss'),G=v('gest'),pAp=v('pApert')/100,tC=v('tasaCli')/100,n=v('plazo'),
+          P=v('pension'),S=v('saldos');
+    if(I<=0) return null;
+    const X=Math.max(0,v('aporta'));
+    const R=P*mDxn+P*mRetro+S;
+    const k=(1+pAp)*(1+tC*n);
+    return ((R/k+X)-G-I)/I;
+  }
+  function aportaMin(a,mRetro,mDxn,com){
+    const I=v('imss'),G=v('gest'),pAp=v('pApert')/100,tC=v('tasaCli')/100,n=v('plazo'),
+          P=v('pension'),S=v('saldos');
+    const b=I+G+I*a, R=P*mDxn+P*mRetro+S, k=(1+pAp)*(1+tC*n);
+    return Math.max(0,b-R/k);
+  }
+
+  let last=null;
+  function render(){
+    const t=tabla(v('imss')), aTabla=t.p, aUso=adminManual===null?aTabla:adminManual;
+    $('pAdmin').value=(''+aUso).replace(/\.0$/,'');
+    $('pAdmin').readOnly=(adminManual===null);
+    $('tablaFlag').innerHTML=t.hueco?'<span class="flag warn" style="margin-left:4px">tramo sin política</span>':'';
+    $('tablaHint').textContent=adminManual===null
+      ? `Tabla: ${aTabla}% para una línea de captura de ${mx(v('imss'))}.`
+      : `Ajustado a mano. Tabla diría ${aTabla}%.`;
+
+    const pisoA=v('pisoAdmin')/100, uA=v('uAmbar')/100, uN=v('uNaranja')/100, pisoC=v('pisoCred')/100;
+    const comB=v('comB')/100, comE=v('comE')/100, canB=v('canB')/100, canE=v('canE')/100;
+
+    const B=corre(aUso/100,v('mRetroB'),v('mDxnB'),comB,canB);
+    const E=corre(aUso/100,v('mRetroE'),v('mDxnE'),comE,canE);
+
+    const set=(id,x)=>$(id).textContent=x;
+    [['B',B],['E',E]].forEach(([p,s])=>{
+      set(p+'_credito',mx(s.credito)); set(p+'_fin',mx(s.finCli)); set(p+'_precio',mx(s.precio));
+      set(p+'_dxnB',mx(s.dxnBruto));
+      set(p+'_retro',mx(s.retro)); set(p+'_saldos',mx(s.saldos)); set(p+'_rec',mx(s.recursos));
+      set(p+'_brechaLbl',s.brecha>=0?'Le sobra':'Le falta');
+      set(p+'_brecha',mx(Math.abs(s.brecha)));
+      $(p+'_brechaRow').classList.toggle('neg',s.brecha<0);
+      $(p+'_brechaRow').classList.toggle('pos',s.brecha>=0);
+      set(p+'_spread',mx(s.margenDxn));
+    });
+    $('pB').textContent=`${v('mRetroB')} meses de retroactivo · DXN ${v('mDxnB')} meses al ${v('comB')}% · fondeo ${v('plazo')} meses`;
+    $('pE').textContent=`${v('mRetroE')} meses de retroactivo · DXN ${v('mDxnE')} meses al ${v('comE')}% · fondeo ${v('plazo')} meses`;
+    $('bB').innerHTML=B.brecha>=0?'<span class="flag ok">cubre</span>':'<span class="flag bad">no cubre</span>';
+    $('bE').innerHTML=E.brecha>=0?'<span class="flag ok">cubre</span>':'<span class="flag bad">no cubre</span>';
+
+    const aMinB=adminMin(v('mRetroB'),v('mDxnB'),comB), aMinE=adminMin(v('mRetroE'),v('mDxnE'),comE);
+    let rige,lvl,name,color,text,auto=true;
+
+    if(B.brecha>=0){
+      rige=B; lvl='Nivel 1'; name='Automático'; color='var(--go)';
+      text=`Cubre con política, con <strong>${mx(B.brecha)}</strong> de holgura y los gastos de administración de tabla. Ni excepción ni comité.`;
+    } else if(E.brecha>=0){
+      rige=E; lvl='Nivel 2'; name='Automático · estresado'; color='var(--go)';
+      text=`No cubre con política (faltan <strong>${mx(-B.brecha)}</strong>) pero sí en el estresado, con <strong>${mx(E.brecha)}</strong> de holgura y los gastos de administración de tabla intactos. Se sale de política en supuestos, no en precio.`;
+    } else if(aMinE!==null&&aMinE>=pisoA){
+      rige=corre(aMinE,v('mRetroE'),v('mDxnE'),comE,canE); lvl='Nivel 3'; name='Automático · admin. reducido'; color='var(--hold)';
+      text=`Solo pasa el estresado bajando los gastos de administración a <strong>${pc(aMinE)}</strong>, todavía arriba del piso de ${pc(pisoA)}. Se autoriza sin comité.`;
+    } else {
+      auto=false;
+      rige=corre(Math.max(0,aMinE===null?0:aMinE),v('mRetroE'),v('mDxnE'),comE,canE);
+      lvl='Nivel 4'; name='A comité'; color='var(--stop)';
+      const apMin=aportaMin(pisoA,v('mRetroE'),v('mDxnE'),comE);
+      text=`Ni el estresado pasa con los gastos de administración en el piso de ${pc(pisoA)}: harían falta <strong>${pc(aMinE)}</strong>. Va a comité. La salida sin excepción de margen es una aportación día 1 de <strong>${mx(apMin)}</strong>, dejando el admin. en el piso.`;
+    }
+    set('stampLvl',lvl); set('stampName',name); $('stamp').style.color=color;
+    $('v_text').innerHTML=text;
+    const credOk=rige.mCred>=pisoC;
+    $('v_admin').innerHTML=`Admin. mínimo para cubrir: base <strong>${aMinB===null?'—':pc(aMinB)}</strong> · estresado <strong>${aMinE===null?'—':pc(aMinE)}</strong> · piso <strong>${pc(pisoA)}</strong> &nbsp; <span class="flag ${credOk?'ok':'bad'}">margen ${credOk?'sobre':'bajo'} el piso de ${pc(pisoC)} s/crédito Finsus</span>`;
+    if(last!==lvl+name){$('stamp').classList.remove('press');void $('stamp').offsetWidth;$('stamp').classList.add('press');last=lvl+name;}
+
+    set('k_abs',mx(rige.margen)); set('k_absF','sobre '+mx(rige.ingreso)+' de ingreso');
+    set('k_costo',pc(rige.mCosto)); set('k_costoF','costo '+mx(rige.costo));
+    set('k_credito',pc(rige.mCred)); set('k_creditoF','crédito '+mx(rige.credito));
+    set('i_precio',mx(rige.precio)); set('i_dxn',mx(rige.dxnCom)); set('i_total',mx(rige.ingreso));
+    set('c_imss',mx(rige.I)); set('c_gest',mx(rige.cGest)); set('c_asesor',mx(rige.cAses));
+    set('c_fondeo',mx(rige.cFon)); set('c_canal',mx(rige.dxnCanal)); set('c_total',mx(rige.costo));
+    set('c_margen',mx(rige.margen));
+    set('c_split',mx(rige.margenProy)+'  /  '+mx(rige.margenDxn));
+
+    set('tV','lo que resulte'); set('tA','≥ '+pc(uA)); set('tN',pc(uN)+' – '+pc(uA)); set('tR','< '+pc(uN));
+    ['bandaV','bandaA','bandaN','bandaR'].forEach(i=>$(i).classList.remove('activa'));
+    const banda = auto?'bandaV' : rige.mCosto>=uA?'bandaA' : rige.mCosto>=uN?'bandaN':'bandaR';
+    $(banda).classList.add('activa');
+    $('bandaNota').textContent = auto
+      ? `Este expediente no llega a comité. El margen resultante es ${pc(rige.mCosto)} sobre costo.`
+      : `Con los gastos de administración que haría falta aplicar, el margen queda en ${pc(rige.mCosto)} sobre costo y ${pc(rige.mCred)} sobre el crédito Finsus.`;
+
+    const r=$('aportaR'); r.max=Math.max(100000,Math.ceil(rige.base/1000)*1000);
+    r.value=Math.min(v('aporta'),r.max);
+
+    window.__VIRAAL__={
+      inputs:(function(){const o={};IDS.forEach(id=>o[id]=v(id));o.pAdmin=v('pAdmin');return o;})(),
+      nivel:lvl, escenario:name,
+      banda:(auto?'verde':(rige.mCosto>=uA?'ambar':(rige.mCosto>=uN?'naranja':'rojo'))),
+      margen:rige.margen, margen_costo:rige.mCosto, margen_credito:rige.mCred,
+      precio:rige.precio, costo:rige.costo, ingreso:rige.ingreso,
+      resultado:rige, veredicto:$('v_text').textContent
+    };
+  }
+
+  IDS.forEach(id=>$(id).addEventListener('input',()=>{if(id==='aporta')$('aportaR').value=$('aporta').value;render();}));
+  $('aportaR').addEventListener('input',()=>{$('aporta').value=$('aportaR').value;render();});
+  $('pAdmin').addEventListener('input',()=>{adminManual=v('pAdmin');render();});
+  document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
+    const p=PRESETS[b.dataset.preset];for(const k in p)$(k).value=p[k];
+    $('aportaR').value=p.aporta;adminManual=null;last=null;render();
+  }));
+  $('btnAdmin').addEventListener('click',()=>{
+    const a=adminMin(v('mRetroE'),v('mDxnE'),v('comE')/100);
+    adminManual=Math.max(v('pisoAdmin'),Math.floor((a||0)*1000)/10);render();
+  });
+  $('btnAporta').addEventListener('click',()=>{
+    const ap=aportaMin(v('pisoAdmin')/100,v('mRetroE'),v('mDxnE'),v('comE')/100);
+    adminManual=v('pisoAdmin');$('aporta').value=Math.ceil(ap/500)*500;$('aportaR').value=$('aporta').value;render();
+  });
+  $('btnReset').addEventListener('click',()=>{adminManual=null;$('aporta').value=0;$('aportaR').value=0;render();});
+  $('btnAutorizar').addEventListener('click',()=>{
+    if(window.__VIRAAL__) parent.postMessage({type:'viraal_autorizar', payload:window.__VIRAAL__}, '*');
+  });
+  window.addEventListener('message',(e)=>{
+    const d=e.data||{}; if(d.type!=='viraal_prefill'||!d.payload) return;
+    const p=d.payload; for(const k in p){ if(p[k]===null||p[k]===undefined) continue; const el=$(k); if(el) el.value=p[k]; }
+    if('aporta' in p && $('aportaR')) $('aportaR').value=p.aporta;
+    adminManual=null; last=null; render();
+  });
+  function postHeight(){ parent.postMessage({type:'viraal_height', height:document.documentElement.scrollHeight}, '*'); }
+  try{ new ResizeObserver(postHeight).observe(document.body); }catch(e){}
+  render();
+  parent.postMessage({type:'viraal_ready'}, '*'); postHeight();
+})();
+</script>
+</body>
+</html>
