@@ -13,7 +13,7 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
   const m = await requireMiembro();
   const db = t3();
   const aliado = searchParams.aliado;
-  const estatus = searchParams.estatus ?? 'activas';
+  const estatus = searchParams.estatus ?? 'todas';
   const mias = searchParams.mias === '1';
   const q = (searchParams.q ?? '').trim().replace(/[,()*%]/g, ' ').trim();
   const page = Math.max(1, Number(searchParams.page ?? 1));
