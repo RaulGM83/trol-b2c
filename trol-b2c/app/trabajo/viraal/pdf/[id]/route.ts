@@ -15,7 +15,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const { data: m } = await db.from('miembros').select('nombre,email').eq('id', a.miembro_id).maybeSingle();
     miembro = (m?.nombre ?? m?.email ?? null) as string | null;
   }
-  const stream = (await renderToStream(viraalDoc({ ...a, miembro } as Any))) as AsyncIterable<Uint8Array>;
+  const { data: p } = await db.from('v_expediente').select('nombre,apellidos,curp').eq('persona_id', a.persona_id).maybeSingle();
+  const { data: nssD } = await db.from('v_mejor_dato').select('valor').eq('persona_id', a.persona_id).eq('campo', 'nss').maybeSingle();
+  const nss = nssD?.valor != null ? String((nssD as Any).valor).replace(/^"|"$/g, '') : null;
+  const cliente = { nombre: p?.nombre ?? null, apellidos: p?.apellidos ?? null, curp: p?.curp ?? null, nss };
+  const stream = (await renderToStream(viraalDoc({ ...a, miembro, cliente } as Any))) as AsyncIterable<Uint8Array>;
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const buf = Buffer.concat(chunks);

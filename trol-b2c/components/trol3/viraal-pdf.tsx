@@ -26,6 +26,11 @@ const s = StyleSheet.create({
   two: { flexDirection: 'row', gap: 26 },
   col: { flex: 1 },
   nota: { marginTop: 12, padding: 8, backgroundColor: '#E9F0FA', borderRadius: 3, fontSize: 9 },
+  cliente: { fontSize: 9.5, marginBottom: 10, color: '#0F1D33' },
+  escWrap: { flexDirection: 'row', gap: 16, marginBottom: 12, alignItems: 'center' },
+  escLbl: { fontSize: 8, letterSpacing: 1.2, color: '#5A6B84', textTransform: 'uppercase' },
+  escOn: { fontSize: 11, fontWeight: 700, color: '#2255A0', textDecoration: 'underline' },
+  escOff: { fontSize: 11, color: '#8A9AB2' },
   foot: { position: 'absolute', bottom: 26, left: 34, right: 34, fontSize: 7.5, color: '#8A9AB2', borderTopWidth: 0.5, borderTopColor: '#C3CDDC', paddingTop: 6 },
 });
 
@@ -42,6 +47,8 @@ export function viraalDoc(a: Any) {
   const r = (a.resultado ?? {}) as Record<string, Any>;
   const i = (a.inputs ?? {}) as Record<string, Any>;
   const banda = BANDA[a.banda ?? ''] ?? { t: (a.banda ?? '—').toUpperCase(), c: '#5A6B84' };
+  const c = (a.cliente ?? {}) as Record<string, Any>;
+  const esBase = (a.nivel ?? '') === 'Nivel 1';
   const fecha = new Date(a.created_at).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
   return (
     <Document title={`Viraal · Autorización ${a.id}`}>
@@ -49,6 +56,14 @@ export function viraalDoc(a: Any) {
         <Text style={s.eyebrow}>VIRAAL · MESA DE AUTORIZACIÓN</Text>
         <Text style={s.h1}>Escenario autorizado</Text>
         <Text style={s.sub}>{fecha}{a.miembro ? ` · autorizó ${a.miembro}` : ''} · folio {a.id}</Text>
+
+        <Text style={s.cliente}>{[c.nombre, c.apellidos].filter(Boolean).join(' ') || '(sin nombre)'}{c.curp ? `   ·   CURP ${c.curp}` : ''}{c.nss ? `   ·   NSS ${c.nss}` : ''}</Text>
+
+        <View style={s.escWrap}>
+          <Text style={s.escLbl}>Escenario que rige:</Text>
+          <Text style={esBase ? s.escOn : s.escOff}>BASE (con política)</Text>
+          <Text style={!esBase ? s.escOn : s.escOff}>ESTRESADO (fuera de política)</Text>
+        </View>
 
         <Text style={[s.band, { backgroundColor: banda.c }]}>{banda.t}{a.nivel ? `  —  ${a.nivel} · ${a.escenario ?? ''}` : ''}</Text>
 
