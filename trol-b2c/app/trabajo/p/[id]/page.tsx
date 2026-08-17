@@ -79,10 +79,12 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
+  const afLiq = (saldosCorregidos?.disponible_afore ?? e.saldo_rcv97) ?? null;
+  const infLiq = (saldosCorregidos?.infonavit ?? e.saldo_infonavit) ?? null;
   const viraalPrefill: Record<string, number | null> = {
     imss: e.costo_retro ?? null,
     pension: (e.pension_mod40_retro ?? e.pension_maxima) ?? null,
-    saldos: (Number(e.saldo_rcv97 ?? 0) + Number(e.saldo_infonavit ?? 0)) || null,
+    saldos: (afLiq != null || infLiq != null) ? (Number(afLiq ?? 0) + Number(infLiq ?? 0)) : null,
   };
   const rawFechaSisec = (datosMap.get('semilla')?.valor as { meta?: { fecha_sisec?: string } } | undefined)?.meta?.fecha_sisec;
   const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;

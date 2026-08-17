@@ -42,7 +42,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
       } else if (d.type === 'viraal_height' && d.height) {
         setAlto(Math.max(600, Math.min(4000, d.height + 24)));
       } else if (d.type === 'viraal_autorizar' && d.payload) {
-        void guardar(d.payload);
+        void autorizar(d.payload);
       }
     }
     window.addEventListener('message', onMsg);
@@ -50,13 +50,25 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
-  async function guardar(payload: Record<string, unknown>) {
+  async function autorizar(payload: Record<string, unknown>) {
+    const banda = String(payload.banda ?? '');
+    const aviso = banda === 'rojo'
+      ? 'Este escenario está en ROJO (no autorizar por política). ¿Registrar la autorización de todas formas?'
+      : '¿Autorizar este proyecto y registrar el caso con estos números?';
+    if (!window.confirm(aviso)) return;
+    const nota = window.prompt('Nota de la autorización (opcional): motivo de excepción, condición del comité, etc.', '') ?? '';
     setGuardando(true);
     setMsg(null);
-    const r = await autorizarViraal(personaId, payload);
+    const r = await autorizarViraal(personaId, { ...payload, nota });
     setGuardando(false);
-    setMsg(r.ok ? '✓ Autorización registrada' : `Error: ${(r as { error?: string }).error ?? 'no se pudo guardar'}`);
-    if (r.ok) setTimeout(() => window.location.reload(), 700);
+    if (r.ok) {
+      setMsg('✓ Autorización registrada · descargando Excel…');
+      const id = (r as { id?: number }).id;
+      if (id) window.open(`/trabajo/viraal/excel/${id}`, '_blank');
+      setTimeout(() => window.location.reload(), 1300);
+    } else {
+      setMsg(`Error: ${(r as { error?: string }).error ?? 'no se pudo guardar'}`);
+    }
   }
 
   return (
@@ -64,7 +76,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
       <div className="rounded-2xl border border-line bg-white p-3">
         <div className="mb-2 flex items-center justify-between px-2">
           <h2 className="text-sm font-bold">Mesa Viraal — autorización del proyecto</h2>
-          {guardando ? <span className="text-xs text-muted">Guardando…</span> : msg ? <span className="text-xs font-semibold text-ink">{msg}</span> : <span className="text-xs text-muted">Pre-llenada con los datos del expediente · el botón “Autorizar / registrar” guarda el caso</span>}
+          {guardando ? <span className="text-xs text-muted">Guardando…</span> : msg ? <span className="text-xs font-semibold text-ink">{msg}</span> : <span className="text-xs text-muted">Pre-llenada con el expediente (usa el saldo ajustado si lo corregiste) · “Autorizar proyecto” registra el caso y genera el Excel</span>}
         </div>
         <iframe ref={ref} src="/viraal/calc.html" title="Mesa Viraal" style={{ width: '100%', height: alto, border: 0, borderRadius: 12 }} />
       </div>
@@ -85,6 +97,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
                   <th className="py-1 pr-3 text-right font-semibold">s/costo</th>
                   <th className="py-1 pr-3 text-right font-semibold">s/crédito</th>
                   <th className="py-1 pr-3 font-semibold">Por</th>
+                  <th className="py-1 pr-3 font-semibold">Archivo</th>
                 </tr>
               </thead>
               <tbody>
@@ -92,11 +105,12 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
                   <tr key={a.id} className="border-b border-line/60">
                     <td className="py-1.5 pr-3 whitespace-nowrap">{new Date(a.created_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}</td>
                     <td className="py-1.5 pr-3"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${BANDA[a.banda ?? '']?.cls ?? 'bg-gray-100 text-gray-700'}`}>{BANDA[a.banda ?? '']?.label ?? a.banda ?? '—'}</span></td>
-                    <td className="py-1.5 pr-3">{a.nivel ? `${a.nivel} · ${a.escenario ?? ''}` : a.escenario ?? '—'}</td>
+                    <td className="py-1.5 pr-3">{a.nivel ? `${a.nivel} · ${a.escenario ?? ''}` : a.escenario ?? '—'}{a.nota ? <span className="block text-[10px] text-muted">{a.nota}</span> : null}</td>
                     <td className="py-1.5 pr-3 text-right font-semibold">{mx(a.margen)}</td>
                     <td className="py-1.5 pr-3 text-right">{pc(a.margen_costo)}</td>
                     <td className="py-1.5 pr-3 text-right">{pc(a.margen_credito)}</td>
                     <td className="py-1.5 pr-3">{a.miembro ?? '—'}</td>
+                    <td className="py-1.5 pr-3"><a href={`/trabajo/viraal/excel/${a.id}`} target="_blank" rel="noreferrer" className="font-semibold text-ink underline">Excel</a></td>
                   </tr>
                 ))}
               </tbody>
