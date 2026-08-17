@@ -153,3 +153,22 @@ export async function autorizarViraal(personaId: string, payload: Any) {
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ id: data });
 }
+
+// ── Consultas de aliados (B2B) ──────────────────────────────────────────────
+export async function gestionarConsultaAliado(
+  id: string,
+  patch: { estatus?: string | null; vobo?: boolean | null; reasignar?: boolean; asignado?: string | null; comentario?: string | null },
+) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('gestionar_consulta_aliado', {
+    p_id: id,
+    p_estatus: patch.estatus ?? null,
+    p_vobo: patch.vobo ?? null,
+    p_reasignar: patch.reasignar ?? false,
+    p_asignado: patch.asignado ?? null,
+    p_comentario: patch.comentario ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/aliados');
+  return ok({ consulta: data });
+}

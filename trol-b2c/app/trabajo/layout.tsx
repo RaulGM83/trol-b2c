@@ -20,6 +20,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
             <Link href="/trabajo" className="rounded-lg px-2 py-1 hover:bg-cream">Clientes</Link>
             <Link href="/trabajo/lista" className="rounded-lg px-2 py-1 hover:bg-cream">Lista de trabajo</Link>
             <Link href="/trabajo/eventos" className="rounded-lg px-2 py-1 hover:bg-cream">Actividad</Link>
+            <Link href="/trabajo/aliados" className="rounded-lg px-2 py-1 hover:bg-cream">Aliados</Link>
           </nav>
           <form action="/trabajo" className="ml-auto">
             <input name="q" placeholder="Buscar teléfono, CURP o nombre" className="w-64 rounded-lg border border-line px-3 py-1.5 text-sm" />
