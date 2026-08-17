@@ -99,12 +99,27 @@ export async function reevaluar(personaId: string) {
   return ok();
 }
 
-export async function altaPersona(telefono: string, nombre: string, canal: string) {
+const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
+
+export async function altaPersona(telefono: string, nombre: string, canal: string, curp?: string) {
   const m = await requireMiembro();
-  const { data, error } = await t3().rpc('alta_por_telefono', { p_tel: telefono, p_canal: canal || 'organico', p_actor: 'recepcionista', p_nombre: nombre || null, p_campania: null, p_verificacion: 'manual' });
+  const db = t3();
+  const c = (curp ?? '').trim().toUpperCase();
+  if (c && !CURP_RE.test(c)) return fail('CURP inválida (18 caracteres).');
+  if (c) {
+    // Si la CURP ya está en otra persona, no duplicamos: avisamos y damos el link.
+    const dup = await db.from('personas').select('id').eq('curp', c).is('merged_into', null).maybeSingle();
+    if (dup.data?.id) return { ok: false, error: 'Esa CURP ya está registrada en otra persona.', persona_id: dup.data.id };
+  }
+  const { data, error } = await db.rpc('alta_por_telefono', { p_tel: telefono, p_canal: canal || 'organico', p_actor: 'recepcionista', p_nombre: nombre || null, p_campania: null, p_verificacion: 'manual' });
   if (error) return fail(error);
   const pid = (data as { persona_id: string }).persona_id;
-  await t3().from('personas').update({ cabecera_id: m.id }).eq('id', pid).is('cabecera_id', null);
+  await db.from('personas').update({ cabecera_id: m.id }).eq('id', pid).is('cabecera_id', null);
+  if (c) {
+    // declarar() espeja la CURP en personas y dispara el checklist de identidad.
+    const r = await db.rpc('declarar', { p_persona: pid, p_campo: 'curp', p_valor: c, p_actor: 'asesor', p_actor_id: m.id, p_capa: 'declarado' });
+    if (r.error) return { ok: true, persona_id: pid, aviso: `Persona creada, pero no se guardó la CURP: ${r.error.message}` };
+  }
   return ok({ persona_id: pid });
 }
 
