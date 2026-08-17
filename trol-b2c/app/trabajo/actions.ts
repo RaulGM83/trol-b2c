@@ -109,7 +109,16 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
   if (c) {
     // Si la CURP ya está en otra persona, no duplicamos: avisamos y damos el link.
     const dup = await db.from('personas').select('id').eq('curp', c).is('merged_into', null).maybeSingle();
-    if (dup.data?.id) return { ok: false, error: 'Esa CURP ya está registrada en otra persona.', persona_id: dup.data.id };
+    if (dup.data?.id) {
+      // Si es la misma persona (mismo teléfono), simplemente la abrimos.
+      const t10 = telefono.replace(/\D/g, '').slice(-10);
+      const mismo = await db.from('contactos').select('persona_id').eq('persona_id', dup.data.id).eq('tipo', 'telefono').eq('normalizado', t10).limit(1).maybeSingle();
+      if (mismo.data) {
+        await db.from('personas').update({ cabecera_id: m.id }).eq('id', dup.data.id).is('cabecera_id', null);
+        return ok({ persona_id: dup.data.id });
+      }
+      return { ok: false, error: 'Esa CURP ya está registrada en otra persona.', persona_id: dup.data.id };
+    }
   }
   const { data, error } = await db.rpc('alta_por_telefono', { p_tel: telefono, p_canal: canal || 'organico', p_actor: 'recepcionista', p_nombre: nombre || null, p_campania: null, p_verificacion: 'manual' });
   if (error) return fail(error);
