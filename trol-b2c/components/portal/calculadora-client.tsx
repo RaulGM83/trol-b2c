@@ -162,7 +162,7 @@ export function CalculadoraClient({
   /** Saldos reales guardados por el asesor (precargan los overrides). */
   saldosCorregidos?: SaldosCorregidos | null
   /** Dónde guarda el botón de saldos ('consulta' | 'cliente'); null lo oculta. */
-  guardarScope?: "consulta" | "cliente" | null
+  guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
 }) {
   const { perfil } = semilla
   const tabDefault = perfil.ley === "Ley97" ? "c97" : "c73"
@@ -993,7 +993,7 @@ function Mod40Panel({
   semilla: SemillaV2
   consultaId: string
   saldosCorregidos?: SaldosCorregidos | null
-  guardarScope?: "consulta" | "cliente" | null
+  guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
   pdfCtx: PdfCtx
 }) {
   const { perfil, saldos, salario_60m } = semilla
@@ -1023,12 +1023,19 @@ function Mod40Panel({
     if (!guardarScope) return
     setGuardando(true)
     const supabase = createClient()
-    const { error } = await supabase.rpc("guardar_saldos_corregidos", {
-      p_id: consultaId,
-      p_scope: guardarScope,
-      p_disponible_afore: overrides?.disponibleAfore ?? null,
-      p_infonavit: overrides?.infonavit ?? null,
-    })
+    const { error } =
+      guardarScope === "consulta_aliado"
+        ? await supabase.schema("trol3").rpc("guardar_saldos_consulta_aliado", {
+            p_consulta: consultaId,
+            p_disponible_afore: overrides?.disponibleAfore ?? null,
+            p_infonavit: overrides?.infonavit ?? null,
+          })
+        : await supabase.rpc("guardar_saldos_corregidos", {
+            p_id: consultaId,
+            p_scope: guardarScope,
+            p_disponible_afore: overrides?.disponibleAfore ?? null,
+            p_infonavit: overrides?.infonavit ?? null,
+          })
     setGuardando(false)
     if (error) {
       toast.error(`No se pudieron guardar los saldos: ${error.message}`)

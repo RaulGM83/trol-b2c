@@ -172,3 +172,26 @@ export async function gestionarConsultaAliado(
   revalidatePath('/trabajo/aliados');
   return ok({ consulta: data });
 }
+
+export async function autorizarViraalAliado(consultaId: string, payload: Any) {
+  await requireMiembro();
+  const p = payload ?? {};
+  const { data, error } = await t3().rpc('guardar_autorizacion_viraal_aliado', {
+    p_consulta: consultaId,
+    p_nivel: p.nivel ?? null,
+    p_escenario: p.escenario ?? null,
+    p_banda: p.banda ?? null,
+    p_margen: p.margen ?? null,
+    p_margen_costo: p.margen_costo ?? null,
+    p_margen_credito: p.margen_credito ?? null,
+    p_precio: p.precio ?? null,
+    p_costo: p.costo ?? null,
+    p_ingreso: p.ingreso ?? null,
+    p_inputs: p.inputs ?? {},
+    p_resultado: p.resultado ?? {},
+    p_nota: p.nota ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/aliados/${consultaId}`);
+  return ok({ id: data });
+}

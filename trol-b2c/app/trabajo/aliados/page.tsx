@@ -114,7 +114,7 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
               {(rows ?? []).map((r: Any) => (
                 <tr key={r.id} className="border-t border-line align-top hover:bg-cream/40">
                   <td className="px-3 py-2">
-                    <div className="font-semibold">{r.nombre ?? '(sin nombre)'} {r.apellidos ?? ''}</div>
+                    <Link href={`/trabajo/aliados/${r.id}`} className="font-semibold hover:underline">{r.nombre ?? '(sin nombre)'} {r.apellidos ?? ''}</Link>
                     <div className="text-[11px] text-muted">{r.curp}{r.edad ? ` · ${r.edad} años` : ''}{r.estado_republica ? ` · ${r.estado_republica}` : ''}</div>
                   </td>
                   <td className="px-3 py-2 text-xs">{r.aliado}<div className="text-[11px] text-muted">{r.canal}{r.consultas_n > 1 ? ` \u00b7 ${r.consultas_n} consultas` : ''}</div></td>

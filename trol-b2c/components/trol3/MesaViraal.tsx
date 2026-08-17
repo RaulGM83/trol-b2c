@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { autorizarViraal } from '@/app/trabajo/actions';
+import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
 
 type Prefill = Record<string, number | null>;
 type Autorizacion = {
@@ -27,7 +27,7 @@ const BANDA: Record<string, { label: string; cls: string }> = {
   rojo: { label: 'Rojo · no autorizar', cls: 'bg-red-100 text-red-700' },
 };
 
-export function MesaViraal({ personaId, prefill, historial }: { personaId: string; prefill: Prefill; historial: Autorizacion[] }) {
+export function MesaViraal({ personaId, consultaAliadoId, prefill, historial }: { personaId?: string; consultaAliadoId?: string; prefill: Prefill; historial: Autorizacion[] }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [alto, setAlto] = useState(1600);
   const [guardando, setGuardando] = useState(false);
@@ -59,7 +59,9 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
     const nota = window.prompt('Nota de la autorización (opcional): motivo de excepción, condición del comité, etc.', '') ?? '';
     setGuardando(true);
     setMsg(null);
-    const r = await autorizarViraal(personaId, { ...payload, nota });
+    const r = consultaAliadoId
+      ? await autorizarViraalAliado(consultaAliadoId, { ...payload, nota })
+      : await autorizarViraal(personaId as string, { ...payload, nota });
     setGuardando(false);
     if (r.ok) {
       setMsg('✓ Autorización registrada · generando PDF…');
