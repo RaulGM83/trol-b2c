@@ -20,7 +20,7 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
   const PAGE = 50;
 
   // Resumen para el panel lateral (proyección ligera).
-  const { data: resumen } = await db.from('consultas_aliados').select('aliado,gestion_estatus');
+  const { data: resumen } = await db.from('v_consultas_aliados_ultima').select('aliado,gestion_estatus');
   const porAliado = new Map<string, number>();
   const porEstatus = new Map<string, number>();
   (resumen ?? []).forEach((r: Any) => {
@@ -35,8 +35,8 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
 
   // Consulta principal.
   let query = db
-    .from('consultas_aliados')
-    .select('id,aliado,nombre,apellidos,curp,edad,estado_republica,canal,status_origen,gestion_estatus,vobo,asignado_a,comentario,creada_en,documento_diagnostico_url,documento_diagnostico_avanzado_url,documento_sisec_url', { count: 'exact' });
+    .from('v_consultas_aliados_ultima')
+    .select('id,aliado,nombre,apellidos,curp,edad,estado_republica,canal,status_origen,gestion_estatus,vobo,asignado_a,comentario,creada_en,consultas_n,primera_consulta_en,documento_diagnostico_url,documento_diagnostico_avanzado_url,documento_sisec_url', { count: 'exact' });
   if (aliado) query = query.eq('aliado', aliado);
   if (estatus === 'activas') query = query.in('gestion_estatus', ['nuevo', 'en_revision', 'error']);
   else if (estatus !== 'todas') query = query.eq('gestion_estatus', estatus);
@@ -87,11 +87,15 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
           <h1 className="text-xl font-extrabold">Consultas de aliados</h1>
           <span className="text-xs text-muted">{count ?? 0} consultas · página {page}</span>
         </div>
-        <form action="/trabajo/aliados" className="mb-3">
-          {aliado && <input type="hidden" name="aliado" value={aliado} />}
+        <form action="/trabajo/aliados" className="mb-3 flex flex-wrap items-center gap-2">
           {estatus && <input type="hidden" name="estatus" value={estatus} />}
           {mias && <input type="hidden" name="mias" value="1" />}
-          <input name="q" defaultValue={q} placeholder="Buscar nombre o CURP" className="w-72 rounded-lg border border-line px-3 py-1.5 text-sm" />
+          <select name="aliado" defaultValue={aliado ?? ''} className="rounded-lg border border-line px-3 py-1.5 text-sm">
+            <option value="">Todos los aliados</option>
+            {aliados.map(([a, n]) => <option key={a} value={a}>{a} ({n})</option>)}
+          </select>
+          <input name="q" defaultValue={q} placeholder="Buscar nombre o CURP" className="w-64 rounded-lg border border-line px-3 py-1.5 text-sm" />
+          <button className="rounded-lg bg-ink px-3 py-1.5 text-sm font-semibold text-white">Filtrar</button>
         </form>
         {error && <p className="text-sm text-red-600">Error: {error.message}. ¿Está expuesto el esquema trol3 en la Data API?</p>}
         <div className="overflow-hidden rounded-2xl border border-line bg-white">
@@ -113,7 +117,7 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
                     <div className="font-semibold">{r.nombre ?? '(sin nombre)'} {r.apellidos ?? ''}</div>
                     <div className="text-[11px] text-muted">{r.curp}{r.edad ? ` · ${r.edad} años` : ''}{r.estado_republica ? ` · ${r.estado_republica}` : ''}</div>
                   </td>
-                  <td className="px-3 py-2 text-xs">{r.aliado}<div className="text-[11px] text-muted">{r.canal}</div></td>
+                  <td className="px-3 py-2 text-xs">{r.aliado}<div className="text-[11px] text-muted">{r.canal}{r.consultas_n > 1 ? ` \u00b7 ${r.consultas_n} consultas` : ''}</div></td>
                   <td className="px-3 py-2 text-xs">{fmtFecha(r.creada_en)}</td>
                   <td className="px-3 py-2 text-xs text-muted">{r.status_origen}</td>
                   <td className="px-3 py-2 text-xs">
