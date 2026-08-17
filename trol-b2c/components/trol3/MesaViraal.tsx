@@ -62,9 +62,9 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
     const r = await autorizarViraal(personaId, { ...payload, nota });
     setGuardando(false);
     if (r.ok) {
-      setMsg('✓ Autorización registrada · descargando Excel…');
+      setMsg('✓ Autorización registrada · generando PDF…');
       const id = (r as { id?: number }).id;
-      if (id) window.open(`/trabajo/viraal/excel/${id}`, '_blank');
+      if (id) window.open(`/trabajo/viraal/pdf/${id}`, '_blank');
       setTimeout(() => window.location.reload(), 1300);
     } else {
       setMsg(`Error: ${(r as { error?: string }).error ?? 'no se pudo guardar'}`);
@@ -76,7 +76,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
       <div className="rounded-2xl border border-line bg-white p-3">
         <div className="mb-2 flex items-center justify-between px-2">
           <h2 className="text-sm font-bold">Mesa Viraal — autorización del proyecto</h2>
-          {guardando ? <span className="text-xs text-muted">Guardando…</span> : msg ? <span className="text-xs font-semibold text-ink">{msg}</span> : <span className="text-xs text-muted">Pre-llenada con el expediente (usa el saldo ajustado si lo corregiste) · “Autorizar proyecto” registra el caso y genera el Excel</span>}
+          {guardando ? <span className="text-xs text-muted">Guardando…</span> : msg ? <span className="text-xs font-semibold text-ink">{msg}</span> : <span className="text-xs text-muted">Pre-llenada con el expediente (usa el saldo ajustado si lo corregiste) · “Autorizar proyecto” registra el caso y genera el PDF</span>}
         </div>
         <iframe ref={ref} src="/viraal/calc.html" title="Mesa Viraal" style={{ width: '100%', height: alto, border: 0, borderRadius: 12 }} />
       </div>
@@ -97,7 +97,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
                   <th className="py-1 pr-3 text-right font-semibold">s/costo</th>
                   <th className="py-1 pr-3 text-right font-semibold">s/crédito</th>
                   <th className="py-1 pr-3 font-semibold">Por</th>
-                  <th className="py-1 pr-3 font-semibold">Archivo</th>
+                  <th className="py-1 pr-3 font-semibold">Resumen</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,7 +110,7 @@ export function MesaViraal({ personaId, prefill, historial }: { personaId: strin
                     <td className="py-1.5 pr-3 text-right">{pc(a.margen_costo)}</td>
                     <td className="py-1.5 pr-3 text-right">{pc(a.margen_credito)}</td>
                     <td className="py-1.5 pr-3">{a.miembro ?? '—'}</td>
-                    <td className="py-1.5 pr-3"><a href={`/trabajo/viraal/excel/${a.id}`} target="_blank" rel="noreferrer" className="font-semibold text-ink underline">Excel</a></td>
+                    <td className="py-1.5 pr-3"><a href={`/trabajo/viraal/pdf/${a.id}`} target="_blank" rel="noreferrer" className="font-semibold text-ink underline">PDF</a></td>
                   </tr>
                 ))}
               </tbody>
