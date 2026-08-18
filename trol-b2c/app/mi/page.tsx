@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc } from '@/components/trol3/MiAcciones';
+import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc } from '@/components/trol3/MiAcciones';
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { getSemillaV2Cliente } from '@/lib/cliente';
@@ -202,17 +202,18 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                 <li key={c.tipo} className="rounded-xl border border-line p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div><div className="font-semibold">{c.nombre}</div><div className="text-xs text-muted">{c.descripcion}</div>{ultimo ? <div className="mt-0.5 text-[11px] text-muted">Última versión: {fmtFecha(ultimo.fecha)}{tengo.length > 1 ? ` · ${tengo.length} versiones` : ''}</div> : null}</div>
-                    <div className="shrink-0 text-right">
-                      {ultimo && (ultimo.url || desbloqueado) ? <a href={ultimo.url ?? '#'} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a>
+                    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                      {ultimo && (ultimo.url || desbloqueado) ? <a href={ultimo.url && /^https?:/.test(ultimo.url) ? ultimo.url : `/mi/doc/${ultimo.id}`} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a>
                        : ultimo ? <DesbloquearDoc tipo={c.tipo} precio={c.precio} maxPct={c.max_pct_puntos} saldo={e.puntos} />
-                       : c.solicitable ? <SolicitarDoc tipo={c.tipo} precio={c.precio} /> : <span className="text-[11px] text-muted">Compártelo por WhatsApp</span>}
+                       : c.solicitable ? <SolicitarDoc tipo={c.tipo} precio={c.precio} /> : null}
+                      {c.sube_cliente ? <SubirDoc tipo={c.tipo} formatos={c.formatos ?? ['pdf']} parseable={!!c.parseable} compacto /> : null}
                     </div>
                   </div>
                 </li>
               );
             })}
           </ul>
-          <p className="mt-3 text-[11px] text-muted">¿Tienes un documento que quieras guardar aquí (constancia de semanas, estado de cuenta)? Mándalo por WhatsApp y lo agregamos a tu expediente (+50 pts).</p>
+          <p className="mt-3 text-[11px] text-muted">Cada documento que subes suma 50 puntos. Si subes tu constancia de semanas del IMSS, actualizamos tu expediente y tus cálculos con ella.</p>
         </section>
       )}
 

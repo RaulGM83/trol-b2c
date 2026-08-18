@@ -1,15 +1,22 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { solicitarDiagnosticoAvanzado } from '@/app/trabajo/actions';
+import { solicitarDiagnosticoAvanzado, subirDocumento } from '@/app/trabajo/actions';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type R = { ok: boolean; error?: string; resultado?: unknown };
 const btnDark = 'rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 const fmtFecha = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
-export function DocumentosPanel({ personaId, docs, legacy }: { personaId: string; docs: any[]; legacy: any | null }) {
+type TipoSubida = { tipo: string; nombre: string; formatos: string[]; parseable: boolean };
+
+export function DocumentosPanel({ personaId, docs, legacy, tiposSubida = [] }: { personaId: string; docs: any[]; legacy: any | null; tiposSubida?: TipoSubida[] }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [tipo, setTipo] = useState(tiposSubida[0]?.tipo ?? 'constancia_semanas');
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [subMsg, setSubMsg] = useState<string | null>(null);
+  const [subiendo, startSubida] = useTransition();
+  const tipoSel = tiposSubida.find((t) => t.tipo === tipo);
   const generando = !!legacy?.diag_avanzado_solicitado_at;
   const tieneSemilla = !!legacy?.tiene_semilla;
   return (
@@ -24,13 +31,31 @@ export function DocumentosPanel({ personaId, docs, legacy }: { personaId: string
                 <div className="font-medium">{d.nombre ?? d.tipo}</div>
                 <div className="text-[11px] text-muted">{d.tipo} · {fmtFecha(d.created_at)} · {d.origen_tipo}{d.gating !== 'gratis' ? ` · cliente: ${d.gating}${d.precio_mxn ? ` $${d.precio_mxn}` : ''}` : ' · visible al cliente'}</div>
               </div>
-              {d.url_externa ? <a href={d.url_externa} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold hover:bg-cream">Abrir</a> : <span className="text-xs text-muted">{d.storage_path ? 'bóveda' : '—'}</span>}
+              {d.storage_path ? <a href={`/trabajo/doc/${d.id}`} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold hover:bg-cream">Abrir</a>
+               : d.url_externa ? <a href={d.url_externa} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold hover:bg-cream">Abrir</a> : <span className="text-xs text-muted">—</span>}
             </li>
           ))}
         </ul>
         {legacy?.drive_folder && <a href={legacy.drive_folder} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs underline">Abrir carpeta de Drive del cliente</a>}
       </section>
       <aside className="space-y-4">
+        <section className="rounded-2xl border border-line bg-white p-5">
+          <h2 className="mb-1 text-sm font-bold">Subir a la bóveda</h2>
+          <p className="mb-3 text-xs text-muted">Se guarda en el expediente (privado, visible para el cliente). Si es la <b>constancia de semanas del IMSS</b>, arranca la extracción y el cálculo automáticamente.</p>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="mb-2 w-full rounded-lg border border-line px-3 py-2 text-sm">
+            {tiposSubida.map((t) => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}
+          </select>
+          <input type="file" accept={(tipoSel?.formatos ?? ['pdf']).map((f) => (f === 'jpg' ? '.jpg,.jpeg' : `.${f}`)).join(',')} onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="mb-2 block w-full text-xs" />
+          <button disabled={subiendo || !archivo} className={btnDark} onClick={() => startSubida(async () => {
+            if (!archivo) return;
+            setSubMsg(null);
+            const fd = new FormData(); fd.set('personaId', personaId); fd.set('tipo', tipo); fd.set('archivo', archivo);
+            const r = (await subirDocumento(fd)) as R & { procesando?: boolean; aviso?: string };
+            setSubMsg(r.ok ? (r.aviso ?? (r.procesando ? 'Guardado. Extrayendo datos y recalculando; en unos minutos se actualiza el expediente.' : 'Guardado en la bóveda.')) : r.error ?? 'error');
+            if (r.ok) setArchivo(null);
+          })}>{subiendo ? 'Subiendo…' : 'Subir documento'}</button>
+          {subMsg && <p className="mt-2 text-xs text-muted">{subMsg}</p>}
+        </section>
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-1 text-sm font-bold">Diagnóstico avanzado</h2>
           <p className="mb-3 text-xs text-muted">Reporte completo en PDF: escenarios por edad, estrategia, Infonavit y ahorro. Uso interno, sin costo. Llega en unos minutos y aparece en la lista.</p>

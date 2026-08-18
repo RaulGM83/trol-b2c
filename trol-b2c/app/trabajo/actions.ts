@@ -2,6 +2,7 @@
 // Server actions del espacio de trabajo (RLS: miembro autenticado).
 import { revalidatePath } from 'next/cache';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
+import { subirDocumentoExpediente, notificarSisecPdf } from '@/lib/trol3/documentos';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -218,4 +219,25 @@ export async function autorizarViraalAliado(consultaId: string, payload: Any) {
   if (error) return fail(error);
   revalidatePath(`/trabajo/aliados/${consultaId}`);
   return ok({ id: data });
+}
+
+// ── Bóveda de documentos ────────────────────────────────────────────────────
+/** Sube un documento al expediente (asesor). Si es constancia de semanas IMSS, dispara el pipeline SISEC en N8N. */
+export async function subirDocumento(formData: FormData) {
+  const m = await requireMiembro();
+  const personaId = String(formData.get('personaId') ?? '');
+  const tipo = String(formData.get('tipo') ?? '');
+  const file = formData.get('archivo');
+  if (!personaId || !tipo || !(file instanceof File)) return fail('Faltan datos.');
+  try {
+    const r = await subirDocumentoExpediente({ personaId, tipo, file, actor: 'asesor', actorId: m.id });
+    let procesando = false;
+    if (tipo === 'constancia_semanas') {
+      const n = await notificarSisecPdf(personaId, r.documentoId, r.path);
+      procesando = n.enviado;
+      if (!n.enviado) { revalidatePath(`/trabajo/p/${personaId}`); return ok({ documento_id: r.documentoId, aviso: `Guardado, pero no se pudo iniciar el cálculo (${n.motivo}).` }); }
+    }
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ documento_id: r.documentoId, procesando });
+  } catch (e) { return fail(e); }
 }

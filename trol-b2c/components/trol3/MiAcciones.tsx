@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { waLink } from '@/lib/whatsapp';
+import { miSubirDocumento } from '@/app/mi/actions';
 
 const card = 'mt-5 rounded-2xl border border-line bg-white p-5';
 const btnDark = 'rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50';
@@ -242,6 +243,32 @@ export function DesbloquearDoc({ tipo, precio, maxPct, saldo }: { tipo: string; 
     <span className="inline-flex flex-col items-end gap-1 text-[11px] text-muted">
       <HablarBoton texto={`Desbloquear · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(p)}`} mensaje={`Hola, quiero desbloquear mi documento "${tipo}" (${p} MXN${conPuntos ? `, usando ${conPuntos} puntos` : ''}). ¿Me pasan los datos de pago? Vengo de mi expediente en app.trol.mx.`} compacto oscuro />
       {conPuntos > 0 ? <span>hasta {conPuntos} pts ({maxPct}%)</span> : null}
+    </span>
+  );
+}
+
+/** Subir un documento a la bóveda del cliente (+50 pts). Constancia de semanas → recalcula el expediente. */
+export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto = false }: { tipo: string; formatos?: string[]; parseable?: boolean; compacto?: boolean }) {
+  const router = useRouter();
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const accept = formatos.map((f) => (f === 'jpg' ? '.jpg,.jpeg' : `.${f}`)).join(',');
+  return (
+    <span className={`inline-flex flex-col items-end gap-1 ${compacto ? '' : 'text-xs'}`}>
+      <label className="cursor-pointer rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-bold hover:bg-cream">
+        {archivo ? archivo.name.slice(0, 22) : 'Elegir archivo'}
+        <input type="file" accept={accept} className="hidden" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); setMsg(null); }} />
+      </label>
+      {archivo && (
+        <button disabled={pending} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50" onClick={() => start(async () => {
+          const fd = new FormData(); fd.set('tipo', tipo); fd.set('archivo', archivo);
+          const r = await miSubirDocumento(fd);
+          setMsg(r.ok ? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualiza tu expediente.' : '¡Guardado! +50 pts.') : r.error ?? 'No se pudo subir.');
+          if (r.ok) { setArchivo(null); router.refresh(); }
+        })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mi expediente' : 'Subir (+50 pts)'}</button>
+      )}
+      {msg && <span className="max-w-[220px] text-right text-[11px] text-green-700">{msg}</span>}
     </span>
   );
 }

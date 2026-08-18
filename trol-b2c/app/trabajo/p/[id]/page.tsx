@@ -45,7 +45,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
   ]);
   const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
-  const [{ data: bens }, { data: catBen }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden')]);
+  const [{ data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
@@ -234,7 +234,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} /></div>)}
+      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} /></div>)}
 
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">
