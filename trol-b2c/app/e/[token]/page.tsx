@@ -48,6 +48,10 @@ export default async function EntradaCampania({
       if (esUuid) {
         const r = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('id', params.token).maybeSingle();
         per = r.data;
+      } else if (/^[a-z0-9]+-[a-z0-9]+$/i.test(params.token)) {
+        // Slug legible del expediente: <nombre>-<últimos 4 del teléfono>
+        const r = await admin.schema('trol3').from('personas').select('id, nombre, legacy_cliente_id').eq('slug_expediente', params.token.toLowerCase()).maybeSingle();
+        per = r.data;
       } else if (telToken.length >= 10) {
         // Tolerancia: el bot armó el link con el teléfono en vez del persona_id → resolver por contacto
         const { data: c } = await admin.schema('trol3').from('contactos').select('persona_id').eq('tipo', 'telefono').eq('normalizado', telToken.slice(-10)).order('principal', { ascending: false }).limit(1).maybeSingle();

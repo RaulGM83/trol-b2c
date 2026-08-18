@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
+import type { MesaViraalData } from '@/lib/viraal/prefill';
 
 type Prefill = Record<string, number | null>;
 type Autorizacion = {
@@ -27,18 +28,29 @@ const BANDA: Record<string, { label: string; cls: string }> = {
   rojo: { label: 'Rojo · no autorizar', cls: 'bg-red-100 text-red-700' },
 };
 
-export function MesaViraal({ personaId, consultaAliadoId, prefill, historial }: { personaId?: string; consultaAliadoId?: string; prefill: Prefill; historial: Autorizacion[] }) {
+export function MesaViraal({ personaId, consultaAliadoId, prefill, historial, datos }: { personaId?: string; consultaAliadoId?: string; prefill: Prefill; historial: Autorizacion[]; datos?: MesaViraalData | null }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [alto, setAlto] = useState(1600);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Variante del proyecto: sin/con recuperación de semanas descontadas (siempre "a día de hoy").
+  const [recuperar, setRecuperar] = useState(false);
+  const [listo, setListo] = useState(false);
+  const variante = datos ? (recuperar && datos.con ? datos.con : datos.sin) : null;
+  const prefillActivo: Prefill = variante ? { ...prefill, ...variante.prefill } : prefill;
+
+  useEffect(() => {
+    if (listo) ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: prefillActivo }, '*');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recuperar, listo]);
 
   useEffect(() => {
     function onMsg(e: MessageEvent) {
       const d = (e.data ?? {}) as { type?: string; height?: number; payload?: Record<string, unknown> };
       if (!d.type) return;
       if (d.type === 'viraal_ready') {
-        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: prefill }, '*');
+        setListo(true);
+        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: prefillActivo }, '*');
       } else if (d.type === 'viraal_height' && d.height) {
         setAlto(Math.max(600, Math.min(4000, d.height + 24)));
       } else if (d.type === 'viraal_autorizar' && d.payload) {
@@ -59,9 +71,11 @@ export function MesaViraal({ personaId, consultaAliadoId, prefill, historial }: 
     const nota = window.prompt('Nota de la autorización (opcional): motivo de excepción, condición del comité, etc.', '') ?? '';
     setGuardando(true);
     setMsg(null);
+    // El caso lleva los datos del cliente y la variante usada (para el PDF y auditoría).
+    const inputs = { ...((payload.inputs as Record<string, unknown> | undefined) ?? {}), cliente: datos?.cliente ?? null, recuperar_semanas: recuperar, semanas_retiro: variante?.semanas_retiro ?? null };
     const r = consultaAliadoId
-      ? await autorizarViraalAliado(consultaAliadoId, { ...payload, nota })
-      : await autorizarViraal(personaId as string, { ...payload, nota });
+      ? await autorizarViraalAliado(consultaAliadoId, { ...payload, inputs, nota })
+      : await autorizarViraal(personaId as string, { ...payload, inputs, nota });
     setGuardando(false);
     if (r.ok) {
       setMsg('✓ Autorización registrada · generando PDF…');
@@ -73,8 +87,39 @@ export function MesaViraal({ personaId, consultaAliadoId, prefill, historial }: 
     }
   }
 
+  const c = datos?.cliente;
   return (
     <div className="space-y-4">
+      {c && (
+        <section className="rounded-2xl border border-line bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold">{c.nombre || 'Cliente'} <span className="ml-2 font-mono text-xs font-normal text-muted">{c.curp || '—'}{c.nss ? ` · NSS ${c.nss}` : ''}</span></h2>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                <span>{c.edad != null ? `${c.edad} años` : 'edad —'}</span>
+                <span>{c.ley}{c.aplica_mod40 ? ' · aplica Mod40' : ' · no aplica Mod40'}</span>
+                <span>Semanas: <b className="text-ink">{c.semanas_cotizadas}</b> cotizadas · {c.semanas_descontadas} descontadas · {c.semanas_recuperadas} recuperadas</span>
+                <span>Salario diario: <b className="text-ink">{mx(c.salario_diario)}</b></span>
+                {c.meses_retro != null && <span>Retroactivo: <b className="text-ink">{c.meses_retro} meses</b> (a hoy)</span>}
+              </div>
+            </div>
+            <div className="text-right text-xs">
+              {datos?.con ? (
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line px-3 py-2">
+                  <input type="checkbox" checked={recuperar} onChange={(e) => setRecuperar(e.target.checked)} />
+                  <span>Recuperar <b>{c.semanas_recuperables}</b> semanas descontadas por desempleo</span>
+                </label>
+              ) : (
+                <span className="text-muted">Sin semanas descontadas por recuperar</span>
+              )}
+              {variante && (
+                <div className="mt-1 text-muted">Pensión con proyecto: <b className="text-ink">{mx(variante.pension)}</b>{variante.semanas_retiro != null ? ` · ${variante.semanas_retiro} semanas al retiro` : ''}</div>
+              )}
+              {!datos?.sin && <div className="mt-1 text-red-600">No pude calcular el proyecto Mod40 hoy con la semilla; la mesa muestra los valores del expediente.</div>}
+            </div>
+          </div>
+        </section>
+      )}
       <div className="rounded-2xl border border-line bg-white p-3">
         <div className="mb-2 flex items-center justify-between px-2">
           <h2 className="text-sm font-bold">Mesa Viraal — autorización del proyecto</h2>

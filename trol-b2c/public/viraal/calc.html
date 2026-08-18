@@ -439,18 +439,19 @@
 
   IDS.forEach(id=>$(id).addEventListener('input',()=>{if(id==='aporta')$('aportaR').value=$('aporta').value;render();}));
   $('aportaR').addEventListener('input',()=>{$('aporta').value=$('aportaR').value;render();});
-  $('pAdmin').addEventListener('input',()=>{adminManual=v('pAdmin');render();});
+  // Regla: la administración manual solo puede BAJAR respecto a la tabla (descuento), nunca superarla.
+  $('pAdmin').addEventListener('input',()=>{const t=tabla(v('imss')).p; adminManual=Math.min(t, v('pAdmin')); if(v('pAdmin')>t) $('pAdmin').value=t; render();});
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
     const p=PRESETS[b.dataset.preset];for(const k in p)$(k).value=p[k];
     $('aportaR').value=p.aporta;adminManual=null;last=null;render();
   }));
   $('btnAdmin').addEventListener('click',()=>{
     const a=adminMin(v('mRetroE'),v('mDxnE'),v('comE')/100);
-    adminManual=Math.max(v('pisoAdmin'),Math.floor((a||0)*1000)/10);render();
+    adminManual=Math.min(tabla(v('imss')).p, Math.max(v('pisoAdmin'),Math.floor((a||0)*1000)/10));render();
   });
   $('btnAporta').addEventListener('click',()=>{
     const ap=aportaMin(v('pisoAdmin')/100,v('mRetroE'),v('mDxnE'),v('comE')/100);
-    adminManual=v('pisoAdmin');$('aporta').value=Math.ceil(ap/500)*500;$('aportaR').value=$('aporta').value;render();
+    adminManual=Math.min(tabla(v('imss')).p, v('pisoAdmin'));$('aporta').value=Math.ceil(ap/500)*500;$('aportaR').value=$('aporta').value;render();
   });
   $('btnReset').addEventListener('click',()=>{adminManual=null;$('aporta').value=0;$('aportaR').value=0;render();});
   $('btnAutorizar').addEventListener('click',()=>{

@@ -4,6 +4,7 @@ import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { GestionAliado } from '@/components/trol3/GestionAliado';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
+import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
@@ -39,10 +40,16 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
 
   const afore = corr?.disponible_afore ?? ((toNum(saldosCalc.rcv97) ?? 0) + (toNum(saldosCalc.sar92) ?? 0) || null);
   const infonavit = corr?.infonavit ?? toNum(saldosCalc.infonavit);
+  const saldosLiq = (afore != null || infonavit != null) ? (Number(afore ?? 0) + Number(infonavit ?? 0)) : null;
+  // Mesa Viraal: proyecto A HOY calculado con la semilla del aliado (línea IMSS = pago al IMSS, no el costo total),
+  // con variante de recuperación de semanas descontadas. Fallback: escenario mod40_retro_hoy del pipeline.
+  const viraalDatos = semilla ? mesaViraalDesdeSemilla(semilla, saldosLiq) : null;
+  const escHoy = (calc?.escenarios?.mod40_retro_hoy ?? {}) as Any;
   const prefill: Record<string, number | null> = {
-    imss: toNum(diag.costo_retroactivo_futuro) ?? toNum(diag.costo_retroactivo_hoy),
-    pension: toNum(diag.pension_mod40_futuro) ?? toNum(diag.escenario_maximo) ?? toNum(diag.pension_mod40_retro_hoy),
-    saldos: (afore != null || infonavit != null) ? (Number(afore ?? 0) + Number(infonavit ?? 0)) : null,
+    imss: toNum(escHoy.costo_imss) ?? toNum(diag.costo_retroactivo_hoy),
+    gest: toNum(escHoy.costo_gestorias),
+    pension: toNum(escHoy.calculatedPension) ?? toNum(diag.pension_mod40_retro_hoy),
+    saldos: saldosLiq,
   };
 
   const nombre = [c.nombre, c.apellidos].filter(Boolean).join(' ') || '(sin nombre)';
@@ -153,7 +160,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
         </section>
       )}
 
-      {tab === 'autorizar' && <MesaViraal consultaAliadoId={c.id} prefill={prefill} historial={viraalHist} />}
+      {tab === 'autorizar' && <MesaViraal consultaAliadoId={c.id} prefill={prefill} historial={viraalHist} datos={viraalDatos} />}
     </div>
   );
 }

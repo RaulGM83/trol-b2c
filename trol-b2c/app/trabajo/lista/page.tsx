@@ -16,8 +16,10 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const PAGE = 50;
 
-  const { data: catalogo } = await db.from('catalogo_oportunidades').select('codigo,nombre,nivel').order('orden');
+  // Solo oportunidades que se empujan como producto (en_lista_trabajo); ordenadas por prioridad y orden del catálogo.
+  const { data: catalogo } = await db.from('catalogo_oportunidades').select('codigo,nombre,nivel,prioridad').eq('en_lista_trabajo', true).order('prioridad', { ascending: false }).order('orden');
   const catMap = new Map((catalogo ?? []).map((c: Any) => [c.codigo, c]));
+  const codigosLista = (catalogo ?? []).map((c: Any) => c.codigo as string);
 
   let q = db
     .from('oportunidades')
@@ -25,6 +27,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
   if (estado === 'abiertas') q = q.in('estado', ['detectada', 'presentada', 'en_proceso']);
   else if (estado !== 'todas') q = q.eq('estado', estado);
   if (codigo) q = q.eq('codigo', codigo);
+  else q = q.in('codigo', codigosLista);
   if (nivel) q = q.in('codigo', (catalogo ?? []).filter((c: Any) => c.nivel === nivel).map((c: Any) => c.codigo));
   if (mias) q = q.or(`dueno_id.eq.${m.id},especialista_id.eq.${m.id}`);
   if (orden === 'urgencia') q = q.order('urgencia_score', { ascending: false }).order('valor_estimado', { ascending: false, nullsFirst: false });
@@ -72,7 +75,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
             {[1, 2, 3].map((n) => (
               <li key={n}>
                 <Link href={params({ nivel: String(n), codigo: undefined, page: undefined })} className={`mt-2 block rounded px-2 py-1 text-[11px] uppercase tracking-wide text-muted hover:bg-cream ${nivel === n ? 'font-bold text-ink' : ''}`}>Nivel {n} · {NIVEL_LABEL[n]}</Link>
-                {(resumen ?? []).filter((r: Any) => catMap.get(r.codigo)?.nivel === n).map((r: Any) => (
+                {(resumen ?? []).filter((r: Any) => catMap.get(r.codigo)?.nivel === n).sort((a: Any, b: Any) => codigosLista.indexOf(a.codigo) - codigosLista.indexOf(b.codigo)).map((r: Any) => (
                   <Link key={r.codigo} href={params({ codigo: r.codigo, nivel: undefined, page: undefined })} className={`flex justify-between rounded px-2 py-1 hover:bg-cream ${codigo === r.codigo ? 'bg-cream font-bold' : ''}`}>
                     <span>{catMap.get(r.codigo)?.nombre ?? r.codigo}</span><span className="text-muted">{r.n}</span>
                   </Link>

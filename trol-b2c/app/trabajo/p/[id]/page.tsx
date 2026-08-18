@@ -9,6 +9,7 @@ import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
+import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
@@ -75,16 +76,22 @@ export default async function Expediente({ params, searchParams }: { params: { i
     }
   }
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
-  const urlExpediente = `${SITE}/e/${e.persona_id}?c=bot`;
+  // Link legible del expediente (nombre-últimos4tel), como el de referidos; /e/ acepta slug o uuid.
+  const { data: slugExp } = await db.rpc('slug_expediente', { p_persona: e.persona_id });
+  const urlExpediente = `${SITE}/e/${(slugExp as string | null) ?? e.persona_id}?c=bot`;
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
   const afLiq = (saldosCorregidos?.disponible_afore ?? e.saldo_rcv97) ?? null;
   const infLiq = (saldosCorregidos?.infonavit ?? e.saldo_infonavit) ?? null;
+  const saldosLiq = (afLiq != null || infLiq != null) ? (Number(afLiq ?? 0) + Number(infLiq ?? 0)) : null;
+  // Mesa Viraal: proyecto Mod40 retroactivo A HOY calculado con la semilla (línea IMSS, gestorías, pensión, saldos)
+  // y variante con recuperación de semanas descontadas. Fallback: valores del expediente.
+  const viraalDatos = semilla ? mesaViraalDesdeSemilla(semilla, saldosLiq) : null;
   const viraalPrefill: Record<string, number | null> = {
     imss: e.costo_retro ?? null,
     pension: (e.pension_mod40_retro ?? e.pension_maxima) ?? null,
-    saldos: (afLiq != null || infLiq != null) ? (Number(afLiq ?? 0) + Number(infLiq ?? 0)) : null,
+    saldos: saldosLiq,
   };
   const rawFechaSisec = (datosMap.get('semilla')?.valor as { meta?: { fecha_sisec?: string } } | undefined)?.meta?.fecha_sisec;
   const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;
@@ -249,7 +256,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'viraal' && <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} />}
+      {tab === 'viraal' && <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} datos={viraalDatos} />}
 
       {tab === 'bitacora' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
