@@ -6,8 +6,9 @@
 //  · Nunca comparativos de inmuebles más baratos.
 //  · Los supuestos van marcados como supuestos, y el contrafactual honesto va completo.
 //  · Se habla sólo de lo que aplica: si no hay crédito, no se explica el crédito.
-import { Document, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { Any } from '@/lib/trol3/server';
+import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 
 const DARK = '#26282B', LIME = '#D1F069', GRAY = '#8A8D91', CREAM = '#F4F4F2', RED = '#B0532F', NEG = '#D9A08C';
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -23,8 +24,10 @@ const pc = (n: Any, d = 1) => (n == null || Number.isNaN(Number(n)) ? '—' : (N
 const s = StyleSheet.create({
   page: { paddingTop: 0, paddingBottom: 46, paddingHorizontal: 0, fontSize: 9, color: DARK, fontFamily: 'Helvetica' },
   band: { backgroundColor: DARK, paddingHorizontal: 46, paddingVertical: 14 },
-  marca: { fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: -0.5 },
-  bandTitle: { fontSize: 13, fontWeight: 700, color: '#fff', marginTop: 6 },
+  // Brandbook: nunca recolorear, rotar ni deformar. El ratio mantiene la proporción.
+  logoBanda: { height: 34, width: 34 * LOGO_TROL_RATIO },
+  logoPie: { height: 13, width: 13 * LOGO_TROL_RATIO },
+  bandTitle: { fontSize: 13, fontWeight: 700, color: '#fff', marginTop: 10 },
   bandSub: { fontSize: 8.8, color: '#C9CCD0', marginTop: 3 },
   bandLime: { fontSize: 9.5, fontWeight: 700, color: LIME, marginTop: 5 },
   body: { paddingHorizontal: 46, paddingTop: 13 },
@@ -44,7 +47,7 @@ const s = StyleSheet.create({
   cajaLime: { color: LIME, fontSize: 11, fontWeight: 700 },
   cajaNota: { color: '#fff', fontSize: 8.2 },
   sup: { color: GRAY, fontSize: 7.5, marginBottom: 2.5, lineHeight: 1.3 },
-  foot: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: DARK, paddingVertical: 9, paddingHorizontal: 46, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  foot: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 40, backgroundColor: DARK, paddingHorizontal: 46, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });
 
 function Sec({ t }: { t: string }) {
@@ -96,7 +99,7 @@ export function infonavitDoc(a: Any) {
     <Document title={`Propuesta Infonavit · ${a.clienteNombre ?? ''}`}>
       <Page size="LETTER" style={s.page}>
         <View style={s.band}>
-          <Text style={s.marca}>tr<Text style={{ color: LIME }}>o</Text>l</Text>
+          <Image src={LOGO_TROL_BLANCO} style={s.logoBanda} />
           <Text style={s.bandTitle}>Propuesta de inversión con tu Subcuenta de Vivienda</Text>
           <Text style={s.bandSub}>{a.clienteNombre ?? ''}{a.cotitularNombre ? ` y ${a.cotitularNombre}` : ''}</Text>
           <Text style={s.bandSub}>
@@ -165,7 +168,11 @@ export function infonavitDoc(a: Any) {
               <Text style={{ fontSize: 8.6, fontWeight: 700, width: 78, textAlign: 'right' }}>{mx(v, true)}</Text>
             </View>
           ))}
-          <View style={{ borderTopWidth: 0.7, borderTopColor: DARK, marginTop: 5, paddingTop: 5, flexDirection: 'row', justifyContent: 'space-between' }}>
+          <View style={s.cajaOscura}>
+            <Text style={s.cajaLime}>RECIBE AL VENDER A {mejorH} MESES:  {mx(mejor?.efectivo)}</Text>
+            <Text style={s.cajaNota}>ya liquidado el crédito, con rentas y devolución de ISR</Text>
+          </View>
+          <View style={{ marginTop: 6, flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ fontSize: 9.5, fontWeight: 700 }}>VENTAJA AL VENDER, FRENTE A DEJAR EL SALDO DONDE ESTÁ</Text>
             <Text style={{ fontSize: 9.5, fontWeight: 700 }}>{mx(mejor?.ventaja_venta, true)}</Text>
           </View>
@@ -188,17 +195,20 @@ export function infonavitDoc(a: Any) {
           <View style={{ height: 9 }} />
           <Sec t="Supuestos base de esta propuesta" />
           <Text style={s.sup}>
-            Plusvalía de {pc(pal.plusvalia, 0)} anual y renta de {mx(inm.renta)} mensuales ({mx(rentaNeta)} netos) como
-            supuestos base{ent.proyecto?.renta_estimada ? ', estimados por nosotros y no observados en el mercado' : ''};
-            la tabla muestra la plusvalía mínima que necesitaría cada plazo.
+            Plusvalía de {pc(pal.plusvalia, 0)} anual y renta de {mx(inm.renta)} mensuales ({mx(rentaNeta)} netos)
+            {ent.proyecto?.renta_estimada ? ', estimados por nosotros y no observados en el mercado' : ''}.
           </Text>
           <Text style={s.sup}>
             Rendimiento de la Subcuenta de Vivienda: alrededor de {pc(sup.r_ssv ?? 0.04, 0)} anual proyectado. Venta libre
             de ISR bajo la exención de casa habitación, a confirmar con su contador.
           </Text>
           <Text style={s.sup}>
+            Del efectivo de la venta se asume que un {pc(pal.pct_deuda, 0)} baja deudas con tasa promedio de
+            {' '}{pc(pal.tasa_deuda, 0)} anual y el resto se invierte a {pc(pal.alterno, 0)}.
+          </Text>
+          <Text style={s.sup}>
             La devolución de ISR depende de su ingreso declarado y del tope de deducciones personales. Cifras en pesos
-            corrientes; no constituyen garantía de rendimiento.
+            corrientes; no son garantía de rendimiento.
           </Text>
           {a.saldoSinConfirmar ? (
             <Text style={[s.sup, { color: DARK }]}>
@@ -209,7 +219,7 @@ export function infonavitDoc(a: Any) {
         </View>
 
         <View style={s.foot} fixed>
-          <Text style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>tr<Text style={{ color: LIME }}>o</Text>l</Text>
+          <Image src={LOGO_TROL_BLANCO} style={s.logoPie} />
           <Text style={{ fontSize: 7.5, color: '#C9CCD0' }}>
             Propuesta personalizada{a.miembro ? `  |  Preparada por ${a.miembro}` : ''}  |  Vigencia 30 días
           </Text>

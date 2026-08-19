@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const ids = [a.persona_id, a.cotitular_persona_id].filter(Boolean) as string[];
   const [{ data: pers }, { data: m }] = await Promise.all([
     db.from('personas').select('id,nombre,apellidos').in('id', ids),
-    a.miembro_id ? db.from('miembros').select('nombre,email').eq('id', a.miembro_id).maybeSingle() : Promise.resolve({ data: null }),
+    a.miembro_id ? db.from('miembros').select('nombre,email,firma').eq('id', a.miembro_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const nombre = (id: string | null) => {
     const p = ((pers ?? []) as Any[]).find((x) => x.id === id);
@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     ...a,
     clienteNombre: nombre(a.persona_id),
     cotitularNombre: nombre(a.cotitular_persona_id),
-    miembro: (m as Any)?.nombre ?? (m as Any)?.email ?? null,
+    miembro: (m as Any)?.firma ?? (m as Any)?.nombre ?? (m as Any)?.email ?? null,
     saldoSinConfirmar,
   } as Any))) as AsyncIterable<Uint8Array>;
   const chunks: Buffer[] = [];
