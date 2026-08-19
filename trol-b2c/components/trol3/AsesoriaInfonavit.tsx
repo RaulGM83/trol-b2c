@@ -1,0 +1,501 @@
+'use client';
+// Pestaña de asesoría Infonavit: convertir el saldo de la Subcuenta de Vivienda en una
+// inversión inmobiliaria antes del retiro, en vez de dejarlo al ~4% anual en Infonavit.
+//
+// Es la hoja `Asesoria` del Excel v4_2 hecha pantalla: selección de inmueble, palancas,
+// la operación con sus señales, de dónde sale la ventaja (bloques I–IV), el valor de la
+// liquidez, el veredicto, la sensibilidad y el PnL interno del aliado.
+//
+// Las señales NUNCA bloquean: son material de conversación, no un semáforo.
+import { useMemo, useState } from 'react';
+import { calcularAsesoriaInfonavit } from '@trol/pension-core';
+import type {
+  ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
+  SupuestosInfonavit, TitularInfonavit,
+} from '@trol/pension-core';
+
+export interface Proyecto {
+  id: string; clave: number | null; desarrollo: string; zona: string | null; m2: number | null;
+  avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number;
+  renta_estimada: boolean; plusvalia: number; plusvalia_validada: boolean;
+  notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
+  aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
+}
+
+export interface SupuestosGlobales {
+  r_ssv: number; inflacion: number; aport_patronal: number; mantenimiento: number;
+  gestion: number; aplica_gestion: boolean; comision_venta: number; alterno: number;
+  base_plusvalia: string; uma_mensual: number; monto_max_credito: number;
+  horizontes: number[]; meses_cotizando_default: number; saldo_min_asesoria: number;
+}
+
+const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+const money = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? '—' : mxn0.format(n));
+const pct = (n: number | null | undefined, d = 1) => (n == null || !Number.isFinite(n) ? '—' : `${(n * 100).toFixed(d)}%`);
+
+const card = 'rounded-2xl border border-line bg-white p-5';
+const h2 = 'text-xs font-bold uppercase tracking-wide text-muted';
+const inp = 'w-full rounded-lg border border-line px-2 py-1 text-sm';
+
+/** Las notas de lectura del Excel: lo que el asesor necesita para defender el número. */
+function Nota({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 rounded-lg bg-cream px-3 py-2 text-[11px] leading-relaxed text-muted">{children}</p>;
+}
+
+function Campo({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-[11px] font-semibold text-muted">{label}</span>
+      {children}
+      {sub ? <span className="mt-0.5 block text-[10px] leading-tight text-muted">{sub}</span> : null}
+    </label>
+  );
+}
+
+function Num({ value, onChange, step = 1, sufijo }: { value: number; onChange: (n: number) => void; step?: number; sufijo?: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <input type="number" step={step} value={Number.isFinite(value) ? value : 0}
+        onChange={(e) => onChange(Number(e.target.value))} className={inp} />
+      {sufijo ? <span className="text-[11px] text-muted">{sufijo}</span> : null}
+    </div>
+  );
+}
+
+function Fila({ label, vals, fmt = money, negativo, indent, fuerte }: {
+  label: string; vals: (number | null)[]; fmt?: (n: number | null | undefined) => string;
+  negativo?: boolean; indent?: boolean; fuerte?: boolean;
+}) {
+  return (
+    <tr className={fuerte ? 'font-bold' : ''}>
+      <td className={`py-1 pr-3 ${indent ? 'pl-4 text-muted' : ''}`}>{label}</td>
+      {vals.map((v, i) => (
+        <td key={i} className={`py-1 text-right tabular-nums ${negativo && v != null && v < 0 ? 'text-red-700' : ''}`}>{fmt(v)}</td>
+      ))}
+    </tr>
+  );
+}
+
+const ETIQUETA_SENAL: Record<string, string> = {
+  credito_excede_monto_maximo: 'El crédito rebasa el monto máximo que autoriza Infonavit',
+  retencion_arriba_30pct: 'La retención pasa del 30% del salario: Infonavit rara vez la autoriza',
+};
+function textoSenal(s: string): string {
+  if (ETIQUETA_SENAL[s]) return ETIQUETA_SENAL[s];
+  const [k, v] = s.split(':');
+  const n = Number(v);
+  if (k === 'desembolso_mensual') return `El cliente desembolsa ${money(n)} al mes (la renta no cubre la retención)`;
+  if (k === 'notariales_cliente') return `${money(n)} de notariales adicionales que paga de contado al inicio`;
+  if (k === 'edad_al_termino') return `Termina de pagar a los ${v} años — informativo, no bloquea`;
+  return s;
+}
+
+export function AsesoriaInfonavit({ cliente, base, origen, saldo, proyectos, supuestos }: {
+  cliente: { nombre: string; ley: string; edad: number | null; cotiza: boolean; creditoVigente: boolean | null };
+  base: TitularInfonavit;
+  origen: { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
+  saldo: { capa: string | null; estimado: number | null; vigente: boolean | null };
+  proyectos: Proyecto[];
+  supuestos: SupuestosGlobales;
+}) {
+  const disponibles = proyectos.filter((p) => p.disponible);
+  const [proyectoId, setProyectoId] = useState(disponibles[0]?.id ?? '');
+  const proyecto = disponibles.find((p) => p.id === proyectoId) ?? null;
+  const [t1, setT1] = useState<TitularInfonavit>(base);
+  const [conCotitular, setConCotitular] = useState(false);
+  const [t2, setT2] = useState<TitularInfonavit>({
+    regimen: 73, edad: 0, salario_imss: 0, ssv: 0,
+    meses_cotizando: supuestos.meses_cotizando_default, ingreso_real: 0, deducciones_usadas: 0, conserva_valor: 1,
+  });
+  const [pal, setPal] = useState<PalancasInfonavit>({
+    plusvalia: proyecto?.plusvalia ?? 0.06,
+    alterno: supuestos.alterno,
+    pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 10,
+  });
+  const [verInterno, setVerInterno] = useState(false);
+  const [aliadoVende, setAliadoVende] = useState(true);
+  const [aliadoRenta, setAliadoRenta] = useState(true);
+
+  const setP = <K extends keyof PalancasInfonavit>(k: K, v: PalancasInfonavit[K]) => setPal((o) => ({ ...o, [k]: v }));
+  const set1 = <K extends keyof TitularInfonavit>(k: K, v: TitularInfonavit[K]) => setT1((o) => ({ ...o, [k]: v }));
+  const set2 = <K extends keyof TitularInfonavit>(k: K, v: TitularInfonavit[K]) => setT2((o) => ({ ...o, [k]: v }));
+
+  const supMotor: Partial<SupuestosInfonavit> = useMemo(() => ({
+    r_ssv: supuestos.r_ssv, inflacion: supuestos.inflacion, aport_patronal: supuestos.aport_patronal,
+    mantenimiento: supuestos.mantenimiento, gestion: supuestos.gestion, aplica_gestion: supuestos.aplica_gestion,
+    comision_venta: supuestos.comision_venta, uma_mensual: supuestos.uma_mensual,
+    monto_max_credito: supuestos.monto_max_credito, horizontes: supuestos.horizontes,
+    base_plusvalia: supuestos.base_plusvalia === 'avaluo' ? 'avaluo' : 'escrituracion',
+  }), [supuestos]);
+
+  const inmueble: InmuebleInfonavit | null = proyecto && {
+    avaluo: proyecto.avaluo, escrituracion: proyecto.escrituracion, costo_aliado: proyecto.costo_aliado ?? proyecto.escrituracion,
+    renta: proyecto.renta, plusvalia: proyecto.plusvalia, notariales_credito: proyecto.notariales_credito,
+    notariales_adicionales: proyecto.notariales_adicionales, comision_desarrollador: proyecto.comision_desarrollador,
+    aliado_cubre_notariales: proyecto.aliado_cubre_notariales,
+  };
+
+  const clienteMotor: ClienteInfonavit = { titulares: conCotitular ? [t1, t2] : [t1] };
+
+  const { r, error } = useMemo(() => {
+    if (!inmueble) return { r: null, error: null as string | null };
+    try { return { r: calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, pal), error: null }; }
+    catch (e) { return { r: null as ResultadoInfonavit | null, error: e instanceof Error ? e.message : 'Error de cálculo' }; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proyectoId, t1, t2, conCotitular, pal, supMotor]);
+
+  // Sensibilidad: la plusvalía es el supuesto que más mueve la conclusión y casi nunca
+  // tiene respaldo de mercado. Ver la ventaja a varias plusvalías evita venderla como certeza.
+  const sensibilidad = useMemo(() => {
+    if (!inmueble) return null;
+    const gs = [0, 0.02, 0.04, 0.06, 0.08, 0.10];
+    return gs.map((g) => {
+      try {
+        const rr = calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, { ...pal, plusvalia: g });
+        return { g, filas: rr.tabla.map((f) => ({ h: f.horizonte, ventaja: f.ventaja_corte, efectivo: f.efectivo })) };
+      } catch { return { g, filas: [] }; }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proyectoId, t1, t2, conCotitular, pal, supMotor]);
+
+  if (!disponibles.length) {
+    return <section className={card}><p className="text-sm text-muted">No hay inmuebles disponibles en el catálogo. Cárgalos en <b>Proyectos Infonavit</b> antes de armar una asesoría.</p></section>;
+  }
+
+  const hs = r?.tabla.map((f) => f.horizonte) ?? supuestos.horizontes;
+  const mejor = r ? r.tabla.find((f) => f.horizonte === r.veredicto.mejor_horizonte) : null;
+  const saldoSinConfirmar = saldo.capa === 'calculado' || saldo.vigente === false;
+
+  // PnL interno del aliado (hoja `Interno`). Nunca se comparte con el cliente.
+  const pnl = (() => {
+    if (!r || !proyecto || !mejor) return null;
+    const margen = proyecto.escrituracion - (proyecto.costo_aliado ?? proyecto.escrituracion);
+    const comisionDesarrollador = proyecto.escrituracion * proyecto.comision_desarrollador;
+    const notarialesRegalados = proyecto.aliado_cubre_notariales ? proyecto.notariales_adicionales : 0;
+    const inicio = margen + comisionDesarrollador - notarialesRegalados;
+    const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * mejor.horizonte : 0;
+    const reventa = aliadoVende ? -mejor.bloques.detalle.comision_venta : 0;
+    return { margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
+      total: inicio + gestion + reventa, sobreEscrituracion: (inicio + gestion + reventa) / proyecto.escrituracion };
+  })();
+
+  return (
+    <div className="space-y-4">
+      {/* ---------------- Cabecera ---------------- */}
+      <section className={card}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-extrabold">Asesoría Infonavit · {cliente.nombre}</h1>
+            <p className="text-xs text-muted">
+              {cliente.ley} · {cliente.edad ? `${cliente.edad} años` : 'edad desconocida'} ·{' '}
+              {cliente.cotiza ? 'cotizando' : 'sin cotizar'} · saldo de vivienda {money(t1.ssv)}
+              {cliente.creditoVigente ? ' · con crédito Infonavit vigente' : ''}
+            </p>
+          </div>
+        </div>
+        {saldoSinConfirmar && (
+          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            El saldo de {money(t1.ssv)} es <b>nuestro estimado</b>, no un dato de su cuenta. Sirve para ver si vale
+            la pena la conversación; para <b>formalizar la propuesta</b> hay que pedirle el saldo real de mi cuenta Infonavit.
+          </p>
+        )}
+        {cliente.creditoVigente && (
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Aparece con un <b>crédito Infonavit vigente</b>: confirma que su subcuenta esté libre antes de avanzar.
+          </p>
+        )}
+      </section>
+
+      {/* ---------------- Selección y palancas ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Selección y palancas</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
+            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
+              {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
+            </select>
+          </Campo>
+          <Campo label="Plusvalía anual del escenario" sub={proyecto && !proyecto.plusvalia_validada ? 'Sin respaldo de mercado: preséntalo como supuesto' : undefined}>
+            <Num value={pal.plusvalia} step={0.005} onChange={(v) => setP('plusvalia', v)} sufijo={pct(pal.plusvalia)} />
+          </Campo>
+          <Campo label="Rendimiento alterno del cliente" sub="Su mejor uso realista del dinero: ésa es la vara honesta, no el 4% de Infonavit">
+            <Num value={pal.alterno} step={0.005} onChange={(v) => setP('alterno', v)} sufijo={pct(pal.alterno)} />
+          </Campo>
+          <Campo label="% del efectivo que va a bajar deuda">
+            <Num value={pal.pct_deuda} step={0.05} onChange={(v) => setP('pct_deuda', v)} sufijo={pct(pal.pct_deuda, 0)} />
+          </Campo>
+          <Campo label="Tasa promedio de esas deudas">
+            <Num value={pal.tasa_deuda} step={0.01} onChange={(v) => setP('tasa_deuda', v)} sufijo={pct(pal.tasa_deuda, 0)} />
+          </Campo>
+          <Campo label="Horizonte de medición (años)">
+            <Num value={pal.corte_anios} onChange={(v) => setP('corte_anios', v)} sufijo="años" />
+          </Campo>
+        </div>
+        {proyecto && (
+          <p className="mt-3 text-[11px] text-muted">
+            Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
+            {proyecto.renta_estimada ? <span className="text-amber-700"> (estimada, no observada)</span> : ' (observada en la zona)'} ·
+            notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
+            {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
+            {proyecto.notas ? <> · {proyecto.notas}</> : null}
+          </p>
+        )}
+        <Nota>
+          El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
+          los intereses corren sólo sobre la deuda viva, que baja cada mes. Regla rápida: conviene más crédito cuando la
+          plusvalía supera la tasa Infonavit neta del escudo fiscal (con 10.45% y marginal de 34%, ~6.9%).
+        </Nota>
+      </section>
+
+      {/* ---------------- Datos del titular ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Datos del titular</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Campo label="Edad" sub="Define el plazo: MIN(30, 70 − edad)"><Num value={t1.edad} step={0.1} onChange={(v) => set1('edad', v)} /></Campo>
+          <Campo label="Salario mensual IMSS" sub={origen.salario}><Num value={t1.salario_imss} step={100} onChange={(v) => set1('salario_imss', v)} /></Campo>
+          <Campo label="Saldo de vivienda" sub={origen.ssv}><Num value={t1.ssv} step={1000} onChange={(v) => set1('ssv', v)} /></Campo>
+          <Campo label="Meses que seguirá cotizando" sub={origen.meses_cotizando}><Num value={t1.meses_cotizando} onChange={(v) => set1('meses_cotizando', v)} /></Campo>
+          <Campo label="Ingreso real mensual" sub={origen.ingreso_real}><Num value={t1.ingreso_real} step={1000} onChange={(v) => set1('ingreso_real', v)} /></Campo>
+          <Campo label="Otras deducciones personales (anuales)" sub="Compiten por el mismo tope del 151-IV y bajan la devolución de ISR">
+            <Num value={t1.deducciones_usadas} step={1000} onChange={(v) => set1('deducciones_usadas', v)} />
+          </Campo>
+          {t1.regimen === 97 && (
+            <Campo label="% del saldo que conserva valor (Ley 97)" sub={origen.conserva_valor}>
+              <Num value={t1.conserva_valor} step={0.05} onChange={(v) => set1('conserva_valor', v)} sufijo={pct(t1.conserva_valor, 0)} />
+            </Campo>
+          )}
+        </div>
+        <label className="mt-4 flex items-center gap-2 border-t border-line pt-3 text-sm">
+          <input type="checkbox" checked={conCotitular} onChange={(e) => setConCotitular(e.target.checked)} />
+          Crédito conyugal (segundo titular)
+        </label>
+        {conCotitular && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Campo label="Régimen del cotitular">
+              <select value={t2.regimen} onChange={(e) => set2('regimen', Number(e.target.value))} className={inp}>
+                <option value={73}>Ley 73</option><option value={97}>Ley 97</option>
+              </select>
+            </Campo>
+            <Campo label="Edad" sub="En conyugal el plazo lo manda el de MAYOR edad"><Num value={t2.edad} step={0.1} onChange={(v) => set2('edad', v)} /></Campo>
+            <Campo label="Salario mensual IMSS"><Num value={t2.salario_imss} step={100} onChange={(v) => set2('salario_imss', v)} /></Campo>
+            <Campo label="Saldo de vivienda"><Num value={t2.ssv} step={1000} onChange={(v) => set2('ssv', v)} /></Campo>
+            <Campo label="Meses que seguirá cotizando"><Num value={t2.meses_cotizando} onChange={(v) => set2('meses_cotizando', v)} /></Campo>
+            <Campo label="Ingreso real mensual"><Num value={t2.ingreso_real} step={1000} onChange={(v) => set2('ingreso_real', v)} /></Campo>
+            {t2.regimen === 97 && (
+              <Campo label="% que conserva valor (Ley 97)"><Num value={t2.conserva_valor} step={0.05} onChange={(v) => set2('conserva_valor', v)} sufijo={pct(t2.conserva_valor, 0)} /></Campo>
+            )}
+          </div>
+        )}
+      </section>
+
+      {error && (
+        <section className={card}>
+          <p className="text-sm text-red-700"><b>El cálculo no cuadra:</b> {error}</p>
+          <p className="mt-1 text-xs text-muted">La verificación interna del motor debe dar cero siempre. Revisa los datos capturados; si persiste, es un error de cableado y hay que reportarlo.</p>
+        </section>
+      )}
+
+      {r && (
+        <>
+          {/* ---------------- La operación ---------------- */}
+          <section className={card}>
+            <h2 className={h2}>La operación</h2>
+            <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Kpi label="Crédito Infonavit" v={money(r.operacion.credito)} sub={`de ${money(r.cliente_derivado.monto_max)} máximo`} />
+              <Kpi label="Retención mensual" v={money(r.operacion.pmt)} sub={`${pct(r.operacion.pct_salario)} del salario`} />
+              <Kpi label="Flujo mensual" v={money(r.operacion.flujo_mensual)} sub={r.operacion.flujo_mensual < 0 ? 'lo pone el cliente' : 'le sobra'} alerta={r.operacion.flujo_mensual < 0} />
+              <Kpi label="Tasa y plazo" v={pct(r.cliente_derivado.tasa, 2)} sub={`${r.cliente_derivado.plazo.toFixed(1)} años`} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <Mini label="Saldo aplicado" v={money(r.operacion.saldo_apl)} />
+              <Mini label="Remanente en Infonavit" v={money(r.operacion.remanente)} />
+              <Mini label="Renta neta" v={money(r.operacion.renta_neta)} />
+              <Mini label="Se liquida el crédito" v={r.mes_liquida_credito ? `mes ${r.mes_liquida_credito}` : `> ${supuestos.horizontes[supuestos.horizontes.length - 1]} meses`} />
+            </div>
+            {r.senales.length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {r.senales.map((s) => (
+                  <li key={s} className="rounded-lg bg-cream px-2.5 py-1 text-[11px]">{textoSenal(s)}</li>
+                ))}
+              </ul>
+            )}
+            <Nota>
+              El capital que la retención amortiza <b>no es un costo</b>: regresa peso por peso en el cheque de venta.
+              La renta cuenta íntegra como ingreso y el único costo real del crédito son los intereses netos. Quién pone
+              el efectivo cada mes es <b>liquidez, no valor</b>: eso lo responden las señales de arriba.
+            </Nota>
+          </section>
+
+          {/* ---------------- Bloques I–IV ---------------- */}
+          <section className={card}>
+            <h2 className={h2}>De dónde sale la ventaja</h2>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase text-muted">
+                    <th className="py-1 text-left">Horizonte de venta (meses)</th>
+                    {hs.map((h) => <th key={h} className="py-1 text-right">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <Fila fuerte label="I. Lo que produce el inmueble completo" vals={r.tabla.map((f) => f.bloques.I_inmueble)} negativo />
+                  <Fila indent label="plusvalía sobre el 100% de la base" vals={r.tabla.map((f) => f.bloques.detalle.plusvalia_100)} />
+                  <Fila indent label="descuento de compra" vals={r.tabla.map((f) => f.bloques.detalle.descuento)} />
+                  <Fila indent label="renta neta acumulada" vals={r.tabla.map((f) => f.bloques.detalle.renta_acum)} />
+                  <Fila indent label="comisión de venta" vals={r.tabla.map((f) => f.bloques.detalle.comision_venta)} negativo />
+                  <Fila indent label="notariales del crédito (financiados)" vals={r.tabla.map((f) => f.bloques.detalle.notariales_credito)} negativo />
+                  <Fila indent label="notariales a cargo del cliente" vals={r.tabla.map((f) => f.bloques.detalle.notariales_cliente)} negativo />
+                  <Fila fuerte label="II. Costo neto de financiamiento" vals={r.tabla.map((f) => f.bloques.II_financiamiento)} negativo />
+                  <Fila indent label="intereses sobre la deuda viva" vals={r.tabla.map((f) => f.bloques.detalle.intereses)} negativo />
+                  <Fila indent label="devolución de ISR por intereses reales" vals={r.tabla.map((f) => f.bloques.detalle.isr_devuelto)} />
+                  <Fila fuerte label="III. Lo que ese dinero ganaba en Infonavit" vals={r.tabla.map((f) => f.bloques.III_oportunidad)} negativo />
+                  <Fila indent label="rendimiento del saldo aplicado" vals={r.tabla.map((f) => f.bloques.detalle.oportunidad_saldo)} negativo />
+                  <Fila indent label="aportaciones netas" vals={r.tabla.map((f) => f.bloques.detalle.aportaciones_netas)} negativo />
+                  <Fila fuerte label="IV. Saldo rescatado (Ley 97 bajo PMG)" vals={r.tabla.map((f) => f.bloques.IV_rescate)} />
+                  <tr className="border-t border-line"><td className="py-2 pr-3 font-bold">Ventaja del esquema a la venta</td>
+                    {r.tabla.map((f) => <td key={f.horizonte} className={`py-2 text-right font-bold tabular-nums ${f.ventaja_venta < 0 ? 'text-red-700' : 'text-green-700'}`}>{money(f.ventaja_venta)}</td>)}
+                  </tr>
+                  <Fila label="Plusvalía de equilibrio (deja la ventaja en cero)" vals={r.tabla.map((f) => f.plusvalia_equilibrio)} fmt={(n) => pct(n, 2)} />
+                  <Fila label="Rendimiento de conservar 12 meses más" vals={r.tabla.map((f) => f.rendimiento_conservar_12m)} fmt={(n) => pct(n, 1)} />
+                </tbody>
+              </table>
+            </div>
+            <Nota>
+              Las aportaciones patronales <b>suman</b>: prepagan el crédito y evitan intereses a la tasa del cliente.
+              Sólo se les resta el rendimiento SSV que dejan de devengar; como la tasa del crédito supera a la de la
+              subcuenta, su efecto neto es positivo. El bloque IV es el caso en que, de no usarse, el sistema consumiría
+              el saldo pagando la pensión que el cliente recibiría de todos modos (Ley 97 bajo PMG).
+            </Nota>
+          </section>
+
+          {/* ---------------- Liquidez ---------------- */}
+          <section className={card}>
+            <h2 className={h2}>El valor de convertirlo en efectivo</h2>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase text-muted">
+                    <th className="py-1 text-left">Horizonte de venta (meses)</th>
+                    {hs.map((h) => <th key={h} className="py-1 text-right">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <Fila label="Efectivo total al vender" vals={r.tabla.map((f) => f.efectivo)} fuerte />
+                  <Fila indent label="a bajar deuda" vals={r.tabla.map((f) => Math.max(0, f.efectivo) * pal.pct_deuda)} />
+                  <Fila indent label="al rendimiento alterno" vals={r.tabla.map((f) => Math.max(0, f.efectivo) * (1 - pal.pct_deuda))} />
+                  <Fila label="Valor adicional de la liquidez" vals={r.tabla.map((f) => f.valor_liquidez)} />
+                  <tr className="border-t border-line">
+                    <td className="py-2 pr-3 font-bold">Ventaja total al corte de {pal.corte_anios} años</td>
+                    {r.tabla.map((f) => <td key={f.horizonte} className={`py-2 text-right font-bold tabular-nums ${f.ventaja_corte < 0 ? 'text-red-700' : 'text-green-700'}`}>{money(f.ventaja_corte)}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              Si nunca hace nada, su saldo y aportaciones en Infonavit valdrían <b>{money(r.contrafactual_corte)}</b> al
+              corte de {pal.corte_anios} años. Tasa de reinversión combinada: <b>{pct(r.tasa_combinada, 1)}</b>.
+            </p>
+            <Nota>
+              Bajar deuda es un rendimiento <b>garantizado</b> a la tasa de esa deuda: cuando esa tasa supera al alterno,
+              cada peso a deuda vale más que invertido. El supuesto es que la deuda seguiría viva todo el corte; si el
+              cliente la pagaría pronto de todos modos, el beneficio real es menor. La venta se modela libre de ISR por
+              la exención de casa habitación (LISR 93-XIX): déjalo como supuesto documentado y que lo confirme su contador.
+            </Nota>
+          </section>
+
+          {/* ---------------- Veredicto ---------------- */}
+          <section className="rounded-2xl border border-line bg-ink p-5 text-white">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-white/60">Veredicto con las palancas actuales</h2>
+            <div className="mt-3 grid gap-4 sm:grid-cols-3">
+              <div><div className="text-[11px] text-white/60">Mejor horizonte</div><div className="text-2xl font-extrabold text-lime">{r.veredicto.mejor_horizonte} meses</div></div>
+              <div><div className="text-[11px] text-white/60">Plusvalía de equilibrio</div><div className="text-2xl font-extrabold">{pct(r.veredicto.plusvalia_equilibrio, 2)}</div></div>
+              <div><div className="text-[11px] text-white/60">Fuente que más aporta</div><div className="text-2xl font-extrabold capitalize">{r.veredicto.fuente_dominante}</div></div>
+            </div>
+            <p className="mt-3 text-sm text-white/80">{r.veredicto.lectura_salida}. Ventaja total al corte: <b className="text-lime">{money(mejor?.ventaja_corte)}</b> contra no hacer nada.</p>
+            <p className="mt-2 text-[11px] text-white/50">
+              El veredicto responde a las palancas actuales: es el punto de partida de la conversación, no la sustituye.
+              Marca los supuestos como supuestos y presenta el contrafactual honesto.
+            </p>
+          </section>
+
+          {/* ---------------- Sensibilidad ---------------- */}
+          {sensibilidad && (
+            <section className={card}>
+              <h2 className={h2}>Sensibilidad: ventaja al corte según la plusvalía</h2>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-[11px] uppercase text-muted">
+                      <th className="py-1 text-left">Plusvalía anual</th>
+                      {hs.map((h) => <th key={h} className="py-1 text-right">{h} meses</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sensibilidad.map((s) => (
+                      <tr key={s.g} className={Math.abs(s.g - pal.plusvalia) < 1e-9 ? 'bg-cream font-semibold' : ''}>
+                        <td className="py-1 pr-3">{pct(s.g, 0)}</td>
+                        {s.filas.map((f) => (
+                          <td key={f.h} className={`py-1 text-right tabular-nums ${f.ventaja < 0 ? 'text-red-700' : 'text-green-700'}`}>{money(f.ventaja)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Nota>
+                Si la ventaja sólo aparece con plusvalías altas, la tesis <b>depende de un supuesto sin respaldo</b>.
+                Enséñale la fila donde deja de convenir: esa conversación construye confianza y evita una venta que se
+                cae después.
+              </Nota>
+            </section>
+          )}
+
+          {/* ---------------- Interno ---------------- */}
+          {pnl && (
+            <section className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/40 p-5">
+              <button onClick={() => setVerInterno(!verInterno)} className="flex w-full items-center justify-between text-left">
+                <span className="text-xs font-bold uppercase tracking-wide text-amber-800">Vista interna · PnL del aliado — no compartir con el cliente</span>
+                <span className="text-xs text-amber-800">{verInterno ? 'Ocultar' : 'Ver'}</span>
+              </button>
+              {verInterno && (
+                <div className="mt-3 text-sm">
+                  <div className="mb-3 flex flex-wrap gap-4 text-xs">
+                    <label className="flex items-center gap-1.5"><input type="checkbox" checked={aliadoVende} onChange={(e) => setAliadoVende(e.target.checked)} /> El aliado gestiona la venta</label>
+                    <label className="flex items-center gap-1.5"><input type="checkbox" checked={aliadoRenta} onChange={(e) => setAliadoRenta(e.target.checked)} /> El aliado gestiona la renta</label>
+                    <span className="text-muted">Horizonte: {mejor?.horizonte} meses (el del veredicto)</span>
+                  </div>
+                  <table className="w-full">
+                    <tbody>
+                      <tr className="border-b border-amber-200"><td colSpan={2} className="pt-2 text-[11px] font-bold uppercase text-amber-800">Al inicio · seguro, con liquidez al firmar</td></tr>
+                      <Fila indent label="Margen sobre el inmueble" vals={[pnl.margen]} />
+                      <Fila indent label="Comisión que paga el desarrollador" vals={[pnl.comisionDesarrollador]} />
+                      <Fila indent label="Notariales que el aliado regala al cliente" vals={[-pnl.notarialesRegalados]} negativo />
+                      <Fila fuerte label="Total al inicio" vals={[pnl.inicio]} />
+                      <tr className="border-b border-amber-200"><td colSpan={2} className="pt-3 text-[11px] font-bold uppercase text-amber-800">Durante y al final · no garantizado</td></tr>
+                      <Fila indent label="Gestión de rentas en el horizonte" vals={[pnl.gestion]} />
+                      <Fila indent label="Comisión de reventa" vals={[pnl.reventa]} />
+                      <Fila fuerte label="Total potencial del horizonte" vals={[pnl.total]} />
+                      <Fila label="Margen sobre el valor de escrituración" vals={[pnl.sobreEscrituracion]} fmt={(n) => pct(n, 1)} />
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-[11px] text-amber-800">
+                    Dos comisiones distintas: la del desarrollador entra al firmar; la de reventa la paga el cliente al
+                    vender y sólo es ingreso si el aliado gestiona esa venta. <b>Durante</b> y <b>al final</b> no dan
+                    liquidez al inicio ni están garantizados: no financiar la operación contra ellos.
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Kpi({ label, v, sub, alerta }: { label: string; v: string; sub?: string; alerta?: boolean }) {
+  return <div><div className="text-[11px] uppercase tracking-wide text-muted">{label}</div><div className={`text-xl font-extrabold ${alerta ? 'text-amber-700' : ''}`}>{v}</div>{sub ? <div className="text-[11px] text-muted">{sub}</div> : null}</div>;
+}
+function Mini({ label, v }: { label: string; v: string }) {
+  return <div><div className="text-[11px] text-muted">{label}</div><div className="font-semibold">{v}</div></div>;
+}

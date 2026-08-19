@@ -1,7 +1,7 @@
 export * from './types';
 export * from './tablas';
 export { computeLey73 } from './ley73';
-export { computeLey97 } from './ley97';
+export { computeLey97, conservaValorSSV } from './ley97';
 export { computeTransicion } from './transicion';
 export type { ResultadoTransicion } from './transicion';
 export { computeProyectoMod40 } from './mod40-proyecto';

@@ -10,6 +10,8 @@ import {
   type ClienteInfonavit, type InmuebleInfonavit, type TitularInfonavit,
 } from '../infonavit-asesoria';
 import { CASOS_GOLDEN } from './fixture-infonavit-goldens';
+import { conservaValorSSV } from '../ley97';
+import type { ResultadoLey97 } from '../types';
 
 /** Tolerancias del kit: 0.05 absoluto en montos, 1e-5 en tasas. */
 const montoCerca = (actual: number, esperado: number) =>
@@ -192,5 +194,41 @@ describe('reglas de negocio', () => {
     expect(bajoPmg.tabla[0].bloques.IV_rescate).toBeGreaterThan(0);
     // rescatar saldo que se iba a consumir mejora la ventaja del esquema
     expect(bajoPmg.tabla[0].ventaja_venta).toBeGreaterThan(sobrePmg.tabla[0].ventaja_venta);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// conservaValorSSV: el puente entre el diagnóstico Ley 97 y el bloque IV.
+// ---------------------------------------------------------------------------
+describe('conservaValorSSV — Ley 97 y la PMG', () => {
+  const base = (afore: number, inf: number, pmg: number, urv = 200): ResultadoLey97 => ({
+    ley: 'Ley97', pensionAfore: null, pensionAforeInfonavit: null, pensionTotal: null,
+    status: 'ok' as ResultadoLey97['status'], negativa: false, razon: null, salida: null,
+    detalle: {
+      edadActual: 60, fechaRetiro: new Date(0), semanasRetiro: 1250, semanasMinimasPMG: 1250,
+      saldoAforeProyectado: afore, saldoInfonavitProyectado: inf, saldoAhorroVoluntario: 0,
+      urv, pmg, aportacionesFuturas: 0,
+    },
+  });
+
+  it('muy por encima de la PMG conserva el saldo completo', () => {
+    // 3,000,000/200 × 0.81/12 = 1,012.5 mensuales, muy arriba de una PMG de 100
+    expect(conservaValorSSV(base(3_000_000, 1_000_000, 100))).toBe(1);
+  });
+
+  it('muy por debajo de la PMG el saldo se consume entero', () => {
+    // ni con Infonavit alcanza la PMG: el sistema lo consume pagando lo mismo
+    expect(conservaValorSSV(base(50_000, 50_000, 5_000))).toBe(0);
+  });
+
+  it('a caballo de la PMG conserva sólo la parte que la levanta', () => {
+    // sin Infonavit queda en PMG; con Infonavit la supera → conserva una fracción
+    const cv = conservaValorSSV(base(1_000_000, 1_000_000, 500));
+    expect(cv).toBeGreaterThan(0);
+    expect(cv).toBeLessThan(1);
+  });
+
+  it('sin saldo Infonavit (crédito ya ejercido) no hay nada que rescatar', () => {
+    expect(conservaValorSSV(base(1_000_000, 0, 5_000))).toBe(1);
   });
 });

@@ -245,3 +245,45 @@ export async function subirDocumento(formData: FormData) {
     return ok({ documento_id: r.documentoId, procesando });
   } catch (e) { return fail(e); }
 }
+
+// ---------------------------------------------------------------------------
+// Inventario de inmuebles para la asesoría Infonavit.
+// costo_aliado y comision_desarrollador son INTERNOS: no salen al cliente ni al PDF.
+// ---------------------------------------------------------------------------
+export async function guardarProyecto(patch: {
+  id?: string | null; clave: number | null; desarrollo: string; zona: string | null; m2: number | null;
+  avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number; renta_estimada: boolean;
+  plusvalia: number; plusvalia_validada: boolean; notariales_credito: number; notariales_adicionales: number;
+  comision_desarrollador: number; aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
+}) {
+  await requireMiembro();
+  if (!patch.desarrollo?.trim()) return fail(new Error('Ponle nombre al desarrollo.'));
+  if (!(patch.escrituracion > 0)) return fail(new Error('La escrituración tiene que ser mayor que cero.'));
+  const { id, ...campos } = patch;
+  const fila = { ...campos, updated_at: new Date().toISOString() };
+  const db = t3();
+  const { error } = id
+    ? await db.from('proyectos_inmobiliarios').update(fila).eq('id', id)
+    : await db.from('proyectos_inmobiliarios').insert(fila);
+  if (error) return fail(error);
+  revalidatePath('/trabajo/proyectos');
+  return ok();
+}
+
+export async function alternarProyecto(id: string, disponible: boolean) {
+  await requireMiembro();
+  const { error } = await t3().from('proyectos_inmobiliarios').update({ disponible, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return fail(error);
+  revalidatePath('/trabajo/proyectos');
+  return ok();
+}
+
+/** Supuestos globales de la asesoría Infonavit (hoja `Supuestos` del Excel). */
+export async function guardarSupuestosInfonavit(patch: Record<string, unknown>) {
+  await requireMiembro();
+  const { error } = await t3().from('infonavit_supuestos')
+    .update({ ...patch, actualizado_at: new Date().toISOString() }).eq('id', 'default');
+  if (error) return fail(error);
+  revalidatePath('/trabajo/proyectos');
+  return ok();
+}

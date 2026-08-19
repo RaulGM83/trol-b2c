@@ -197,3 +197,23 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     },
   };
 }
+
+/**
+ * Ley 97: qué proporción del saldo de la Subcuenta de Vivienda CONSERVA VALOR al pensionarse.
+ *
+ * El saldo se suma al AFORE y se convierte en pensión. Si la persona queda en Pensión Mínima
+ * Garantizada, el sistema consume ese saldo pagando la pensión que de todos modos recibiría:
+ * ahí el saldo no agrega nada y conviene rescatarlo antes (bloque IV de la asesoría Infonavit).
+ *
+ * 1 = lo conserva completo (está por encima de la PMG) · 0 = se consume entero.
+ * Valores intermedios: sólo una parte del saldo la levanta por encima de la PMG.
+ */
+export function conservaValorSSV(r: ResultadoLey97): number {
+  const { urv, saldoInfonavitProyectado: inf, saldoAforeProyectado: afore, pmg } = r.detalle;
+  if (inf <= 0 || urv <= 0) return 1;
+  const bruto = (inf / urv) * FACTOR_RETIRO / 12; // lo que aportaría si no hubiera piso
+  if (bruto <= 0) return 1;
+  const sinInf = Math.max((afore / urv) * FACTOR_RETIRO / 12, pmg);
+  const conInf = Math.max(((afore + inf) / urv) * FACTOR_RETIRO / 12, pmg);
+  return Math.min(1, Math.max(0, (conInf - sinInf) / bruto));
+}

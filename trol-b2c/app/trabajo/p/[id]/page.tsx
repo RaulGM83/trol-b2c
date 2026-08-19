@@ -12,6 +12,8 @@ import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
+import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales } from '@/components/trol3/AsesoriaInfonavit';
+import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,11 +25,10 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
-  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'resumen';
   const db = t3();
   const [{ data: e }, { data: campos }, { data: datos }, { data: ck }, { data: ops }, { data: cat }, { data: consultas }, { data: docs }, { data: inter }, { data: contactos }, { data: citas }, { data: miembros }, { data: puntos }] = await Promise.all([
     db.from('v_expediente').select('*').eq('persona_id', params.id).maybeSingle(),
@@ -75,6 +76,32 @@ export default async function Expediente({ params, searchParams }: { params: { i
       codigoReferido = (cod as string) ?? null;
     }
   }
+  // ---- Asesoría Infonavit: la pestaña abre con saldo arriba del umbral y cotizando.
+  // El crédito vigente NO bloquea: aparece como señal dentro de la pestaña.
+  const { data: supRow } = await db.from('infonavit_supuestos').select('*').eq('id', 'default').maybeSingle();
+  const supInfonavit = (supRow ?? null) as SupuestosGlobales | null;
+  const umbralInfonavit = Number(supInfonavit?.saldo_min_asesoria ?? 350000);
+  const aplicaInfonavit = e.status_empleo === 'empleado' && Number(e.saldo_infonavit ?? 0) > umbralInfonavit;
+  let proyectosInf: Proyecto[] = [];
+  let baseInfonavit: ReturnType<typeof titularDesdeExpediente> | null = null;
+  if (aplicaInfonavit && semilla && supInfonavit) {
+    const { data: proys } = await db.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('clave');
+    proyectosInf = (proys ?? []) as Proyecto[];
+    baseInfonavit = titularDesdeExpediente({
+      semilla,
+      saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
+      saldoEsReportado: e.saldo_infonavit_capa === 'declarado' || e.saldo_infonavit_capa === 'validado',
+      creditoVigente: e.credito_infonavit ?? null,
+      mesesCotizandoDefault: Number(supInfonavit.meses_cotizando_default ?? 60),
+      ingresoRealMensual: datosMap.get('ingreso_mensual')?.valor == null ? null : Number(datosMap.get('ingreso_mensual')?.valor),
+      deduccionesUsadas: datosMap.get('deducciones_personales_anuales')?.valor == null ? null : Number(datosMap.get('deducciones_personales_anuales')?.valor),
+    });
+  }
+  const TABS: [string, string][] = aplicaInfonavit
+    ? [...TABS_BASE.slice(0, 2), ['infonavit', 'Infonavit'] as [string, string], ...TABS_BASE.slice(2)]
+    : TABS_BASE;
+  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'resumen';
+
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   // Link legible del expediente (nombre-últimos4tel), como el de referidos; /e/ acepta slug o uuid.
   const { data: slugExp } = await db.rpc('slug_expediente', { p_persona: e.persona_id });
@@ -217,6 +244,29 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
           )}
         </section>
+      )}
+
+      {tab === 'infonavit' && (
+        baseInfonavit && supInfonavit ? (
+          <AsesoriaInfonavit
+            cliente={{
+              nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
+              ley: e.ley ?? '—',
+              edad: e.edad ?? null,
+              cotiza: e.status_empleo === 'empleado',
+              creditoVigente: e.credito_infonavit ?? null,
+            }}
+            base={baseInfonavit.titular}
+            origen={baseInfonavit.origen}
+            saldo={{ capa: e.saldo_infonavit_capa ?? null, estimado: e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado), vigente: e.saldo_infonavit_vigente ?? null }}
+            proyectos={proyectosInf}
+            supuestos={supInfonavit}
+          />
+        ) : (
+          <section className="rounded-2xl border border-line bg-white p-5 text-sm text-muted">
+            Sin semilla de cálculo no podemos derivar su salario ni su régimen. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen</Link>.
+          </section>
+        )
       )}
 
       {tab === 'datos' && (
