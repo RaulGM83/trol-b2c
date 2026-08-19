@@ -7,8 +7,10 @@
 // liquidez, el veredicto, la sensibilidad y el PnL interno del aliado.
 //
 // Las señales NUNCA bloquean: son material de conversación, no un semáforo.
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { calcularAsesoriaInfonavit } from '@trol/pension-core';
+import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit } from '@/app/trabajo/actions';
 import type {
   ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
   SupuestosInfonavit, TitularInfonavit,
@@ -90,19 +92,41 @@ function textoSenal(s: string): string {
   return s;
 }
 
-export function AsesoriaInfonavit({ cliente, base, origen, saldo, proyectos, supuestos }: {
+export interface AsesoriaGuardada {
+  id: string; created_at: string; mejor_horizonte: number | null; ventaja_corte: number | null;
+  credito: number | null; desarrollo: string | null; miembro: string | null;
+  cotitular_nombre: string | null; es_cotitular: boolean; nota: string | null;
+}
+
+type Origen = { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
+type CotitularCliente = { personaId: string; nombre: string; origen: Origen; saldoCapa: string | null; creditoVigente: boolean | null };
+type ModoCotitular = 'no' | 'cliente' | 'manual';
+type Hallazgo = { id: string; nombre: string | null; apellidos: string | null; curp: string | null; edad: number | null; ley: string | null };
+type R = { ok: boolean; error?: string; personas?: Hallazgo[]; id?: string } & Partial<CotitularCliente> & { titular?: TitularInfonavit };
+
+export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, proyectos, supuestos, historial }: {
+  personaId: string;
   cliente: { nombre: string; ley: string; edad: number | null; cotiza: boolean; creditoVigente: boolean | null };
   base: TitularInfonavit;
-  origen: { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
+  origen: Origen;
   saldo: { capa: string | null; estimado: number | null; vigente: boolean | null };
   proyectos: Proyecto[];
   supuestos: SupuestosGlobales;
+  historial: AsesoriaGuardada[];
 }) {
   const disponibles = proyectos.filter((p) => p.disponible);
   const [proyectoId, setProyectoId] = useState(disponibles[0]?.id ?? '');
   const proyecto = disponibles.find((p) => p.id === proyectoId) ?? null;
   const [t1, setT1] = useState<TitularInfonavit>(base);
-  const [conCotitular, setConCotitular] = useState(false);
+  const [modoCotitular, setModoCotitular] = useState<ModoCotitular>('no');
+  const [q, setQ] = useState('');
+  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  const [cotitular, setCotitular] = useState<CotitularCliente | null>(null);
+  const [buscando, buscar] = useTransition();
+  const [guardando, guardar] = useTransition();
+  const [nota, setNota] = useState('');
+  const [msgGuardar, setMsgGuardar] = useState<string | null>(null);
+  const conCotitular = modoCotitular !== 'no';
   const [t2, setT2] = useState<TitularInfonavit>({
     regimen: 73, edad: 0, salario_imss: 0, ssv: 0,
     meses_cotizando: supuestos.meses_cotizando_default, ingreso_real: 0, deducciones_usadas: 0, conserva_valor: 1,
@@ -265,10 +289,53 @@ export function AsesoriaInfonavit({ cliente, base, origen, saldo, proyectos, sup
             </Campo>
           )}
         </div>
-        <label className="mt-4 flex items-center gap-2 border-t border-line pt-3 text-sm">
-          <input type="checkbox" checked={conCotitular} onChange={(e) => setConCotitular(e.target.checked)} />
-          Crédito conyugal (segundo titular)
-        </label>
+        <div className="mt-4 border-t border-line pt-3">
+          <span className="text-[11px] font-semibold text-muted">Crédito conyugal · Infonavit suma el monto máximo de cada titular</span>
+          <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+            {([['no', 'Sin cotitular'], ['cliente', 'Buscar entre clientes de Trol'], ['manual', 'Capturar a mano']] as [ModoCotitular, string][]).map(([k, l]) => (
+              <button key={k} onClick={() => { setModoCotitular(k); if (k !== 'cliente') setCotitular(null); }}
+                className={`rounded-lg px-2.5 py-1 font-semibold ${modoCotitular === k ? 'bg-ink text-white' : 'border border-line bg-white hover:bg-cream'}`}>{l}</button>
+            ))}
+          </div>
+          {modoCotitular === 'cliente' && (
+            <div className="mt-3">
+              {cotitular ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-cream px-3 py-2 text-xs">
+                  <b>{cotitular.nombre}</b>
+                  <span className="text-muted">
+                    saldo {cotitular.saldoCapa === 'declarado' || cotitular.saldoCapa === 'validado' ? 'reportado' : 'estimado'}
+                    {cotitular.creditoVigente ? ' · con crédito vigente' : ''}
+                  </span>
+                  <button className="ml-auto rounded-lg border border-line bg-white px-2 py-0.5 font-semibold" onClick={() => { setCotitular(null); setHallazgos([]); }}>Quitar</button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder="Nombre o CURP del cónyuge" className="w-64 rounded-lg border border-line px-2 py-1 text-sm" />
+                    <button disabled={buscando} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                      onClick={() => buscar(async () => { const r = (await buscarCotitular(q)) as R; setHallazgos(r.ok ? (r.personas ?? []) : []); })}>Buscar</button>
+                  </div>
+                  {hallazgos.length > 0 && (
+                    <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+                      {hallazgos.filter((h) => h.id !== personaId).map((h) => (
+                        <li key={h.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs">
+                          <span>{[h.nombre, h.apellidos].filter(Boolean).join(' ')} <span className="text-muted">{h.curp ?? 'sin CURP'} · {h.edad ?? '—'} años · {h.ley ?? '—'}</span></span>
+                          <button className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream" onClick={() => buscar(async () => {
+                            const r = (await cargarCotitular(h.id)) as R;
+                            if (!r.ok) return setMsgGuardar(r.error ?? 'error');
+                            setCotitular({ personaId: h.id, nombre: r.nombre as string, origen: r.origen as Origen, saldoCapa: r.saldoCapa ?? null, creditoVigente: r.creditoVigente ?? null });
+                            if (r.titular) setT2(r.titular);
+                            setMsgGuardar(null);
+                          })}>Usar</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
         {conCotitular && (
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Campo label="Régimen del cotitular">
@@ -489,6 +556,55 @@ export function AsesoriaInfonavit({ cliente, base, origen, saldo, proyectos, sup
           )}
         </>
       )}
+
+      {/* ---------------- Guardar e historial ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Guardar la asesoría</h2>
+        <p className="mt-1 text-xs text-muted">
+          Se congelan el inmueble y los supuestos de este momento: el catálogo cambia y una propuesta
+          entregada tiene que poder reproducirse tal como se presentó. La oportunidad pasa a
+          <b> presentada</b> y queda la nota en la bitácora.
+          {cotitular ? <> El escenario aparecerá también en el expediente de <b>{cotitular.nombre}</b>; el valor se cuenta sólo aquí para no duplicar el embudo.</> : null}
+        </p>
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          <input value={nota} onChange={(ev) => setNota(ev.target.value)} placeholder="Nota de la sesión (opcional)" className="min-w-[240px] flex-1 rounded-lg border border-line px-2 py-1 text-sm" />
+          <button disabled={!r || guardando} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            onClick={() => guardar(async () => {
+              if (!r || !proyecto || !inmueble) return;
+              const res = (await guardarAsesoriaInfonavit({
+                personaId,
+                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: pal, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada } },
+                resultado: r,
+                proyectoId: proyecto.id,
+                cotitularPersonaId: cotitular?.personaId ?? null,
+                cotitularDatos: modoCotitular === 'manual' ? t2 : null,
+                nota: nota || null,
+              })) as R;
+              setMsgGuardar(res.ok ? 'Guardada.' : res.error ?? 'error');
+            })}>Guardar asesoría</button>
+          {msgGuardar && <span className="py-1.5 text-xs text-muted">{msgGuardar}</span>}
+        </div>
+
+        {historial.length > 0 && (
+          <ul className="mt-4 divide-y divide-line border-t border-line">
+            {historial.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                <span>
+                  {new Date(a.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {a.desarrollo ? ` · ${a.desarrollo}` : ''}
+                  {a.mejor_horizonte ? ` · ${a.mejor_horizonte} meses` : ''}
+                  {a.ventaja_corte != null ? ` · ventaja ${money(Number(a.ventaja_corte))}` : ''}
+                  {a.es_cotitular ? <span className="ml-1 rounded bg-cream px-1.5 py-0.5">como cotitular</span> : null}
+                  {a.cotitular_nombre ? <span className="ml-1 text-muted">con {a.cotitular_nombre}</span> : null}
+                  {a.miembro ? <span className="text-muted"> · {a.miembro}</span> : null}
+                  {a.nota ? <span className="text-muted"> · {a.nota}</span> : null}
+                </span>
+                <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Propuesta PDF</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

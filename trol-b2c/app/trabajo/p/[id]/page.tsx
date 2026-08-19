@@ -12,7 +12,7 @@ import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
-import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales } from '@/components/trol3/AsesoriaInfonavit';
+import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 
 export const dynamic = 'force-dynamic';
@@ -83,7 +83,39 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const umbralInfonavit = Number(supInfonavit?.saldo_min_asesoria ?? 350000);
   const aplicaInfonavit = e.status_empleo === 'empleado' && Number(e.saldo_infonavit ?? 0) > umbralInfonavit;
   let proyectosInf: Proyecto[] = [];
+  let historialInf: AsesoriaGuardada[] = [];
   let baseInfonavit: ReturnType<typeof titularDesdeExpediente> | null = null;
+  // El historial se muestra aunque la pestaña ya no aplique: si en su momento se le
+  // presentó una propuesta, tiene que seguir siendo consultable.
+  {
+    const { data: ases } = await db.from('infonavit_asesorias')
+      .select('id,created_at,persona_id,cotitular_persona_id,proyecto_id,miembro_id,mejor_horizonte,ventaja_corte,credito,nota')
+      .or(`persona_id.eq.${params.id},cotitular_persona_id.eq.${params.id}`)
+      .order('created_at', { ascending: false }).limit(20);
+    const filas = (ases ?? []) as Any[];
+    if (filas.length) {
+      const proyIds = [...new Set(filas.map((a) => a.proyecto_id).filter(Boolean))];
+      const persIds = [...new Set(filas.flatMap((a) => [a.persona_id, a.cotitular_persona_id]).filter((x) => x && x !== params.id))];
+      const [{ data: proyNom }, { data: persNom }] = await Promise.all([
+        proyIds.length ? db.from('proyectos_inmobiliarios').select('id,desarrollo').in('id', proyIds) : Promise.resolve({ data: [] as Any[] }),
+        persIds.length ? db.from('personas').select('id,nombre,apellidos').in('id', persIds) : Promise.resolve({ data: [] as Any[] }),
+      ]);
+      const pmap = new Map(((proyNom ?? []) as Any[]).map((x) => [x.id, x.desarrollo]));
+      const nmap = new Map(((persNom ?? []) as Any[]).map((x) => [x.id, [x.nombre, x.apellidos].filter(Boolean).join(' ')]));
+      historialInf = filas.map((a) => {
+        const esCotitular = a.cotitular_persona_id === params.id;
+        const otro = esCotitular ? a.persona_id : a.cotitular_persona_id;
+        return {
+          id: a.id, created_at: a.created_at, mejor_horizonte: a.mejor_horizonte,
+          ventaja_corte: a.ventaja_corte, credito: a.credito,
+          desarrollo: pmap.get(a.proyecto_id) ?? null,
+          miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null,
+          cotitular_nombre: otro ? nmap.get(otro) ?? null : null,
+          es_cotitular: esCotitular, nota: a.nota ?? null,
+        };
+      });
+    }
+  }
   if (aplicaInfonavit && semilla && supInfonavit) {
     const { data: proys } = await db.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('clave');
     proyectosInf = (proys ?? []) as Proyecto[];
@@ -97,7 +129,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
       deduccionesUsadas: datosMap.get('deducciones_personales_anuales')?.valor == null ? null : Number(datosMap.get('deducciones_personales_anuales')?.valor),
     });
   }
-  const TABS: [string, string][] = aplicaInfonavit
+  const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;
+  const TABS: [string, string][] = verTabInfonavit
     ? [...TABS_BASE.slice(0, 2), ['infonavit', 'Infonavit'] as [string, string], ...TABS_BASE.slice(2)]
     : TABS_BASE;
   const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'resumen';
@@ -249,6 +282,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
       {tab === 'infonavit' && (
         baseInfonavit && supInfonavit ? (
           <AsesoriaInfonavit
+            personaId={e.persona_id}
+            historial={historialInf}
             cliente={{
               nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
               ley: e.ley ?? '—',

@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
 import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib/trol3/documentos';
+import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -286,4 +288,73 @@ export async function guardarSupuestosInfonavit(patch: Record<string, unknown>) 
   if (error) return fail(error);
   revalidatePath('/trabajo/proyectos');
   return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Asesoría Infonavit: cotitular, guardado e historial.
+// ---------------------------------------------------------------------------
+
+/** Busca al cónyuge entre los expedientes de Trol para no teclear sus datos a mano. */
+export async function buscarCotitular(q: string) {
+  await requireMiembro();
+  if (!q || q.trim().length < 3) return ok({ personas: [] });
+  const { data, error } = await t3().rpc('buscar_personas', { p_q: q.trim(), p_limit: 8 });
+  if (error) return fail(error);
+  return ok({ personas: (data ?? []) as Any[] });
+}
+
+/**
+ * Trae al cotitular ya derivado: su saldo entra con su propia capa y su propia
+ * fecha, igual que el titular principal. Un cotitular tecleado a mano no tiene
+ * procedencia; éste sí, y por eso es el camino preferido.
+ */
+export async function cargarCotitular(personaId: string) {
+  await requireMiembro();
+  const db = t3();
+  const [{ data: e }, { data: datos }, { data: sup }] = await Promise.all([
+    db.from('v_expediente').select('*').eq('persona_id', personaId).maybeSingle(),
+    db.from('v_mejor_dato').select('*').eq('persona_id', personaId),
+    db.from('infonavit_supuestos').select('meses_cotizando_default').eq('id', 'default').maybeSingle(),
+  ]);
+  if (!e) return fail(new Error('No encontramos ese expediente.'));
+  const map = new Map(((datos ?? []) as Any[]).map((d) => [d.campo, d]));
+  const semilla = parseSemillaV2(map.get('semilla')?.valor);
+  if (!semilla) return fail(new Error('Ese expediente todavía no tiene información del IMSS: captura sus datos a mano o pide su consulta primero.'));
+  const base = titularDesdeExpediente({
+    semilla,
+    saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
+    saldoEsReportado: e.saldo_infonavit_capa === 'declarado' || e.saldo_infonavit_capa === 'validado',
+    creditoVigente: e.credito_infonavit ?? null,
+    mesesCotizandoDefault: Number((sup as Any)?.meses_cotizando_default ?? 60),
+    ingresoRealMensual: map.get('ingreso_mensual')?.valor == null ? null : Number(map.get('ingreso_mensual')?.valor),
+    deduccionesUsadas: map.get('deducciones_personales_anuales')?.valor == null ? null : Number(map.get('deducciones_personales_anuales')?.valor),
+  });
+  return ok({
+    personaId,
+    nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
+    titular: base.titular,
+    origen: base.origen,
+    saldoCapa: e.saldo_infonavit_capa ?? null,
+    creditoVigente: e.credito_infonavit ?? null,
+  });
+}
+
+export async function guardarAsesoriaInfonavit(payload: {
+  personaId: string; entrada: unknown; resultado: unknown; proyectoId: string | null;
+  cotitularPersonaId: string | null; cotitularDatos: unknown | null; nota: string | null;
+}) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('guardar_asesoria_infonavit', {
+    p_persona: payload.personaId,
+    p_entrada: payload.entrada,
+    p_resultado: payload.resultado,
+    p_proyecto: payload.proyectoId,
+    p_cotitular: payload.cotitularPersonaId,
+    p_cotitular_datos: payload.cotitularDatos,
+    p_nota: payload.nota,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${payload.personaId}`);
+  if (payload.cotitularPersonaId) revalidatePath(`/trabajo/p/${payload.cotitularPersonaId}`);
+  return ok({ id: data as string });
 }

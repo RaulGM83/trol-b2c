@@ -232,3 +232,42 @@ describe('conservaValorSSV — Ley 97 y la PMG', () => {
     expect(conservaValorSSV(base(1_000_000, 0, 5_000))).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Aportación patronal por titular. El Excel v4_2 colapsaba las dos ventanas de
+// cotización en una sola (max de ambas) y aplicaba la aportación CONJUNTA todo
+// ese tramo. El contexto §3 dice que el 5% se aplica "sólo mientras el titular
+// sigue cotizando", en singular: cada quien tiene su propia ventana.
+// ---------------------------------------------------------------------------
+describe('la aportación de cada titular respeta su propia ventana', () => {
+  const conVentanas = (m1: number, m2: number) => calcular(
+    cliente(
+      titular({ edad: 50, salario_imss: 40_000, ssv: 500_000, meses_cotizando: m1 }),
+      titular({ edad: 52, salario_imss: 40_000, ssv: 500_000, meses_cotizando: m2 }),
+    ),
+    inmueble({ escrituracion: 2_000_000 }),
+  );
+
+  it('un titular que deja de cotizar antes no sigue aportando', () => {
+    // Con el modelo colapsado ambas corridas darían IDÉNTICO (meses_cot = max = 96).
+    const paraPronto = conVentanas(12, 96);
+    const siguen = conVentanas(96, 96);
+    expect(paraPronto.contrafactual_corte).toBeLessThan(siguen.contrafactual_corte);
+    expect(paraPronto.tabla[3].bloques.detalle.aportaciones_netas)
+      .not.toBeCloseTo(siguen.tabla[3].bloques.detalle.aportaciones_netas, 2);
+  });
+
+  it('si las dos ventanas cubren todo el periodo evaluado, nada cambia', () => {
+    // Es el caso de los goldens (173 y 127 meses contra horizontes de 18 a 60):
+    // por eso el puerto sigue cuadrando celda a celda con el Excel.
+    const a = conVentanas(200, 200);
+    const b = conVentanas(200, 150);
+    expect(a.contrafactual_corte).toBeCloseTo(b.contrafactual_corte, 6);
+    expect(a.tabla[3].ventaja_corte).toBeCloseTo(b.tabla[3].ventaja_corte, 6);
+  });
+
+  it('quien no cotiza no aporta, aunque el otro sí', () => {
+    const soloUno = conVentanas(0, 96);
+    expect(soloUno.cliente_derivado.aport_mensual).toBeCloseTo(40_000 * 0.05, 6);
+  });
+});

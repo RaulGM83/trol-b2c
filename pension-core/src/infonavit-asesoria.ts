@@ -131,9 +131,17 @@ export function tasaInfonavit(salario: number): number {
   return tasa;
 }
 
+/**
+ * Un titular aporta su 5% patronal SÓLO mientras él sigue cotizando (contexto §3).
+ * Por eso la ventana es por titular y no una sola compartida: si uno se pensiona
+ * antes que el otro, su aportación se detiene ahí, en el crédito y en el contrafactual.
+ */
+interface AportanteInfonavit { mensual: number; meses: number }
+
 interface ClienteDerivado {
   ssv_total: number; salario: number; aport_mensual: number; tasa: number; plazo: number;
   tope_deduccion: number; marginal: number; monto_max: number; meses_cot: number;
+  aportantes: AportanteInfonavit[];
   t1: TitularInfonavit; t2: TitularInfonavit;
 }
 
@@ -142,8 +150,10 @@ function derivarCliente(cliente: ClienteInfonavit, sup: SupuestosInfonavit): Cli
   const t2 = cliente.titulares[1] ?? T2_VACIO;
   const ssv_total = t1.ssv + t2.ssv;
   const salario = t1.salario_imss + t2.salario_imss;
-  const aport = t1.salario_imss * sup.aport_patronal * (t1.meses_cotizando > 0 ? 1 : 0)
-              + t2.salario_imss * sup.aport_patronal * (t2.meses_cotizando > 0 ? 1 : 0);
+  const aportantes: AportanteInfonavit[] = [t1, t2]
+    .filter((t) => t.salario_imss > 0 && t.meses_cotizando > 0)
+    .map((t) => ({ mensual: t.salario_imss * sup.aport_patronal, meses: t.meses_cotizando }));
+  const aport = aportantes.reduce((acc, a) => acc + a.mensual, 0);
   const tasa1 = tasaInfonavit(t1.salario_imss);
   const tasa2 = t2.salario_imss > 0 ? tasaInfonavit(t2.salario_imss) : 0;
   let tasa: number;
@@ -164,7 +174,7 @@ function derivarCliente(cliente: ClienteInfonavit, sup: SupuestosInfonavit): Cli
     tope_deduccion: topeDeduccion, marginal,
     // Infonavit SUMA el monto máximo de cada titular en crédito conyugal.
     monto_max: sup.monto_max_credito * (dos ? 2 : 1),
-    meses_cot: Math.max(t1.meses_cotizando, t2.meses_cotizando), t1, t2,
+    meses_cot: Math.max(t1.meses_cotizando, t2.meses_cotizando), aportantes, t1, t2,
   };
 }
 
@@ -213,8 +223,8 @@ function simularMotor(op: OperacionInfonavit, dc: ClienteDerivado, sup: Supuesto
     if (op.credito > 0) {
       interes = saldo * i;
       ret = Math.min(op.pmt, saldo + interes);
-      aport = Math.min(m <= dc.meses_cot ? dc.aport_mensual : 0,
-                       Math.max(0, saldo + interes - ret));
+      const aportDelMes = dc.aportantes.reduce((acc, a) => acc + (m <= a.meses ? a.mensual : 0), 0);
+      aport = Math.min(aportDelMes, Math.max(0, saldo + interes - ret));
       saldo = Math.max(0, saldo + interes - ret - aport);
     }
     intAcum += interes;
@@ -229,10 +239,16 @@ function simularMotor(op: OperacionInfonavit, dc: ClienteDerivado, sup: Supuesto
 }
 
 function fvAportaciones(dc: ClienteDerivado, sup: SupuestosInfonavit, t: number): number {
-  const r = sup.r_ssv, mc = Math.min(t, dc.meses_cot);
-  if (r === 0) return dc.aport_mensual * mc;
-  const f = (Math.pow(1 + r, mc / 12) - 1) / (Math.pow(1 + r, 1 / 12) - 1);
-  return dc.aport_mensual * f * Math.pow(1 + r, (t - mc) / 12);
+  const r = sup.r_ssv;
+  let total = 0;
+  for (const a of dc.aportantes) {
+    const mc = Math.min(t, a.meses);
+    if (mc <= 0) continue;
+    if (r === 0) { total += a.mensual * mc; continue; }
+    const f = (Math.pow(1 + r, mc / 12) - 1) / (Math.pow(1 + r, 1 / 12) - 1);
+    total += a.mensual * f * Math.pow(1 + r, (t - mc) / 12);
+  }
+  return total;
 }
 
 function isrDevuelto(motor: SerieMotor, dc: ClienteDerivado, sup: SupuestosInfonavit, t: number): number {
