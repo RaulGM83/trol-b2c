@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
-import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm } from '@/components/trol3/ExpedienteAcciones';
+import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
@@ -98,6 +98,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const semillaAt = datosMap.get('semilla')?.obtenido_en ? fmtFecha(datosMap.get('semilla')?.obtenido_en) : null;
   const ultimaConsulta = (consultas ?? [])[0];
   const href = (t: string) => `/trabajo/p/${e.persona_id}?tab=${t}`;
+  // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
+  const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
 
   return (
     <div className="space-y-4">
@@ -142,8 +144,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 <Mini label="Cotiza" v={e.status_empleo ?? '—'} />
                 <Mini label="Derechos Ley 73" v={e.ley === 'Ley97' ? 'n/a' : e.conserva_derechos == null ? '—' : e.conserva_derechos ? 'Vigentes' : 'No vigentes'} />
                 <Mini label="Mod 40 retro hoy" v={e.mod40_retro_aplica == null ? '—' : e.mod40_retro_aplica ? `Sí · ${e.pension_mod40_retro ? fmtMXN(e.pension_mod40_retro) : ''}` : 'No'} />
-                <Mini label="Saldo Infonavit" v={e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} />
+                <Mini label="Saldo Infonavit" v={e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} sub={e.saldo_infonavit == null ? undefined : e.saldo_infonavit_vigente === false ? 'reportado, vencido' : e.saldo_infonavit_capa === 'validado' ? 'validado' : e.saldo_infonavit_capa === 'declarado' ? 'reportado' : 'estimado'} />
               </div>
+              <SaldoInfonavitAccion personaId={e.persona_id} saldo={e.saldo_infonavit == null ? null : Number(e.saldo_infonavit)} estimado={e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado)} capa={e.saldo_infonavit_capa ?? null} origen={e.saldo_infonavit_origen ?? null} en={e.saldo_infonavit_en ?? null} vigente={e.saldo_infonavit_vigente ?? null} credito={e.credito_infonavit ?? null} />
               {e.dolor_principal && <p className="mt-4 rounded-xl bg-cream p-3 text-sm">“{e.dolor_principal}”</p>}
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                 <span><b className={e.ley_vigente === false ? 'text-amber-700' : 'text-ink'}>Datos del IMSS (SISEC) al {e.ley_en ? fmtFecha(e.ley_en) : '—'}</b>{e.ley_en ? ` · hace ${Math.floor((Date.now() - new Date(e.ley_en).getTime()) / 86400000)} días` : ''}</span>
@@ -208,7 +211,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 saldosCorregidos={saldosCorregidos}
                 guardarScope={e.legacy_cliente_id ? 'cliente' : null}
               />
-              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>.</p>
+              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
             </>
           ) : (
             <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
@@ -234,7 +237,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} /></div>)}
+      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
 
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">
@@ -256,7 +259,12 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'viraal' && <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} datos={viraalDatos} />}
+      {tab === 'viraal' && (
+        <div className="space-y-2">
+          {avisoSaldoEstimado && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">La liquidez de la mesa incluye {e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} de Infonavit que <b>nadie ha confirmado</b>: es nuestro estimado. Confírmalo en <Link href={href('resumen')} className="underline">Resumen</Link> antes de comprometer un plan de pagos.</p>}
+          <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} datos={viraalDatos} />
+        </div>
+      )}
 
       {tab === 'bitacora' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -289,6 +297,6 @@ export default async function Expediente({ params, searchParams }: { params: { i
 function Kpi({ label, v, sub, green }: { label: string; v: string; sub?: string; green?: boolean }) {
   return <div><div className="text-[11px] uppercase tracking-wide text-muted">{label}</div><div className={`text-xl font-extrabold ${green ? 'text-green-700' : ''}`}>{v}</div>{sub ? <div className="text-[11px] text-muted">{sub}</div> : null}</div>;
 }
-function Mini({ label, v }: { label: string; v: string }) {
-  return <div><div className="text-[11px] text-muted">{label}</div><div className="font-semibold">{v}</div></div>;
+function Mini({ label, v, sub }: { label: string; v: string; sub?: string }) {
+  return <div><div className="text-[11px] text-muted">{label}</div><div className="font-semibold">{v}</div>{sub ? <div className="text-[10px] text-muted">{sub}</div> : null}</div>;
 }

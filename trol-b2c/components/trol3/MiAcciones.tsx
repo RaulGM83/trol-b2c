@@ -150,7 +150,7 @@ export function MisionCta({ mision, campos, compacto = false }: { mision: { codi
   }
   if (cta === 'infonavit') {
     if (compacto) return <Link href="/mi?tab=expediente" className={cls}>Contestar</Link>;
-    return <CompletarDatos campos={campos.filter((c) => ['credito_infonavit_vigente', 'saldo_infonavit'].includes(c.campo))} />;
+    return <InfonavitCta />;
   }
   if (cta === 'ahorrar') {
     const m = mision as { detalle?: string; clabe?: string | null };
@@ -248,10 +248,12 @@ export function DesbloquearDoc({ tipo, precio, maxPct, saldo }: { tipo: string; 
 }
 
 /** Subir un documento a la bóveda del cliente (+50 pts). Constancia de semanas → recalcula el expediente. */
-export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto = false }: { tipo: string; formatos?: string[]; parseable?: boolean; compacto?: boolean }) {
+export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto = false, tieneCurp = true }: { tipo: string; formatos?: string[]; parseable?: boolean; compacto?: boolean; tieneCurp?: boolean }) {
   const router = useRouter();
   const [archivo, setArchivo] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [curp, setCurp] = useState('');
+  const [pedirCurp, setPedirCurp] = useState(!tieneCurp && tipo === 'constancia_semanas');
   const [pending, start] = useTransition();
   const accept = formatos.map((f) => (f === 'jpg' ? '.jpg,.jpeg' : `.${f}`)).join(',');
   return (
@@ -260,15 +262,68 @@ export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto
         {archivo ? archivo.name.slice(0, 22) : 'Elegir archivo'}
         <input type="file" accept={accept} className="hidden" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); setMsg(null); }} />
       </label>
+      {archivo && pedirCurp && (
+        <input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase())} maxLength={18} placeholder="Tu CURP (18 caracteres)" className="w-[220px] rounded-lg border border-line px-2 py-1.5 font-mono text-xs uppercase" />
+      )}
       {archivo && (
-        <button disabled={pending} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50" onClick={() => start(async () => {
-          const fd = new FormData(); fd.set('tipo', tipo); fd.set('archivo', archivo);
-          const r = await miSubirDocumento(fd);
-          setMsg(r.ok ? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualiza tu expediente.' : '¡Guardado! +50 pts.') : r.error ?? 'No se pudo subir.');
-          if (r.ok) { setArchivo(null); router.refresh(); }
+        <button disabled={pending || (pedirCurp && curp.length > 0 && curp.length < 18)} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50" onClick={() => start(async () => {
+          const fd = new FormData(); fd.set('tipo', tipo); fd.set('archivo', archivo); if (curp) fd.set('curp', curp);
+          const r = (await miSubirDocumento(fd)) as { ok: boolean; error?: string; procesando?: boolean; aviso?: string; falta_curp?: boolean };
+          setMsg(r.ok ? (r.aviso ?? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualiza tu expediente.' : '¡Guardado! +50 pts.')) : r.error ?? 'No se pudo subir.');
+          if (r.ok && r.falta_curp) setPedirCurp(true);
+          if (r.ok && !r.falta_curp) { setArchivo(null); router.refresh(); }
         })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mi expediente' : 'Subir (+50 pts)'}</button>
       )}
       {msg && <span className="max-w-[220px] text-right text-[11px] text-green-700">{msg}</span>}
     </span>
+  );
+}
+
+/**
+ * El saldo de Infonavit lo tiene la persona en su cuenta; nosotros sólo lo estimamos.
+ * Este formulario se puede volver a usar aunque ya haya contestado antes: el saldo vence
+ * a los 180 días y el número real manda sobre nuestro estimado.
+ */
+export function InfonavitCta() {
+  const supabase = createClient();
+  const router = useRouter();
+  const [saldo, setSaldo] = useState('');
+  const [credito, setCredito] = useState<'' | 'si' | 'no'>('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const guardar = () => start(async () => {
+    setErr(null);
+    const n = Number(saldo.replace(/[^0-9.]/g, ''));
+    if (saldo && (!Number.isFinite(n) || n < 0)) return setErr('Escribe el saldo en pesos, sin letras.');
+    if (!saldo && !credito) return setErr('Contesta al menos una de las dos.');
+    if (saldo) {
+      const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: 'saldo_infonavit', p_valor: n });
+      if (error) return setErr(error.message);
+    }
+    if (credito) {
+      const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: 'credito_infonavit_vigente', p_valor: credito === 'si' });
+      if (error) return setErr(error.message);
+    }
+    setMsg('¡Gracias! Con tu saldo real las cuentas te van a salir bien (+10 pts).');
+    setSaldo(''); router.refresh();
+  });
+
+  return (
+    <div className="w-full">
+      <p className="mb-2 text-xs text-muted">Entra a <b>mi cuenta Infonavit</b> y busca tu saldo de la subcuenta de vivienda. Si no lo tienes a la mano, contesta lo que sí sepas.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={saldo} onChange={(e) => setSaldo(e.target.value)} inputMode="decimal" placeholder="Saldo de mi subcuenta de vivienda" className="w-60 rounded-lg border border-line px-2 py-1.5 text-sm" />
+        <select value={credito} onChange={(e) => setCredito(e.target.value as '' | 'si' | 'no')} className="rounded-lg border border-line px-2 py-1.5 text-sm">
+          <option value="">¿Ya usaste tu crédito?</option>
+          <option value="no">Todavía no</option>
+          <option value="si">Sí, ya lo usé</option>
+        </select>
+        <button disabled={pending} className={btnDark} onClick={guardar}>Guardar</button>
+      </div>
+      {msg && <p className="mt-1 text-xs text-green-700">{msg}</p>}
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+    </div>
   );
 }

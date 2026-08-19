@@ -130,3 +130,67 @@ export function CitaForm({ personaId }: { personaId: string }) {
     </div>
   );
 }
+
+/**
+ * Saldo Infonavit con su procedencia. Lo que la persona reporta de su propia cuenta
+ * le gana a nuestro estimado (migración 056); aquí se ve de dónde salió el número y
+ * se puede corregir sin salir del resumen.
+ */
+export function SaldoInfonavitAccion({ personaId, saldo, estimado, capa, origen, en, vigente, credito }: {
+  personaId: string; saldo: number | null; estimado: number | null;
+  capa: string | null; origen: string | null; en: string | null; vigente: boolean | null; credito: boolean | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState('');
+  const [cred, setCred] = useState<'' | 'si' | 'no'>(credito == null ? '' : credito ? 'si' : 'no');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const mxn = (n: number | null) => (n == null ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n));
+  const reportado = capa === 'declarado' || capa === 'validado';
+  const vencido = vigente === false;
+  const brecha = reportado && !vencido && estimado != null && saldo != null && Math.max(saldo, estimado) > 0
+    ? Math.abs(saldo - estimado) / Math.max(saldo, estimado) : 0;
+  const fecha = en ? new Date(en).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
+
+  const guardar = () => start(async () => {
+    const n = Number(val.replace(/[^0-9.]/g, ''));
+    if (!Number.isFinite(n) || n < 0) return setMsg('Escribe el saldo en pesos.');
+    const r = (await declararAsesor(personaId, 'saldo_infonavit', n, 'declarado')) as R;
+    if (!r.ok) return setMsg(r.error ?? 'error');
+    if (cred) await declararAsesor(personaId, 'credito_infonavit_vigente', cred === 'si', 'declarado');
+    setMsg(null); setVal(''); setOpen(false);
+  });
+
+  return (
+    <div className="mt-4 rounded-xl bg-cream p-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          <b className="text-sm">{mxn(saldo)}</b> de saldo Infonavit ·{' '}
+          {vencido ? <span className="text-amber-700">reportado {fecha} · vencido, conviene reconfirmar</span>
+            : capa === 'validado' ? <span className="text-green-700">validado{fecha ? ` el ${fecha}` : ''}</span>
+            : capa === 'declarado' ? <span className="text-amber-700">reportado por {origen === 'cliente' ? 'el cliente' : origen === 'asesor' ? 'un asesor' : 'Trol'}{fecha ? ` el ${fecha}` : ''}</span>
+            : <span className="text-blue-700">estimado por Trol con su historial de salarios, sin confirmar</span>}
+          {brecha > 0.2 && estimado != null ? <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">nuestro estimado era {mxn(estimado)}</span> : null}
+        </span>
+        <button className={btn} onClick={() => setOpen(!open)}>{reportado && !vencido ? 'Actualizar' : 'Confirmar el saldo real'}</button>
+      </div>
+      {!reportado || vencido ? (
+        <p className="mt-1 text-muted">Nuestro estimado sirve para detectar la oportunidad y sale de su historial de salarios. Para <b>formalizar una propuesta</b> necesitas el saldo real de su cuenta Infonavit.</p>
+      ) : null}
+      {open && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2">
+          <input value={val} onChange={(e) => setVal(e.target.value)} inputMode="decimal" placeholder={estimado ? `Saldo real (estimado ${mxn(estimado)})` : 'Saldo real en pesos'} className="w-64 rounded-lg border border-line px-2 py-1" />
+          <select value={cred} onChange={(e) => setCred(e.target.value as '' | 'si' | 'no')} className="rounded-lg border border-line px-2 py-1">
+            <option value="">¿Ya usó su crédito?</option>
+            <option value="no">No lo ha usado</option>
+            <option value="si">Ya lo usó / está vigente</option>
+          </select>
+          <button disabled={pending} className={btnDark} onClick={guardar}>Guardar</button>
+          <span className="text-muted">Vale 180 días; después se vuelve a pedir.</span>
+          {msg && <span className="text-red-600">{msg}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
