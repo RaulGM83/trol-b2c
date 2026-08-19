@@ -2,7 +2,7 @@
 // Server actions del espacio del cliente (/mi).
 import { revalidatePath } from 'next/cache';
 import { getPersonaMia } from '@/lib/trol3/server';
-import { subirDocumentoExpediente, notificarSisecPdf } from '@/lib/trol3/documentos';
+import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib/trol3/documentos';
 
 /** El cliente sube un documento a su bóveda (gana puntos vía trigger). Constancia de semanas → pipeline SISEC. */
 export async function miSubirDocumento(formData: FormData) {
@@ -14,7 +14,12 @@ export async function miSubirDocumento(formData: FormData) {
   try {
     const r = await subirDocumentoExpediente({ personaId: pid, tipo, file, actor: 'cliente', actorId: pid });
     let procesando = false;
-    if (tipo === 'constancia_semanas') procesando = (await notificarSisecPdf(pid, r.documentoId, r.path)).enviado;
+    if (tipo === 'constancia_semanas') {
+      const c = await asegurarCurp(pid, String(formData.get('curp') ?? ''), r.buffer, 'cliente', pid);
+      if (c.error) { revalidatePath('/mi'); return { ok: true, procesando: false, aviso: `Guardado (+50 pts), pero ${c.error}` }; }
+      if (!c.curp) { revalidatePath('/mi'); return { ok: true, procesando: false, falta_curp: true, aviso: 'Guardado (+50 pts). Para actualizar tu expediente necesitamos tu CURP: escríbela abajo y vuelve a subir.' }; }
+      procesando = (await notificarSisecPdf(pid, r.documentoId, r.path)).enviado;
+    }
     revalidatePath('/mi');
     return { ok: true, procesando };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'No se pudo subir.' }; }

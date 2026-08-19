@@ -2,7 +2,7 @@
 // Server actions del espacio de trabajo (RLS: miembro autenticado).
 import { revalidatePath } from 'next/cache';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
-import { subirDocumentoExpediente, notificarSisecPdf } from '@/lib/trol3/documentos';
+import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib/trol3/documentos';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -233,6 +233,10 @@ export async function subirDocumento(formData: FormData) {
     const r = await subirDocumentoExpediente({ personaId, tipo, file, actor: 'asesor', actorId: m.id });
     let procesando = false;
     if (tipo === 'constancia_semanas') {
+      // Sin CURP no hay pipeline: la tomamos del formulario o la leemos del PDF y la declaramos.
+      const c = await asegurarCurp(personaId, String(formData.get('curp') ?? ''), r.buffer, 'asesor', m.id);
+      if (c.error) { revalidatePath(`/trabajo/p/${personaId}`); return ok({ documento_id: r.documentoId, aviso: `Guardado, pero ${c.error}` }); }
+      if (!c.curp) { revalidatePath(`/trabajo/p/${personaId}`); return { ok: true, documento_id: r.documentoId, falta_curp: true, aviso: 'Guardado. No pude leer la CURP del PDF: escríbela y vuelve a subir para iniciar el cálculo.' }; }
       const n = await notificarSisecPdf(personaId, r.documentoId, r.path);
       procesando = n.enviado;
       if (!n.enviado) { revalidatePath(`/trabajo/p/${personaId}`); return ok({ documento_id: r.documentoId, aviso: `Guardado, pero no se pudo iniciar el cálculo (${n.motivo}).` }); }

@@ -9,7 +9,9 @@ const fmtFecha = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-
 
 type TipoSubida = { tipo: string; nombre: string; formatos: string[]; parseable: boolean };
 
-export function DocumentosPanel({ personaId, docs, legacy, tiposSubida = [] }: { personaId: string; docs: any[]; legacy: any | null; tiposSubida?: TipoSubida[] }) {
+export function DocumentosPanel({ personaId, docs, legacy, tiposSubida = [], tieneCurp = true }: { personaId: string; docs: any[]; legacy: any | null; tiposSubida?: TipoSubida[]; tieneCurp?: boolean }) {
+  const [curp, setCurp] = useState('');
+  const [pedirCurp, setPedirCurp] = useState(!tieneCurp);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [tipo, setTipo] = useState(tiposSubida[0]?.tipo ?? 'constancia_semanas');
@@ -46,13 +48,20 @@ export function DocumentosPanel({ personaId, docs, legacy, tiposSubida = [] }: {
             {tiposSubida.map((t) => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}
           </select>
           <input type="file" accept={(tipoSel?.formatos ?? ['pdf']).map((f) => (f === 'jpg' ? '.jpg,.jpeg' : `.${f}`)).join(',')} onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="mb-2 block w-full text-xs" />
+          {tipo === 'constancia_semanas' && pedirCurp && (
+            <div className="mb-2">
+              <input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase())} maxLength={18} placeholder="CURP de la persona (18 caracteres)" className="w-full rounded-lg border border-line px-3 py-2 font-mono text-sm uppercase" />
+              <p className="mt-1 text-[11px] text-muted">La persona no tiene CURP en el expediente. Intentamos leerla del PDF; si no se puede, la usamos de aquí. Sin CURP no corre el cálculo.</p>
+            </div>
+          )}
           <button disabled={subiendo || !archivo} className={btnDark} onClick={() => startSubida(async () => {
             if (!archivo) return;
             setSubMsg(null);
-            const fd = new FormData(); fd.set('personaId', personaId); fd.set('tipo', tipo); fd.set('archivo', archivo);
-            const r = (await subirDocumento(fd)) as R & { procesando?: boolean; aviso?: string };
+            const fd = new FormData(); fd.set('personaId', personaId); fd.set('tipo', tipo); fd.set('archivo', archivo); if (curp) fd.set('curp', curp);
+            const r = (await subirDocumento(fd)) as R & { procesando?: boolean; aviso?: string; falta_curp?: boolean };
             setSubMsg(r.ok ? (r.aviso ?? (r.procesando ? 'Guardado. Extrayendo datos y recalculando; en unos minutos se actualiza el expediente.' : 'Guardado en la bóveda.')) : r.error ?? 'error');
-            if (r.ok) setArchivo(null);
+            if (r.ok && r.falta_curp) setPedirCurp(true);
+            if (r.ok && !r.falta_curp) { setArchivo(null); if (r.procesando) setPedirCurp(false); }
           })}>{subiendo ? 'Subiendo…' : 'Subir documento'}</button>
           {subMsg && <p className="mt-2 text-xs text-muted">{subMsg}</p>}
         </section>

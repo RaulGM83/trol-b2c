@@ -206,7 +206,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                       {ultimo && (ultimo.url || desbloqueado) ? <a href={ultimo.url && /^https?:/.test(ultimo.url) ? ultimo.url : `/mi/doc/${ultimo.id}`} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a>
                        : ultimo ? <DesbloquearDoc tipo={c.tipo} precio={c.precio} maxPct={c.max_pct_puntos} saldo={e.puntos} />
                        : c.solicitable ? <SolicitarDoc tipo={c.tipo} precio={c.precio} /> : null}
-                      {c.sube_cliente ? <SubirDoc tipo={c.tipo} formatos={c.formatos ?? ['pdf']} parseable={!!c.parseable} compacto /> : null}
+                      {c.sube_cliente ? <SubirDoc tipo={c.tipo} formatos={c.formatos ?? ['pdf']} parseable={!!c.parseable} compacto tieneCurp={!!e.persona?.curp} /> : null}
                     </div>
                   </div>
                 </li>

@@ -11,6 +11,39 @@ const MAX_BYTES = 15 * 1024 * 1024;
 const MIME_OK: Record<string, string> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' };
 
 export type ActorDoc = 'cliente' | 'asesor' | 'recepcionista';
+export const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+
+/** Intenta leer la CURP del texto de un PDF (constancia de semanas IMSS). Best-effort. */
+export async function extraerCurpDePdf(buf: Buffer): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (b: Buffer, o?: unknown) => Promise<{ text: string }>;
+    const { text } = await pdfParse(buf, { max: 2 });
+    const m = (text || '').toUpperCase().match(/[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d/);
+    return m ? m[0] : null;
+  } catch { return null; }
+}
+
+/**
+ * Asegura que la persona tenga CURP antes de procesar una constancia: usa la que venga del formulario,
+ * si no, la que se lea del PDF. Devuelve la CURP final o null si no hay forma de obtenerla.
+ */
+export async function asegurarCurp(personaId: string, curpForm: string | null | undefined, pdf: Buffer | null, actor: ActorDoc, actorId?: string | null): Promise<{ curp: string | null; origen: 'persona' | 'formulario' | 'pdf' | null; error?: string }> {
+  const admin = createAdminClient();
+  const t3 = admin.schema('trol3');
+  const { data: p } = await t3.from('personas').select('curp').eq('id', personaId).maybeSingle();
+  if (p?.curp) return { curp: p.curp as string, origen: 'persona' };
+  let curp = (curpForm ?? '').trim().toUpperCase() || null;
+  let origen: 'formulario' | 'pdf' | null = curp ? 'formulario' : null;
+  if (curp && !CURP_RE.test(curp)) return { curp: null, origen: null, error: 'La CURP no es válida (18 caracteres).' };
+  if (!curp && pdf) { curp = await extraerCurpDePdf(pdf); origen = curp ? 'pdf' : null; }
+  if (!curp) return { curp: null, origen: null };
+  const { data: dup } = await t3.from('personas').select('id').eq('curp', curp).neq('id', personaId).is('merged_into', null).maybeSingle();
+  if (dup) return { curp: null, origen: null, error: 'Esa CURP ya pertenece a otra persona del expediente.' };
+  const { error } = await t3.rpc('declarar', { p_persona: personaId, p_campo: 'curp', p_valor: curp, p_actor: actor === 'cliente' ? 'cliente' : 'asesor', p_actor_id: actorId ?? null, p_capa: 'declarado' });
+  if (error) return { curp: null, origen: null, error: error.message };
+  return { curp, origen };
+}
 
 function limpiarNombre(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
@@ -45,7 +78,7 @@ export async function subirDocumentoExpediente(args: { personaId: string; tipo: 
     await admin.storage.from(BUCKET_EXPEDIENTE).remove([path]);
     throw new Error(error.message);
   }
-  return { documentoId: docId as string, path, parseable: !!cat.parseable };
+  return { documentoId: docId as string, path, parseable: !!cat.parseable, buffer: buf };
 }
 
 /** URL firmada de corta duración para abrir un documento de la bóveda. */
