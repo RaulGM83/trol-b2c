@@ -342,6 +342,7 @@ export async function cargarCotitular(personaId: string) {
 export async function guardarAsesoriaInfonavit(payload: {
   personaId: string; entrada: unknown; resultado: unknown; proyectoId: string | null;
   cotitularPersonaId: string | null; cotitularDatos: unknown | null; nota: string | null;
+  nombre?: string | null; horizonte?: number | null;
 }) {
   await requireMiembro();
   const { data, error } = await t3().rpc('guardar_asesoria_infonavit', {
@@ -352,9 +353,23 @@ export async function guardarAsesoriaInfonavit(payload: {
     p_cotitular: payload.cotitularPersonaId,
     p_cotitular_datos: payload.cotitularDatos,
     p_nota: payload.nota,
+    p_nombre: payload.nombre ?? null,
+    p_horizonte: payload.horizonte ?? null,
   });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${payload.personaId}`);
   if (payload.cotitularPersonaId) revalidatePath(`/trabajo/p/${payload.cotitularPersonaId}`);
   return ok({ id: data as string });
+}
+
+/**
+ * Archivar en vez de borrar: si el escenario ya se le entregó al cliente, hay que poder
+ * rastrear qué se le presentó aunque el asesor lo saque del historial.
+ */
+export async function archivarAsesoria(id: string, personaId: string, archivar = true) {
+  await requireMiembro();
+  const { error } = await t3().rpc('archivar_asesoria_infonavit', { p_id: id, p_archivar: archivar });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
 }

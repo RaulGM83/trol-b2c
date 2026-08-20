@@ -290,6 +290,13 @@ export interface FilaHorizonte {
   efectivo: number;
   valor_liquidez: number;
   ventaja_corte: number;
+  /**
+   * Rentas netas menos la retención REAL de cada mes, acumuladas.
+   * Negativo = el cliente puso dinero de su bolsa; positivo = el inmueble le dejó flujo.
+   */
+  flujo_neto_acum: number;
+  /** Aportación patronal del 5% que de verdad se aplicó al crédito en el periodo. */
+  aportaciones_aplicadas: number;
 }
 
 export interface ResultadoInfonavit {
@@ -374,6 +381,8 @@ export function calcular(
       },
       ventaja_venta: ventaja, plusvalia_equilibrio: equilibrio,
       rendimiento_conservar_12m: marginal12, efectivo: efv,
+      flujo_neto_acum: motor.flujo_acum[t],
+      aportaciones_aplicadas: aportAplicadas,
       valor_liquidez: valorCorte - ritmoInf,
       ventaja_corte: valorCorte - op.not_cliente - contrafactual(dc, sup, pal.corte_anios * 12),
     });

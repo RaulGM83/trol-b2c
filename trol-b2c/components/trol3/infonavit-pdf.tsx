@@ -69,7 +69,8 @@ export function infonavitDoc(a: Any) {
   const pal = ent.palancas ?? {};
   const sup = ent.supuestos ?? {};
   const tabla: Any[] = r.tabla ?? [];
-  const mejorH = r.veredicto?.mejor_horizonte;
+  // El plazo que se presenta lo elige el asesor; el del motor es sólo la sugerencia.
+  const mejorH = a.horizonte ?? r.veredicto?.mejor_horizonte;
   const mejor = tabla.find((f) => f.horizonte === mejorH) ?? tabla[tabla.length - 1];
   const det = mejor?.bloques?.detalle ?? {};
   const hayCredito = Number(op.credito ?? 0) > 0;

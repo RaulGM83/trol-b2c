@@ -10,7 +10,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { calcularAsesoriaInfonavit } from '@trol/pension-core';
-import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit } from '@/app/trabajo/actions';
+import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAsesoria } from '@/app/trabajo/actions';
 import type {
   ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
   SupuestosInfonavit, TitularInfonavit,
@@ -96,6 +96,7 @@ export interface AsesoriaGuardada {
   id: string; created_at: string; mejor_horizonte: number | null; ventaja_corte: number | null;
   credito: number | null; desarrollo: string | null; miembro: string | null;
   cotitular_nombre: string | null; es_cotitular: boolean; nota: string | null;
+  nombre: string | null; horizonte: number | null; efectivo: number | null;
 }
 
 type Origen = { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
@@ -125,6 +126,12 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [buscando, buscar] = useTransition();
   const [guardando, guardar] = useTransition();
   const [nota, setNota] = useState('');
+  // null = seguir la recomendación del motor. En cuanto el asesor elige, manda su elección:
+  // el óptimo no siempre es lo que el cliente quiere, y el plazo se conversa.
+  const [horizonteElegido, setHorizonteElegido] = useState<number | null>(null);
+  const [nombre, setNombre] = useState('');
+  const [nombreTocado, setNombreTocado] = useState(false);
+  const [archivando, archivar] = useTransition();
   const [msgGuardar, setMsgGuardar] = useState<string | null>(null);
   const conCotitular = modoCotitular !== 'no';
   const [t2, setT2] = useState<TitularInfonavit>({
@@ -187,18 +194,27 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   }
 
   const hs = r?.tabla.map((f) => f.horizonte) ?? supuestos.horizontes;
-  const mejor = r ? r.tabla.find((f) => f.horizonte === r.veredicto.mejor_horizonte) : null;
+  const sugerida = r ? r.tabla.find((f) => f.horizonte === r.veredicto.mejor_horizonte) ?? null : null;
+  const elegida = r ? r.tabla.find((f) => f.horizonte === (horizonteElegido ?? r.veredicto.mejor_horizonte)) ?? sugerida : null;
+  const horizonte = elegida?.horizonte ?? r?.veredicto.mejor_horizonte ?? null;
+  const sigueSugerencia = horizonte === r?.veredicto.mejor_horizonte;
+  // Default del nombre: a quien, donde y a cuanto tiempo. Con eso el historial se lee solo.
+  const nombreSugerido = [
+    cotitular ? `${cliente.nombre} y ${cotitular.nombre}` : cliente.nombre,
+    proyecto?.desarrollo,
+    horizonte ? `${horizonte} meses` : null,
+  ].filter(Boolean).join(' · ');
   const saldoSinConfirmar = saldo.capa === 'calculado' || saldo.vigente === false;
 
   // PnL interno del aliado (hoja `Interno`). Nunca se comparte con el cliente.
   const pnl = (() => {
-    if (!r || !proyecto || !mejor) return null;
+    if (!r || !proyecto || !elegida) return null;
     const margen = proyecto.escrituracion - (proyecto.costo_aliado ?? proyecto.escrituracion);
     const comisionDesarrollador = proyecto.escrituracion * proyecto.comision_desarrollador;
     const notarialesRegalados = proyecto.aliado_cubre_notariales ? proyecto.notariales_adicionales : 0;
     const inicio = margen + comisionDesarrollador - notarialesRegalados;
-    const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * mejor.horizonte : 0;
-    const reventa = aliadoVende ? -mejor.bloques.detalle.comision_venta : 0;
+    const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * elegida.horizonte : 0;
+    const reventa = aliadoVende ? -elegida.bloques.detalle.comision_venta : 0;
     return { margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
       total: inicio + gestion + reventa, sobreEscrituracion: (inicio + gestion + reventa) / proyecto.escrituracion };
   })();
@@ -255,6 +271,30 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             <Num value={pal.corte_anios} onChange={(v) => setP('corte_anios', v)} sufijo="años" />
           </Campo>
         </div>
+        {r && (
+          <div className="mt-3 border-t border-line pt-3">
+            <span className="text-[11px] font-semibold text-muted">Plazo de venta que vas a presentar</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+              {r.tabla.map((f) => {
+                const activo = f.horizonte === horizonte;
+                const esSugerido = f.horizonte === r.veredicto.mejor_horizonte;
+                return (
+                  <button key={f.horizonte} onClick={() => { setHorizonteElegido(f.horizonte); setNombreTocado(false); }}
+                    className={`rounded-lg px-2.5 py-1 font-semibold ${activo ? 'bg-ink text-white' : 'border border-line bg-white hover:bg-cream'}`}>
+                    {f.horizonte} meses{esSugerido ? <span className={activo ? ' text-lime' : ' text-muted'}> · sugerido</span> : null}
+                  </button>
+                );
+              })}
+              {!sigueSugerencia && (
+                <button className="text-[11px] underline text-muted" onClick={() => { setHorizonteElegido(null); setNombreTocado(false); }}>volver al sugerido</button>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] text-muted">
+              Manda en la propuesta, en el escenario resumido y en el PnL interno. El sugerido es el de mayor
+              ventaja al corte; si el cliente tiene una fecha en mente, ésa pesa más.
+            </p>
+          </div>
+        )}
         {proyecto && (
           <p className="mt-3 text-[11px] text-muted">
             Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
@@ -395,7 +435,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
 
           {/* ---------------- Bloques I–IV ---------------- */}
           <section className={card}>
-            <h2 className={h2}>De dónde sale la ventaja</h2>
+            <h2 className={h2}>De dónde sale la ventaja {horizonte ? <span className="normal-case text-muted">· plazo elegido: {horizonte} meses</span> : null}</h2>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
@@ -478,7 +518,11 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               <div><div className="text-[11px] text-white/60">Plusvalía de equilibrio</div><div className="text-2xl font-extrabold">{pct(r.veredicto.plusvalia_equilibrio, 2)}</div></div>
               <div><div className="text-[11px] text-white/60">Fuente que más aporta</div><div className="text-2xl font-extrabold capitalize">{r.veredicto.fuente_dominante}</div></div>
             </div>
-            <p className="mt-3 text-sm text-white/80">{r.veredicto.lectura_salida}. Ventaja total al corte: <b className="text-lime">{money(mejor?.ventaja_corte)}</b> contra no hacer nada.</p>
+            <p className="mt-3 text-sm text-white/80">
+              {r.veredicto.lectura_salida}. Ventaja total al corte con el plazo que vas a presentar
+              ({horizonte} meses): <b className="text-lime">{money(elegida?.ventaja_corte)}</b> contra no hacer nada.
+              {!sigueSugerencia && sugerida ? <span className="text-white/50"> Con los {sugerida.horizonte} meses que sugiere el motor serían {money(sugerida.ventaja_corte)}.</span> : null}
+            </p>
             <p className="mt-2 text-[11px] text-white/50">
               El veredicto responde a las palancas actuales: es el punto de partida de la conversación, no la sustituye.
               Marca los supuestos como supuestos y presenta el contrafactual honesto.
@@ -529,7 +573,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <div className="mb-3 flex flex-wrap gap-4 text-xs">
                     <label className="flex items-center gap-1.5"><input type="checkbox" checked={aliadoVende} onChange={(e) => setAliadoVende(e.target.checked)} /> El aliado gestiona la venta</label>
                     <label className="flex items-center gap-1.5"><input type="checkbox" checked={aliadoRenta} onChange={(e) => setAliadoRenta(e.target.checked)} /> El aliado gestiona la renta</label>
-                    <span className="text-muted">Horizonte: {mejor?.horizonte} meses (el del veredicto)</span>
+                    <span className="text-muted">Horizonte: {horizonte} meses</span>
                   </div>
                   <table className="w-full">
                     <tbody>
@@ -566,11 +610,15 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
           <b> presentada</b> y queda la nota en la bitácora.
           {cotitular ? <> El escenario aparecerá también en el expediente de <b>{cotitular.nombre}</b>; el valor se cuenta sólo aquí para no duplicar el embudo.</> : null}
         </p>
-        <div className="mt-3 flex flex-wrap items-start gap-2">
-          <input value={nota} onChange={(ev) => setNota(ev.target.value)} placeholder="Nota de la sesión (opcional)" className="min-w-[240px] flex-1 rounded-lg border border-line px-2 py-1 text-sm" />
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <input value={nombreTocado ? nombre : nombreSugerido} onChange={(ev) => { setNombre(ev.target.value); setNombreTocado(true); }}
+            placeholder="Nombre del escenario" className="rounded-lg border border-line px-2 py-1 text-sm" />
+          <input value={nota} onChange={(ev) => setNota(ev.target.value)} placeholder="Nota de la sesión (opcional)" className="rounded-lg border border-line px-2 py-1 text-sm" />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button disabled={!r || guardando} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
             onClick={() => guardar(async () => {
-              if (!r || !proyecto || !inmueble) return;
+              if (!r || !proyecto || !inmueble || !horizonte) return;
               const res = (await guardarAsesoriaInfonavit({
                 personaId,
                 entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: pal, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada } },
@@ -579,10 +627,12 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 cotitularPersonaId: cotitular?.personaId ?? null,
                 cotitularDatos: modoCotitular === 'manual' ? t2 : null,
                 nota: nota || null,
+                nombre: (nombreTocado ? nombre : nombreSugerido) || null,
+                horizonte,
               })) as R;
               setMsgGuardar(res.ok ? 'Guardada.' : res.error ?? 'error');
             })}>Guardar asesoría</button>
-          {msgGuardar && <span className="py-1.5 text-xs text-muted">{msgGuardar}</span>}
+          {msgGuardar && <span className="text-xs text-muted">{msgGuardar}</span>}
         </div>
 
         {historial.length > 0 && (
@@ -590,16 +640,24 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             {historial.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
                 <span>
-                  {new Date(a.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  {a.desarrollo ? ` · ${a.desarrollo}` : ''}
-                  {a.mejor_horizonte ? ` · ${a.mejor_horizonte} meses` : ''}
-                  {a.ventaja_corte != null ? ` · ventaja ${money(Number(a.ventaja_corte))}` : ''}
+                  <b>{a.nombre ?? a.desarrollo ?? 'Escenario'}</b>
+                  <span className="text-muted">
+                    {' · '}{new Date(a.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {a.horizonte ? ` · ${a.horizonte} meses` : ''}
+                    {a.efectivo != null ? ` · recibe ${money(Number(a.efectivo))}` : ''}
+                    {a.ventaja_corte != null ? ` · ventaja ${money(Number(a.ventaja_corte))}` : ''}
+                    {a.miembro ? ` · ${a.miembro}` : ''}
+                    {a.nota ? ` · ${a.nota}` : ''}
+                  </span>
                   {a.es_cotitular ? <span className="ml-1 rounded bg-cream px-1.5 py-0.5">como cotitular</span> : null}
                   {a.cotitular_nombre ? <span className="ml-1 text-muted">con {a.cotitular_nombre}</span> : null}
-                  {a.miembro ? <span className="text-muted"> · {a.miembro}</span> : null}
-                  {a.nota ? <span className="text-muted"> · {a.nota}</span> : null}
                 </span>
-                <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Propuesta PDF</Link>
+                <span className="flex flex-wrap gap-1.5">
+                  <Link href={`/trabajo/infonavit/resumen/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Resumen WhatsApp</Link>
+                  <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Propuesta PDF</Link>
+                  <button disabled={archivando} className="rounded-lg border border-line px-2 py-0.5 text-muted hover:bg-cream disabled:opacity-50"
+                    onClick={() => archivar(async () => { await archivarAsesoria(a.id, personaId, true); })}>Archivar</button>
+                </span>
               </li>
             ))}
           </ul>

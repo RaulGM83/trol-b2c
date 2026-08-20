@@ -271,3 +271,39 @@ describe('la aportación de cada titular respeta su propia ventana', () => {
     expect(soloUno.cliente_derivado.aport_mensual).toBeCloseTo(40_000 * 0.05, 6);
   });
 });
+
+describe('acumulados expuestos para el escenario resumido', () => {
+  it('el flujo neto acumulado es negativo cuando el cliente desembolsa', () => {
+    // Crédito grande contra una renta chica: la retención se come la renta.
+    const r = calcular(
+      cliente(titular({ ssv: 100_000, salario_imss: 60_000 })),
+      inmueble({ escrituracion: 2_500_000, renta: 6_000 }),
+    );
+    expect(r.operacion.flujo_mensual).toBeLessThan(0);
+    expect(r.tabla[0].flujo_neto_acum).toBeLessThan(0);
+    // a más meses, más pone de su bolsa
+    expect(r.tabla[3].flujo_neto_acum).toBeLessThan(r.tabla[0].flujo_neto_acum);
+  });
+
+  it('sin crédito el flujo acumulado es la renta neta íntegra', () => {
+    const r = calcular(
+      cliente(titular({ ssv: 2_000_000 })),
+      inmueble({ escrituracion: 1_500_000, notariales_credito: 30_000 }),
+    );
+    expect(r.operacion.credito).toBe(0);
+    montoCerca(r.tabla[0].flujo_neto_acum, r.operacion.renta_neta * 18);
+  });
+
+  it('las aportaciones aplicadas paran cuando se acaba la ventana de cotización', () => {
+    const corta = calcular(cliente(titular({ meses_cotizando: 6 })), inmueble({ escrituracion: 2_000_000 }));
+    const larga = calcular(cliente(titular({ meses_cotizando: 60 })), inmueble({ escrituracion: 2_000_000 }));
+    expect(corta.tabla[3].aportaciones_aplicadas).toBeLessThan(larga.tabla[3].aportaciones_aplicadas);
+    expect(corta.tabla[3].aportaciones_aplicadas).toBeGreaterThan(0);
+  });
+
+  it('sin crédito no hay aportación que aplicar', () => {
+    const r = calcular(cliente(titular({ ssv: 2_000_000 })), inmueble({ escrituracion: 1_000_000 }));
+    expect(r.operacion.credito).toBe(0);
+    expect(r.tabla[3].aportaciones_aplicadas).toBe(0);
+  });
+});

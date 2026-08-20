@@ -89,8 +89,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // presentó una propuesta, tiene que seguir siendo consultable.
   {
     const { data: ases } = await db.from('infonavit_asesorias')
-      .select('id,created_at,persona_id,cotitular_persona_id,proyecto_id,miembro_id,mejor_horizonte,ventaja_corte,credito,nota')
+      .select('id,created_at,persona_id,cotitular_persona_id,proyecto_id,miembro_id,mejor_horizonte,horizonte,ventaja_corte,efectivo,credito,nota,nombre')
       .or(`persona_id.eq.${params.id},cotitular_persona_id.eq.${params.id}`)
+      .is('archivada_at', null)
       .order('created_at', { ascending: false }).limit(20);
     const filas = (ases ?? []) as Any[];
     if (filas.length) {
@@ -112,6 +113,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
           miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null,
           cotitular_nombre: otro ? nmap.get(otro) ?? null : null,
           es_cotitular: esCotitular, nota: a.nota ?? null,
+          nombre: a.nombre ?? null, horizonte: a.horizonte ?? a.mejor_horizonte ?? null,
+          efectivo: a.efectivo ?? null,
         };
       });
     }
