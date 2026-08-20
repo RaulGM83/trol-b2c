@@ -31,7 +31,7 @@ const mx = (n: Any) => {
 
 function Fila({ k, v, sub }: { k: string; v: string; sub?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', marginTop: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', marginTop: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div style={{ fontSize: 26, color: DARK }}>{k}</div>
         <div style={{ fontSize: 30, fontWeight: 700, color: DARK }}>{v}</div>
@@ -43,7 +43,7 @@ function Fila({ k, v, sub }: { k: string; v: string; sub?: string }) {
 
 function Titulo({ t }: { t: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', marginTop: 26 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', marginTop: 20 }}>
       <div style={{ fontSize: 20, fontWeight: 700, color: GRAY, letterSpacing: 1.5 }}>{t.toUpperCase()}</div>
       <div style={{ display: 'flex', width: 46, height: 4, backgroundColor: LIME, marginTop: 7 }} />
     </div>
@@ -81,13 +81,21 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const flujo = Number(fila.flujo_neto_acum ?? 0);
   const plusvalia = Number(fila.bloques?.detalle?.plusvalia_100 ?? 0);
   const recibe = Number(fila.efectivo ?? 0);
+  // Lo que el esquema genera CONTRA no hacer nada, medido al corte: el efectivo de la venta
+  // reinvertido (parte a bajar deudas, parte al rendimiento alterno) menos lo que su saldo
+  // habría valido quieto en Infonavit al mismo corte.
+  const ventajaCorte = Number(fila.ventaja_corte ?? 0);
+  const corte = Number(pal.corte_anios ?? 10);
+  const pctDeuda = Math.round(Number(pal.pct_deuda ?? 0) * 100);
+  const tasaDeuda = Math.round(Number(pal.tasa_deuda ?? 0) * 100);
+  const alterno = Math.round(Number(pal.alterno ?? 0) * 100);
   const logoW = Math.round(74 * LOGO_TROL_RATIO);
 
   return new ImageResponse(
     (
       <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', fontFamily: 'Inter' }}>
         {/* ---- banda ---- */}
-        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '38px 56px 34px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '32px 56px 28px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={LOGO_TROL_BLANCO} width={logoW} height={74} alt="" />
           <div style={{ fontSize: 42, fontWeight: 700, color: '#fff', marginTop: 22, lineHeight: 1.15 }}>{inm && ent.proyecto?.desarrollo}</div>
@@ -122,11 +130,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         </div>
 
         {/* ---- lo que recibe ---- */}
-        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '30px 56px 26px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '26px 56px 24px' }}>
           <div style={{ fontSize: 26, color: '#C9CCD0' }}>{`Recibe al vender a ${h} meses`}</div>
-          <div style={{ fontSize: 92, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 4 }}>{mx(recibe)}</div>
-          <div style={{ fontSize: 20, color: '#9DA1A6', marginTop: 8 }}>
+          <div style={{ fontSize: 84, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 2 }}>{mx(recibe)}</div>
+          <div style={{ fontSize: 20, color: '#9DA1A6', marginTop: 6 }}>
             Ya liquidado el crédito, con rentas y devolución de ISR
+          </div>
+          <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 20, marginBottom: 16 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontSize: 24, color: '#C9CCD0' }}>{`Generó contra dejarlo en Infonavit, a ${corte} años`}</div>
+            <div style={{ fontSize: 46, fontWeight: 700, color: '#fff' }}>{(ventajaCorte >= 0 ? '+' : '−') + mx(ventajaCorte)}</div>
+          </div>
+          <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 6 }}>
+            {`Reinvirtiendo el efectivo: ${pctDeuda}% a bajar deudas al ${tasaDeuda}% y el resto al ${alterno}% anual`}
           </div>
         </div>
 
