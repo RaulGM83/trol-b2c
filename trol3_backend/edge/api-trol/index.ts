@@ -8,6 +8,7 @@
 //   /handoff         {persona_id|telefono, motivo?}
 //   /consulta        {persona_id|telefono, tipo, actor?, actor_id?, pagador?, notificar?, motivo?, forzar?, proveedor?}
 //   /consulta/resultado {consulta_id, estado, datos?, documentos?, resultado?, error?, fecha_dato?}
+//                       documentos: [{tipo, nombre, base64?|storage_path?|url?, gating?}] — el base64 se sube a la bóveda
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -31,6 +32,9 @@ function normalizaAfore(v: string): string {
   return v;
 }
 
+function curpNormalizada(v: string): string { return v.toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function curpValida(v: string): boolean { return /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9][0-9]$/.test(v); }
+
 async function personaId(b: Record<string, unknown>): Promise<string> {
   if (b.persona_id) return String(b.persona_id);
   if (b.telefono) {
@@ -43,6 +47,42 @@ async function personaId(b: Record<string, unknown>): Promise<string> {
     return (alta as { persona_id: string }).persona_id;
   }
   throw new Error("falta persona_id o telefono");
+}
+
+type DocEntrada = { tipo?: string; nombre?: string; base64?: string; contenido?: string; storage_path?: string; url?: string; gating?: string; precio_mxn?: unknown };
+
+/**
+ * Sube a la bóveda privada (bucket `expediente`) los documentos que lleguen como base64
+ * y los deja listos para trol3.resultado_consulta con su storage_path.
+ * Los que ya traen storage_path o url pasan sin cambios; si la subida falla se conserva la entrada
+ * sin archivo para no perder el resto del resultado.
+ */
+async function subirDocumentosBase64(consultaId: string, docs: DocEntrada[]): Promise<DocEntrada[]> {
+  if (!Array.isArray(docs) || !docs.length) return [];
+  const conBase64 = docs.some((d) => d?.base64 || d?.contenido);
+  if (!conBase64) return docs;
+  const { data: c } = await db.from("consultas").select("persona_id").eq("id", consultaId).maybeSingle();
+  const pid = (c as { persona_id?: string } | null)?.persona_id;
+  if (!pid) return docs.map(({ base64: _b, contenido: _c, ...resto }) => resto);
+  const out: DocEntrada[] = [];
+  for (const d of docs) {
+    const raw = d?.base64 ?? d?.contenido;
+    if (!raw || d?.storage_path) { const { base64: _b, contenido: _c, ...resto } = d ?? {}; out.push(resto); continue; }
+    try {
+      const limpio = String(raw).replace(/^data:[^;]+;base64,/, "").replace(/\s/g, "");
+      const bin = Uint8Array.from(atob(limpio), (ch) => ch.charCodeAt(0));
+      const tipo = d.tipo ?? "otro";
+      const nombreArchivo = (d.nombre ?? tipo).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60);
+      const path = `${pid}/${tipo}/${Date.now()}-${nombreArchivo}.pdf`;
+      const up = await db.storage.from("expediente").upload(path, bin, { contentType: "application/pdf", upsert: false });
+      const { base64: _b, contenido: _c, ...resto } = d;
+      out.push(up.error ? resto : { ...resto, storage_path: path });
+    } catch {
+      const { base64: _b, contenido: _c, ...resto } = d ?? {};
+      out.push(resto);
+    }
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -91,7 +131,10 @@ Deno.serve(async (req) => {
       }
       case "/declarar": {
         const pid = await personaId(b);
-        if (b.campo === "curp" && typeof b.valor === "string") b.valor = (b.valor as string).toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (b.campo === "curp" && typeof b.valor === "string") {
+          b.valor = curpNormalizada(b.valor as string);
+          if (!curpValida(b.valor as string)) return json({ ok: false, error: "curp_formato_invalido", mensaje: "CURP no válida (18 caracteres, formato oficial). Pídela de nuevo." }, 400);
+        }
         const { data, error } = await db.rpc("declarar", { p_persona: pid, p_campo: b.campo, p_valor: b.valor, p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_capa: "declarado" });
         if (error) return json({ ok: false, error: error.message, hint: (error as { hint?: string }).hint }, 400);
         return json({ ok: true, dato_id: data, persona_id: pid });
@@ -117,7 +160,10 @@ Deno.serve(async (req) => {
             else if (/^(true|false)$/i.test(s)) valor = s.toLowerCase() === "true";
             else valor = s;
           }
-          if (campo === "curp" && typeof valor === "string") valor = valor.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          if (campo === "curp" && typeof valor === "string") {
+            valor = curpNormalizada(valor);
+            if (!curpValida(valor as string)) { out["curp"] = { error: "formato_invalido", mensaje: "CURP no válida: deben ser 18 caracteres con el formato oficial. Pídela de nuevo." }; continue; }
+          }
           if (campo === "afore_actual" && typeof valor === "string") valor = normalizaAfore(valor);
           if (campo === "status_empleo" && typeof valor === "string") valor = valor.toLowerCase();
           const { data, error } = await db.rpc("declarar", { p_persona: pid, p_campo: campo, p_valor: valor, p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_capa: "declarado" });
@@ -144,7 +190,10 @@ Deno.serve(async (req) => {
         return json({ persona_id: pid, ...(data as object) });
       }
       case "/consulta/resultado": {
-        const { data, error } = await db.rpc("resultado_consulta", { p_consulta: b.consulta_id, p_estado: b.estado ?? "completada", p_datos: b.datos ?? {}, p_documentos: b.documentos ?? [], p_resultado: b.resultado ?? null, p_error: b.error ?? null, p_fecha_dato: b.fecha_dato ?? null });
+        // Los documentos pueden venir como base64 (p.ej. el PDF del ISSSTE de Nubarium):
+        // se suben a la bóveda privada y se guarda su storage_path, no la URL del proveedor.
+        const docs = await subirDocumentosBase64(String(b.consulta_id ?? ""), (b.documentos ?? []) as DocEntrada[]);
+        const { data, error } = await db.rpc("resultado_consulta", { p_consulta: b.consulta_id, p_estado: b.estado ?? "completada", p_datos: b.datos ?? {}, p_documentos: docs, p_resultado: b.resultado ?? null, p_error: b.error ?? null, p_fecha_dato: b.fecha_dato ?? null });
         if (error) throw error;
         return json(data);
       }

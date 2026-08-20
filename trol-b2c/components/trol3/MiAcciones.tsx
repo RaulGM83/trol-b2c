@@ -126,6 +126,22 @@ export function MisionCta({ mision, campos, compacto = false }: { mision: { codi
       </div>
     );
   }
+  if (cta === 'issste') {
+    // Sí → la consulta al ISSSTE (Nubarium) se dispara sola desde la base; No → la misión queda cerrada.
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button disabled={pending} className={cls} onClick={() => start(async () => {
+          const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: 'cotiza_issste', p_valor: true });
+          setMsg(error ? error.message : 'Gracias: ya estamos consultando tu historial del ISSSTE (+10 pts).'); router.refresh();
+        })}>Sí, trabajé en gobierno</button>
+        <button disabled={pending} className={clsAlt} onClick={() => start(async () => {
+          const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: 'cotiza_issste', p_valor: false });
+          setMsg(error ? error.message : 'Listo, lo anotamos (+10 pts).'); router.refresh();
+        })}>No</button>
+        {msg && <span className="text-xs text-green-700">{msg}</span>}
+      </div>
+    );
+  }
   if (cta === 'completar') {
     if (compacto) return <Link href="/mi?tab=expediente" className={cls}>Completar</Link>;
     return <CompletarDatos campos={campos.slice(0, 4)} />;
