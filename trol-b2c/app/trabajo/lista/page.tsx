@@ -13,6 +13,8 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
   const codigo = searchParams.codigo;
   const nivel = searchParams.nivel ? Number(searchParams.nivel) : undefined;
   const orden = searchParams.orden ?? 'valor';
+  const DIR_DEFAULT: Record<string, boolean> = { persona: true, oportunidad: true, estado: true }; // true = asc
+  const asc = searchParams.dir ? searchParams.dir === 'asc' : (DIR_DEFAULT[orden] ?? false);
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const PAGE = 50;
 
@@ -30,9 +32,12 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
   else q = q.in('codigo', codigosLista);
   if (nivel) q = q.in('codigo', (catalogo ?? []).filter((c: Any) => c.nivel === nivel).map((c: Any) => c.codigo));
   if (mias) q = q.or(`dueno_id.eq.${m.id},especialista_id.eq.${m.id}`);
-  if (orden === 'urgencia') q = q.order('urgencia_score', { ascending: false }).order('valor_estimado', { ascending: false, nullsFirst: false });
-  else if (orden === 'reciente') q = q.order('detectada_en', { ascending: false });
-  else q = q.order('valor_estimado', { ascending: false, nullsFirst: false }).order('urgencia_score', { ascending: false });
+  if (orden === 'urgencia') q = q.order('urgencia_score', { ascending: asc }).order('valor_estimado', { ascending: false, nullsFirst: false });
+  else if (orden === 'reciente') q = q.order('detectada_en', { ascending: asc });
+  else if (orden === 'persona') q = q.order('personas(nombre)', { ascending: asc });
+  else if (orden === 'oportunidad') q = q.order('codigo', { ascending: asc }).order('valor_estimado', { ascending: false, nullsFirst: false });
+  else if (orden === 'estado') q = q.order('estado', { ascending: asc }).order('valor_estimado', { ascending: false, nullsFirst: false });
+  else q = q.order('valor_estimado', { ascending: asc, nullsFirst: asc }).order('urgencia_score', { ascending: false });
   q = q.range((page - 1) * PAGE, page * PAGE - 1);
   const { data: ops, count, error } = await q;
 
@@ -64,7 +69,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
           <h2 className="mb-2 mt-4 text-sm font-bold">Orden</h2>
           <div className="flex flex-wrap gap-2 text-xs">
             {[['valor', 'Valor'], ['urgencia', 'Urgencia'], ['reciente', 'Recientes']].map(([k, l]) => (
-              <Link key={k} href={params({ orden: k, page: undefined })} className={`rounded-full border px-3 py-1 ${orden === k ? 'bg-ink text-white' : ''}`}>{l}</Link>
+              <Link key={k} href={params({ orden: k, dir: undefined, page: undefined })} className={`rounded-full border px-3 py-1 ${orden === k ? 'bg-ink text-white' : ''}`}>{l}</Link>
             ))}
           </div>
         </div>
@@ -95,7 +100,20 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
         <div className="overflow-hidden rounded-2xl border border-line bg-white">
           <table className="w-full text-sm">
             <thead className="bg-cream text-left text-xs uppercase tracking-wide text-muted">
-              <tr><th className="px-3 py-2">Persona</th><th className="px-3 py-2">Oportunidad</th><th className="px-3 py-2 text-right">Valor est.</th><th className="px-3 py-2">Urgencia</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2">Motivo</th></tr>
+              <tr>
+                {([['persona', 'Persona', false], ['oportunidad', 'Oportunidad', false], ['valor', 'Valor est.', true], ['urgencia', 'Urgencia', false], ['estado', 'Estado', false]] as [string, string, boolean][]).map(([k, l, right]) => {
+                  const activo = orden === k;
+                  const sigDir = activo ? (asc ? 'desc' : 'asc') : ((DIR_DEFAULT[k] ?? false) ? 'asc' : 'desc');
+                  return (
+                    <th key={k} className={`px-3 py-2 ${right ? 'text-right' : ''}`}>
+                      <Link href={params({ orden: k, dir: sigDir, page: undefined })} className={`inline-flex items-center gap-1 hover:text-ink ${activo ? 'text-ink' : ''}`}>
+                        {l}{activo ? <span>{asc ? '▲' : '▼'}</span> : null}
+                      </Link>
+                    </th>
+                  );
+                })}
+                <th className="px-3 py-2">Motivo</th>
+              </tr>
             </thead>
             <tbody>
               {(ops ?? []).map((o: Any) => {

@@ -127,12 +127,21 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
   if (error) return fail(error);
   const pid = (data as { persona_id: string }).persona_id;
   await db.from('personas').update({ cabecera_id: m.id }).eq('id', pid).is('cabecera_id', null);
+  let aviso: string | undefined;
   if (c) {
     // declarar() espeja la CURP en personas y dispara el checklist de identidad.
     const r = await db.rpc('declarar', { p_persona: pid, p_campo: 'curp', p_valor: c, p_actor: 'asesor', p_actor_id: m.id, p_capa: 'declarado' });
-    if (r.error) return { ok: true, persona_id: pid, aviso: `Persona creada, pero no se guardó la CURP: ${r.error.message}` };
+    if (r.error) aviso = `Persona creada, pero no se guardó la CURP: ${r.error.message}`;
   }
-  return ok({ persona_id: pid });
+  // Alta desde plataforma = cliente cálido: se pide la información pensional de una vez (Jordan).
+  // Sin CURP la consulta queda pendiente y se dispara sola en cuanto alguien la capture.
+  if (!aviso) {
+    await db.rpc('pedir_consulta', {
+      p_persona: pid, p_tipo: 'imss_historial', p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol',
+      p_notificar: false, p_motivo: 'alta_plataforma', p_forzar: false, p_proveedor: 'jordan',
+    });
+  }
+  return { ok: true as const, persona_id: pid, aviso };
 }
 
 export async function solicitarDiagnosticoAvanzado(personaId: string) {

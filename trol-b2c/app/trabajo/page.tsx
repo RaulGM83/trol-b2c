@@ -9,32 +9,54 @@ const takoUrl = (tel10: string) => `https://portal.takohub.com/trol-financiero/p
 const fmtFecha = (s?: string | null) => (s ? new Date(s).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'America/Mexico_City' }) : '—');
 const fmtTel = (t?: string | null) => (t && t.length === 10 ? `${t.slice(0, 2)} ${t.slice(2, 6)} ${t.slice(6)}` : t ?? '');
 
-export default async function TrabajoHome({ searchParams }: { searchParams: { q?: string } }) {
+// Dirección por defecto de cada columna (texto asc, números/fechas desc)
+const DIR_DEFAULT: Record<string, 'asc' | 'desc'> = { nombre: 'asc', curp: 'asc', telefono: 'asc', ley: 'asc', edad: 'desc', semanas: 'desc', creado: 'desc' };
+
+export default async function TrabajoHome({ searchParams }: { searchParams: { q?: string; orden?: string; dir?: string } }) {
   const m = await requireMiembro();
   const q = (searchParams.q ?? '').trim();
+  const orden = searchParams.orden ?? 'actividad';
+  const dir = (searchParams.dir === 'asc' || searchParams.dir === 'desc') ? searchParams.dir : (DIR_DEFAULT[orden] ?? 'desc');
   const db = t3();
-  // Una sola RPC: con búsqueda (>=4 chars o teléfono) filtra; sin búsqueda trae la actividad reciente.
-  const r = await db.rpc('buscar_personas', { p_q: q, p_limit: q.length >= 4 ? 40 : 30 });
+  // Una sola RPC: con búsqueda (>=4 chars o teléfono) filtra; sin búsqueda trae la actividad reciente (u ordenado por la columna elegida).
+  const r = await db.rpc('buscar_personas', { p_q: q, p_limit: q.length >= 4 ? 40 : 30, p_orden: orden, p_dir: dir });
   const rows: Any[] = r.data ?? [];
   const error: string | null = r.error?.message ?? null;
+
+  const Th = ({ col, children, right }: { col: string; children: React.ReactNode; right?: boolean }) => {
+    const activo = orden === col;
+    const sig = activo && dir === (DIR_DEFAULT[col] ?? 'desc') ? (dir === 'asc' ? 'desc' : 'asc') : (DIR_DEFAULT[col] ?? 'desc');
+    const sp = new URLSearchParams(); if (q) sp.set('q', q); sp.set('orden', col); sp.set('dir', activo ? sig : (DIR_DEFAULT[col] ?? 'desc'));
+    return (
+      <th className={`px-3 py-2 ${right ? 'text-right' : ''}`}>
+        <Link href={`/trabajo?${sp.toString()}`} className={`inline-flex items-center gap-1 hover:text-ink ${activo ? 'text-ink' : ''}`}>
+          {children}{activo ? <span>{dir === 'asc' ? '▲' : '▼'}</span> : null}
+        </Link>
+      </th>
+    );
+  };
+
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h1 className="text-xl font-extrabold">Personas {q ? <span className="text-sm font-normal text-muted">· resultados para “{q}”</span> : <span className="text-sm font-normal text-muted">· actividad reciente</span>}</h1>
-        <AltaPersonaBoton />
+        <h1 className="text-xl font-extrabold">Personas {q ? <span className="text-sm font-normal text-muted">· resultados para “{q}”</span> : <span className="text-sm font-normal text-muted">{orden === 'actividad' ? '· actividad reciente' : '· ordenado'}</span>}</h1>
+        <div className="flex items-center gap-2">
+          {orden !== 'actividad' && <Link href={q ? `/trabajo?q=${encodeURIComponent(q)}` : '/trabajo'} className="text-xs text-muted underline">Quitar orden</Link>}
+          <AltaPersonaBoton />
+        </div>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="overflow-hidden rounded-2xl border border-line bg-white">
         <table className="w-full text-sm">
           <thead className="bg-cream text-left text-xs uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-3 py-2">Nombre</th>
-              <th className="px-3 py-2">CURP</th>
-              <th className="px-3 py-2">Teléfono</th>
-              <th className="px-3 py-2">Edad</th>
-              <th className="px-3 py-2">Ley</th>
-              <th className="px-3 py-2">Semanas</th>
-              <th className="px-3 py-2">Creado</th>
+              <Th col="nombre">Nombre</Th>
+              <Th col="curp">CURP</Th>
+              <Th col="telefono">Teléfono</Th>
+              <Th col="edad">Edad</Th>
+              <Th col="ley">Ley</Th>
+              <Th col="semanas">Semanas</Th>
+              <Th col="creado">Creado</Th>
             </tr>
           </thead>
           <tbody>
