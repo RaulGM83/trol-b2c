@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { svgAPng, svgABlob, descargar, nombreArchivoQr } from '@/lib/marca/qr-png';
 
 export type LinkAsesor = {
   codigo: string;
@@ -13,6 +14,9 @@ export type LinkAsesor = {
   altas: number;
   clics: number;
 };
+
+/** Lado del PNG de imprenta. A 2048 px un QR de 41 módulos da ~50 px por módulo. */
+const PNG_LADO = 2048;
 
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50';
 
@@ -38,6 +42,39 @@ function CopiarBoton({ url }: { url: string }) {
   );
 }
 
+function DescargarBotones({ codigo, svg, impreso }: { codigo: string; svg: string; impreso?: boolean }) {
+  const [estado, setEstado] = useState<'' | 'trabajando' | 'error'>('');
+  return (
+    <>
+      <button
+        className={btn}
+        title="Descargar el QR en vectorial"
+        onClick={() => descargar(nombreArchivoQr(codigo, 'svg'), svgABlob(svg))}
+      >
+        SVG
+      </button>
+      {impreso && (
+        <button
+          className={btn}
+          disabled={estado === 'trabajando'}
+          title={`PNG de ${PNG_LADO}×${PNG_LADO} px, por si la imprenta no digiere el SVG`}
+          onClick={async () => {
+            setEstado('trabajando');
+            try {
+              descargar(nombreArchivoQr(codigo, 'png'), await svgAPng(svg, PNG_LADO));
+              setEstado('');
+            } catch {
+              setEstado('error');
+            }
+          }}
+        >
+          {estado === 'trabajando' ? 'PNG…' : estado === 'error' ? 'PNG ✕' : 'PNG'}
+        </button>
+      )}
+    </>
+  );
+}
+
 export function LinksEquipo({ links }: { links: LinkAsesor[] }) {
   const [qr, setQr] = useState<string | null>(null);
   if (!links.length) return <p className="text-sm text-muted">No hay códigos de asesor registrados.</p>;
@@ -59,6 +96,7 @@ export function LinksEquipo({ links }: { links: LinkAsesor[] }) {
             <div className="flex gap-1">
               <CopiarBoton url={l.url} />
               <button className={btn} onClick={() => setQr(qr === l.codigo ? null : l.codigo)}>QR</button>
+              <DescargarBotones codigo={l.codigo} svg={l.svg} impreso={l.impreso} />
             </div>
           </div>
           <input
