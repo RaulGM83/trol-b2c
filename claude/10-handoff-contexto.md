@@ -85,7 +85,7 @@ El disparador: Vero reportó 5 clientes sin reporte. El diagnóstico real fue qu
 
 > **Ojo con la numeración:** los números **056–061 están duplicados**. Se aplicaron dos juegos en paralelo desde chats distintos: el de Infonavit (19-ago) y el de ISSSTE (20-ago). Además la 065 se aplicó *antes* que las 056/057 de ISSSTE. Guiarse por `supabase_migrations.schema_migrations`, no por el número.
 
-038–043 aliados · 044 `buscar_personas` · 045 triggers evento secdef · 046–047 CDA · 048 lista de trabajo · 049 slug · 050 rol coach · 051 coaches/citas · 052 mejoravit · 053 bóveda · 054 `mi_expediente` · 055 triggers secdef · **056–061 (juego Infonavit)** prioridad\_capa, v\_expediente saldos, saldo Infonavit del cliente, misión Infonavit, copy, proyectos e inmuebles · **056–061 (juego ISSSTE)** orden en `buscar_personas`, despacho sin CURP, ISSSTE, campos extra, documentos sin duplicar · 062 asesorías Infonavit y relaciones · 063 `miembros.firma` · 064 inventario notariales · 065 nombre/horizonte/archivado · **066** watchdog de consultas · **067** puente destapado · **068** CURP corregible · **069** identidad por confirmar · **070** CURP bloqueada \+ motor · **071** fix del clasificador · **072** carrera del alta · **073** duplicados y fusión · **074** `mi_identidad` · **075** misión confirma tu CURP.
+038–043 aliados · 044 `buscar_personas` · 045 triggers evento secdef · 046–047 CDA · 048 lista de trabajo · 049 slug · 050 rol coach · 051 coaches/citas · 052 mejoravit · 053 bóveda · 054 `mi_expediente` · 055 triggers secdef · **056–061 (juego Infonavit)** prioridad\_capa, v\_expediente saldos, saldo Infonavit del cliente, misión Infonavit, copy, proyectos e inmuebles · **056–061 (juego ISSSTE)** orden en `buscar_personas`, despacho sin CURP, ISSSTE, campos extra, documentos sin duplicar · 062 asesorías Infonavit y relaciones · 063 `miembros.firma` · 064 inventario notariales · 065 nombre/horizonte/archivado · **066** watchdog de consultas · **067** puente destapado · **068** CURP corregible · **069** identidad por confirmar · **070** CURP bloqueada \+ motor · **071** fix del clasificador · **072** carrera del alta · **073** duplicados y fusión · **074** `mi_identidad` · **075** misión confirma tu CURP · **076** códigos de invitación y atribución · **077** el alta resuelve el código \+ puntos al capturar CURP · **078** `search_path` de `registrar_clic` (pgcrypto en `extensions`).
 
 ### Sesión 21-ago (tarde) — el parche de UI, ya en producción
 
@@ -97,16 +97,31 @@ Commits **`689f59e`** (tarjeta de identidad en `/mi`, botón Reprocesar en el ex
 - **`mi_identidad().editable` también es `false` cuando todavía no hay CURP** (`estatus = 'sin_curp'`), no solo cuando está bloqueada. Decidir por `estatus`, nunca por `editable` a secas, o a alguien sin CURP se le dice “ya fue validada”.
 - **`fusionar_personas` devuelve `movidas`** con valores mezclados: número de filas por tabla, o el string `'conflicto_conservado'` cuando el update chocó con un índice único. Mandarlo a JSX tal cual truena con *“Objects are not valid as a React child”*. Se aplana con `combinarMovidas()` en `trol-b2c/lib/trol3/duplicados.ts`.
 
+### Sesión 21-ago (tarde) — atribución de links (migraciones 076–078)
+
+Cerró el diagnóstico de `claude/17`: el `ref:` sí llegaba, pero nadie lo resolvía y no había denominador.
+
+- **Registro único `trol3.codigos_invitacion`** con cuatro tipos: `asesor`, `cliente`, `prensa`, `campania`. Códigos del equipo **`lore`, `vero`, `moni`, `andrea`, `raul`**, más **`lorena-455a`** (el link original de Lore, que ya traía 3 altas) y **`elasegurador`** para el QR de la revista.
+- **`normalizar_codigo`** limpia el prefijo `ref:`, baja a minúsculas, tira todo lo que no sea `[a-z0-9_-]` y descarta basura (`na`, `null`, `undefined`, `test`, `prueba`, `{{codigo}}`…). Ese era el bug de fondo: `enlazar_legacy` buscaba `^ref:.+` y Tako manda `lorena-455a` **sin** prefijo, así que el `referidor_persona_id` nunca se resolvía.
+- **`resolver_codigo`** busca en el catálogo y, si no está, cae a `cliente_por_codigo_referido` para los ~14k códigos históricos de `clientes.codigo_referido`. Un código desconocido se conserva igual como `campania`, para no perder la traza.
+- **El alta resuelve el código, y el código manda sobre el canal**: si el código dice `asesor`, eso gana sobre lo que venga en `canal`.
+- **`clics_invitacion`** con la IP **hasheada con sal** (nunca en claro), alimentada por `registrar_clic` desde `/i/[codigo]`. Es el denominador que faltaba.
+- **`v_embudo_codigo`**: clics → altas → CURP → consulta completada → asesorado, por código.
+- **Puntos:** 100 al referidor **al capturar la CURP** del referido (`referido_diagnostico`), y solo si quien refirió es **cliente** — un asesor del equipo se lleva el crédito de origen, no puntos.
+- **Backfill de 21 códigos históricos** rescatados de `campania_origen`. Hoy son 22 códigos distintos en `personas.codigo_origen` sobre 1 653 personas.
+- **Tako ya manda el canal correcto** (`organico` / `meta` / `referido`); se acabó el `meta` fijo que hacía inservible el campo.
+
+UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espera acotada, ver gotcha de serverless) y `/trabajo/atribucion` tiene el embudo ordenable, el filtro por tipo y los links del equipo con copiar y QR.
+
+> **La vista esconde los códigos nuevos.** `v_embudo_codigo` es un `FULL JOIN` altas⋈clics: un código aparece solo si ya tuvo ≥1 alta o ≥1 clic, así que los seis links recién creados no salían. El panel los fusiona con `codigos_invitacion` para que se vean en ceros. Y los históricos vienen con `tipo`/`etiqueta`/`miembro` en **null**, no en `'campania'`.
+
 ---
 
 ## 4\. Pendientes (en el orden acordado)
 
-1. **Atribución de links y campañas** (`claude/17`). Diagnóstico cerrado el 21-ago:  
-   - El `ref:` **sí llega**: Tako lo manda a `/alta` como `campania` y queda en `personas.campania_origen`. El link de Lore produjo 3 personas el 20-ago.  
-   - Pero **`enlazar_legacy` busca `^ref:.+`** y Tako manda `lorena-455a` sin prefijo → el `referidor_persona_id` nunca se resuelve.  
-   - Tako manda `canal='meta'` fijo, así que el canal no sirve para nada.  
-   - No hay tabla de clics: no sabemos el denominador.  
-   - Falta: normalizador de código, canal `asesor` (Lore es del equipo: crédito de origen, sin puntos) vs `referido` de cliente (puntos **al capturar CURP**), tabla `clics_invitacion`, ruta `/i/[codigo]` que registre, panel por código y canal de prensa para El Asegurador.  
+1. **Atribución** — lo construido ya está en producción; falta cerrarlo:  
+   - **Validar el registro de clics con tráfico real.** `clics_invitacion` está en cero: probado end-to-end pero sin un solo clic de verdad todavía. Hasta que entre tráfico, toda la columna clic→alta dice "sin datos de clic".  
+   - **Contratación del referido (300 pts, `referido_contrata`)**: no está automatizada. Hoy la carga el administrador a mano. Los 100 de `referido_diagnostico` sí se otorgan solos al capturar la CURP.  
 2. **Un teléfono, una CURP**: falta el `principal` **único** por número (índice), el reparto de los 51 casos de familiares y la revisión de los ~18 candidatos que quedan. La UI ya está en `/trabajo/duplicados` (fusionar, ligar como familiares y elegir dueño del número). En Tako: preguntar con quién habla cuando el número tenga más de un expediente activo.  
 3. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
 4. **Agenda propia sobre Google Calendar** (opción 2).  
@@ -141,6 +156,8 @@ Commits **`689f59e`** (tarjeta de identidad en `/mi`, botón Reprocesar en el ex
 - **Los binarios de `trol-b2c/node_modules/.bin` pueden apuntar al checkout viejo** `~/Documents/Claude/Projects/b2c experiencia/`. Cuando pasa, `npx next` y `npx tsc` corren desde **esa otra copia** y el build carga **dos React distintos**: revienta al prerenderizar con `TypeError: Cannot read properties of null (reading 'useContext')` en `/`, `/404`, `/500` y `/_not-found`. Se ve con `find node_modules/.bin -maxdepth 1 -type l -lname '*Documents*'`; se arregla con `rm -rf node_modules/.bin && npm install` (quedan relativos: `../next/dist/bin/next`). Primo del mismo problema en `node_modules/@trol/pension-core`, que además tiene una docena de symlinks huérfanos al lado (`.broken`, `.f`, `.zz`…) — inertes, pero confunden.  
 - **Un `tsc --noEmit` limpio puede ser mentira** si faltan dependencias o el binario es el equivocado. Verificar con `node -e "require.resolve('@trol/pension-core')"` y, ante la duda, inyectar un error a propósito para confirmar que el typecheck sí muerde.  
 - Política de proveedor: `belvo_first` para canales del bot; `jordan_first` para linkedin/referido\_vip, para asesores y para el alta desde la plataforma.  
+- **`digest()` de pgcrypto vive en el esquema `extensions`.** Una función con `search_path = trol3, public` truena al usarlo con `42883: function digest(...) does not exist`. Y truena **aunque la rama del `CASE` no se tome**: Postgres resuelve la referencia al *planear*, no al ejecutar, así que `case when p_ip is null then null else encode(digest(...)) end` falla incluso con `p_ip` nulo. Fue exactamente lo que dejó a `registrar_clic` sin insertar nada (arreglado en la **078**: `search_path` con `extensions` y `extensions.digest(...)` calificado).  
+- **`exception when others then return` convierte el fallo en silencio absoluto.** Es lo que hizo que el bug anterior tardara en verse: la ruta redirigía bien, la RPC devolvía sin error y la tabla se quedaba vacía. Si una función es best-effort, que al menos deje `raise warning` antes de tragarse la excepción. Con este patrón viven hoy `registrar_clic`, `tg_puntos_referidor` y `tg_public_procesos`.  
 - **`pedir_consulta` dispara de verdad.** `tg_consulta_despachar` hace el POST al proveedor en el mismo INSERT: llamarla "para probar" cuesta dinero y manda una consulta real.  
 - Los datos de catálogo **no los atrapa ningún test**: un flag mal sembrado solo se ve simulando.
 
