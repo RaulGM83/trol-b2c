@@ -87,28 +87,33 @@ El disparador: Vero reportó 5 clientes sin reporte. El diagnóstico real fue qu
 
 038–043 aliados · 044 `buscar_personas` · 045 triggers evento secdef · 046–047 CDA · 048 lista de trabajo · 049 slug · 050 rol coach · 051 coaches/citas · 052 mejoravit · 053 bóveda · 054 `mi_expediente` · 055 triggers secdef · **056–061 (juego Infonavit)** prioridad\_capa, v\_expediente saldos, saldo Infonavit del cliente, misión Infonavit, copy, proyectos e inmuebles · **056–061 (juego ISSSTE)** orden en `buscar_personas`, despacho sin CURP, ISSSTE, campos extra, documentos sin duplicar · 062 asesorías Infonavit y relaciones · 063 `miembros.firma` · 064 inventario notariales · 065 nombre/horizonte/archivado · **066** watchdog de consultas · **067** puente destapado · **068** CURP corregible · **069** identidad por confirmar · **070** CURP bloqueada \+ motor · **071** fix del clasificador · **072** carrera del alta · **073** duplicados y fusión · **074** `mi_identidad` · **075** misión confirma tu CURP.
 
+### Sesión 21-ago (tarde) — el parche de UI, ya en producción
+
+Commits **`689f59e`** (tarjeta de identidad en `/mi`, botón Reprocesar en el expediente, pantalla de duplicados) y **`acfbbf4`** (render seguro del resultado de fusión). Ambos desplegados en Vercel desde `main`.
+
+- **Duplicados:** se ejecutaron **5 fusiones reales sin pérdida de datos** (5 expedientes absorbidos sobre 4 conservados; uno era un grupo de tres). Los grupos bajaron de 73 a 69 y quedan **~18 candidatos por revisar** contra 51 de familiares compartiendo teléfono. La pantalla no ofrece fusionar cuando las CURPs difieren: ahí el botón es **“Ligar como familiares”** (`relacionar_personas` con `tipo='familiar'`) más un selector de dueño del número que escribe `contactos.principal`.
+- **Identidad:** el flujo se probó con un **caso RENAPO real** (hoy hay 1 persona en `estatus_identidad = 'por_confirmar'`). Nota para quien siga: todavía no hay eventos `curp_corregida` ni `curp_confirmada_con_problema` en la base, así que el lado de escritura —corregir y confirmar— no ha dejado rastro aún.
+- **`curp_duplicada` no es una excepción.** `declarar` emite el evento, deja la CURP anterior y **retorna normal**. No hay error que atrapar: la UI lo detecta releyendo `mi_identidad()` y comparando contra lo que tecleó el cliente. `curp_confirmada` sí levanta excepción, y su texto viene en `error.hint`, no en `message`.
+- **`mi_identidad().editable` también es `false` cuando todavía no hay CURP** (`estatus = 'sin_curp'`), no solo cuando está bloqueada. Decidir por `estatus`, nunca por `editable` a secas, o a alguien sin CURP se le dice “ya fue validada”.
+- **`fusionar_personas` devuelve `movidas`** con valores mezclados: número de filas por tabla, o el string `'conflicto_conservado'` cuando el update chocó con un índice único. Mandarlo a JSX tal cual truena con *“Objects are not valid as a React child”*. Se aplana con `combinarMovidas()` en `trol-b2c/lib/trol3/duplicados.ts`.
+
 ---
 
 ## 4\. Pendientes (en el orden acordado)
 
-1. **Parche de UI de la sesión 21-ago** (lo único que falta para que todo lo anterior se vea):  
-   - `/mi`: tarjeta de confirmar/corregir CURP sobre `mi_identidad()`, `declarar('curp')` y `confirmar_curp()`. Misión `curp_confirmar` ya viene en `mi_misiones`.  
-   - `/trabajo/p/[id]`: botón **Reprocesar** sobre `reprocesar_consulta`, mostrando el último error desde `v_ultima_consulta_imss` y con selector de proveedor.  
-   - `/trabajo`: pantalla de duplicados sobre `v_personas_duplicadas` con botón Fusionar.  
-   - Manejar los errores `curp_confirmada` y `curp_duplicada` (mostrar el `hint`, no reventar).  
-2. **Atribución de links y campañas** (`claude/17`). Diagnóstico cerrado el 21-ago:  
+1. **Atribución de links y campañas** (`claude/17`). Diagnóstico cerrado el 21-ago:  
    - El `ref:` **sí llega**: Tako lo manda a `/alta` como `campania` y queda en `personas.campania_origen`. El link de Lore produjo 3 personas el 20-ago.  
    - Pero **`enlazar_legacy` busca `^ref:.+`** y Tako manda `lorena-455a` sin prefijo → el `referidor_persona_id` nunca se resuelve.  
    - Tako manda `canal='meta'` fijo, así que el canal no sirve para nada.  
    - No hay tabla de clics: no sabemos el denominador.  
    - Falta: normalizador de código, canal `asesor` (Lore es del equipo: crédito de origen, sin puntos) vs `referido` de cliente (puntos **al capturar CURP**), tabla `clics_invitacion`, ruta `/i/[codigo]` que registre, panel por código y canal de prensa para El Asegurador.  
-3. **Un teléfono, una CURP**: `principal` único por número y reparto manual de los 51 casos. En Tako: preguntar con quién habla cuando el número tenga más de un expediente activo.  
-4. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
-5. **Agenda propia sobre Google Calendar** (opción 2).  
-6. **Estado de cuenta AFORE parseable**.  
-7. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
-8. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
-9. Decomisión final de HubSpot y apagar el dual-write a `public`.
+2. **Un teléfono, una CURP**: falta el `principal` **único** por número (índice), el reparto de los 51 casos de familiares y la revisión de los ~18 candidatos que quedan. La UI ya está en `/trabajo/duplicados` (fusionar, ligar como familiares y elegir dueño del número). En Tako: preguntar con quién habla cuando el número tenga más de un expediente activo.  
+3. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
+4. **Agenda propia sobre Google Calendar** (opción 2).  
+5. **Estado de cuenta AFORE parseable**.  
+6. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
+7. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
+8. Decomisión final de HubSpot y apagar el dual-write a `public`.
 
 ---
 
@@ -133,6 +138,8 @@ El disparador: Vero reportó 5 clientes sin reporte. El diagnóstico real fue qu
 - Desde SQL **no se pueden borrar objetos de Storage** (`storage.protect_delete`); usar la Storage API.  
 - Para probar webhooks externos desde el sandbox: `curl` bloqueado, pero `extensions.http(...)` sale.  
 - Vercel deploya al pushear a `main`. Si muestra un commit viejo: `git fetch origin && git push`.  
+- **Los binarios de `trol-b2c/node_modules/.bin` pueden apuntar al checkout viejo** `~/Documents/Claude/Projects/b2c experiencia/`. Cuando pasa, `npx next` y `npx tsc` corren desde **esa otra copia** y el build carga **dos React distintos**: revienta al prerenderizar con `TypeError: Cannot read properties of null (reading 'useContext')` en `/`, `/404`, `/500` y `/_not-found`. Se ve con `find node_modules/.bin -maxdepth 1 -type l -lname '*Documents*'`; se arregla con `rm -rf node_modules/.bin && npm install` (quedan relativos: `../next/dist/bin/next`). Primo del mismo problema en `node_modules/@trol/pension-core`, que además tiene una docena de symlinks huérfanos al lado (`.broken`, `.f`, `.zz`…) — inertes, pero confunden.  
+- **Un `tsc --noEmit` limpio puede ser mentira** si faltan dependencias o el binario es el equivocado. Verificar con `node -e "require.resolve('@trol/pension-core')"` y, ante la duda, inyectar un error a propósito para confirmar que el typecheck sí muerde.  
 - Política de proveedor: `belvo_first` para canales del bot; `jordan_first` para linkedin/referido\_vip, para asesores y para el alta desde la plataforma.  
 - **`pedir_consulta` dispara de verdad.** `tg_consulta_despachar` hace el POST al proveedor en el mismo INSERT: llamarla "para probar" cuesta dinero y manda una consulta real.  
 - Los datos de catálogo **no los atrapa ningún test**: un flag mal sembrado solo se ve simulando.
