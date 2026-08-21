@@ -176,11 +176,13 @@ export async function fusionarPersonas(conservar: string, absorber: string[], mo
   if (!motivo.trim()) return fail(new Error('Escribe por qué son la misma persona.'));
   if (!absorber.length) return fail(new Error('No hay expedientes que absorber.'));
   const db = t3();
-  const hechas: string[] = [];
+  // `movidas` viene como objeto tabla → número | 'conflicto_conservado'. Se pasa crudo
+  // al cliente y allá se aplana con resumenMovidas(); nunca se manda a JSX tal cual.
+  const hechas: { id: string; movidas: unknown }[] = [];
   for (const id of absorber) {
-    const { error } = await db.rpc('fusionar_personas', { p_conservar: conservar, p_absorber: id, p_motivo: motivo });
+    const { data, error } = await db.rpc('fusionar_personas', { p_conservar: conservar, p_absorber: id, p_motivo: motivo });
     if (error) return { ...fail(error), fusionadas: hechas };
-    hechas.push(id);
+    hechas.push({ id, movidas: (data as { movidas?: unknown } | null)?.movidas ?? null });
   }
   revalidatePath('/trabajo/duplicados');
   revalidatePath(`/trabajo/p/${conservar}`);

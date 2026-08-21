@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3, fmtFecha, type Any } from '@/lib/trol3/server';
 import { FusionarGrupo, LigarFamiliaresGrupo, type PersonaDup } from '@/components/trol3/DuplicadosAcciones';
+import { clasificarGrupo } from '@/lib/trol3/duplicados';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Duplicados · Trol' };
@@ -24,16 +25,9 @@ export default async function Duplicados() {
     : { data: [] as Any[] };
   const pmap = new Map(((personas ?? []) as Any[]).map((p) => [p.id, p as PersonaDup]));
 
-  const filas = ((grupos ?? []) as Any[]).map((g) => {
-    const miembros = ((g.personas ?? []) as string[]).map((id) => pmap.get(id)).filter(Boolean) as PersonaDup[];
-    const curps = [...new Set(miembros.map((p) => p.curp).filter(Boolean))];
-    // Dos CURPs distintas = dos personas. `fusionar_personas` también lo rechaza.
-    const familiares = curps.length >= 2;
-    // Sugerimos conservar (o dejar dueño) al que tiene CURP; a igualdad, el más antiguo.
-    const orden = [...miembros].sort((a, b) =>
-      (a.curp ? 0 : 1) - (b.curp ? 0 : 1) || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')));
-    return { llave: g.llave as string, motivo: g.motivo as string, miembros, curps, familiares, sugerido: orden[0]?.id ?? '' };
-  }).filter((f) => f.miembros.length > 1);
+  const filas = ((grupos ?? []) as Any[])
+    .map((g) => ({ llave: g.llave as string, motivo: g.motivo as string, ...clasificarGrupo<PersonaDup>((g.personas ?? []) as string[], pmap) }))
+    .filter((f) => f.miembros.length > 1);
 
   const candidatos = filas.filter((f) => !f.familiares);
   const familias = filas.filter((f) => f.familiares);
