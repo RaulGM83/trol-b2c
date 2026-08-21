@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc } from '@/components/trol3/MiAcciones';
+import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, IDENTIDAD_VISIBLE, type Identidad } from '@/components/trol3/MiAcciones';
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { getSemillaV2Cliente } from '@/lib/cliente';
@@ -24,11 +24,15 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   if (!pid) return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
   const db = t3();
   await db.rpc('mi_bienvenida');
-  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas')]);
+  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad')]);
   if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}.</main>;
   const e = x as Any;
   const tab = TABS.some(([t]) => t === searchParams.tab) || searchParams.tab === 'calculadora' ? (searchParams.tab as string) : 'hoy';
   const misiones: Any[] = (mis as Any[]) ?? [];
+  // `editable` de mi_identidad() también es false cuando todavía no hay CURP; la tarjeta
+  // sólo sale cuando el IMSS ya la rechazó, no en el camino normal.
+  const identidad = (ident as Identidad | null) ?? null;
+  const identidadVisible = identidad && IDENTIDAD_VISIBLE.includes(identidad.estatus) ? identidad : null;
   const ck: Any[] = e.checklist ?? [];
   const alertas = ck.filter((c) => c.estado === 'alerta');
   const datos: Any[] = e.datos ?? [];
@@ -36,7 +40,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const beneficios: string[] = e.beneficios ?? [];
   const nombre = (e.persona?.nombre ?? '').split(' ')[0];
   const brecha = e.pension_base && e.pension_maxima ? Number(e.pension_maxima) - Number(e.pension_base) : null;
-  const siguiente = misiones.find((m) => m.estado === 'atencion') ?? misiones.find((m) => m.estado === 'recomendada') ?? misiones.find((m) => m.estado === 'pendiente' && m.nivel === 1) ?? misiones.find((m) => m.estado === 'pendiente');
+  // La misión de CURP ya vive en su propia tarjeta; no la repetimos en "tu siguiente paso".
+  const candidatas = identidadVisible ? misiones.filter((m) => m.codigo !== 'curp_confirmar') : misiones;
+  const siguiente = candidatas.find((m) => m.estado === 'atencion') ?? candidatas.find((m) => m.estado === 'recomendada') ?? candidatas.find((m) => m.estado === 'pendiente' && m.nivel === 1) ?? candidatas.find((m) => m.estado === 'pendiente');
   const hechas = misiones.filter((m) => m.estado === 'hecho').length;
   const progreso = Math.round((100 * hechas) / Math.max(1, misiones.length));
   const href = (t: string) => `/mi?tab=${t}`;
@@ -72,6 +78,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             <div className="mt-1 text-[11px] text-white/60">{hechas} de {misiones.length} misiones · {progreso}%</div>
           </section>
 
+          {identidadVisible ? <IdentidadCard identidad={identidadVisible} /> : null}
+
           {jugada ? (
             <section className="rounded-2xl bg-lime p-5 text-ink">
               <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">{(jugada as Any).recomendada ? `Tu mejor jugada · la recomienda ${(jugada as Any).experto ?? 'tu experto'}` : 'Tu mejor jugada (por confirmar con tu experto)'}</div>
@@ -88,7 +96,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               <h2 className="mt-1 text-lg font-extrabold">{siguiente.titulo}</h2>
               <p className="mt-1 text-sm text-muted">{siguiente.detalle ?? siguiente.por_que}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted"><span>{siguiente.esfuerzo}</span>{siguiente.puntos ? <span>· +{siguiente.puntos} pts</span> : null}{siguiente.valor ? <span>· hasta {fmtMXN(siguiente.valor)}/año</span> : null}</div>
-              <div className="mt-3"><MisionCta mision={siguiente} campos={faltan} /></div>
+              <div className="mt-3"><MisionCta mision={siguiente} campos={faltan} identidad={identidad} /></div>
             </section>
           )}
 
@@ -137,7 +145,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                         </div>
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
                           <span>{m.esfuerzo}{m.puntos ? ` · +${m.puntos} pts` : ''}{m.valor ? ` · hasta ${fmtMXN(m.valor)}/año` : ''}{m.urgencia ? ` · antes del ${fmtFecha(m.urgencia)}` : ''}</span>
-                          {m.estado !== 'hecho' && m.estado !== 'bloqueado' && <MisionCta mision={m} campos={faltan} compacto />}
+                          {m.estado !== 'hecho' && m.estado !== 'bloqueado' && <MisionCta mision={m} campos={faltan} identidad={identidad} compacto />}
                         </div>
                       </li>
                     );

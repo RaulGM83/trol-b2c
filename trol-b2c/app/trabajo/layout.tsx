@@ -22,6 +22,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
             <Link href="/trabajo/eventos" className="rounded-lg px-2 py-1 hover:bg-cream">Actividad</Link>
             <Link href="/trabajo/aliados" className="rounded-lg px-2 py-1 hover:bg-cream">Aliados</Link>
             <Link href="/trabajo/proyectos" className="rounded-lg px-2 py-1 hover:bg-cream">Inmuebles</Link>
+            <Link href="/trabajo/duplicados" className="rounded-lg px-2 py-1 hover:bg-cream">Duplicados</Link>
           </nav>
           <form action="/trabajo" className="ml-auto">
             <input name="q" placeholder="Buscar teléfono, CURP o nombre" className="w-64 rounded-lg border border-line px-3 py-1.5 text-sm" />

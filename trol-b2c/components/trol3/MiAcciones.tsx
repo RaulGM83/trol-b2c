@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { waLink } from '@/lib/whatsapp';
+import { mensajeError } from '@/lib/trol3/errores';
 import { miSubirDocumento } from '@/app/mi/actions';
 
 const card = 'mt-5 rounded-2xl border border-line bg-white p-5';
@@ -88,8 +89,134 @@ export function CompletarDatos({ campos }: { campos: { campo: string; nombre: st
 }
 
 
+/* ---------- Identidad: confirmar o corregir la CURP ---------- */
+
+/** Lo que devuelve `mi_identidad()` (migración 074). */
+export type Identidad = {
+  curp: string | null;
+  estatus: string;
+  mensaje: string | null;
+  editable: boolean;
+  puede_confirmar: boolean;
+  ultimo_intento: { estado?: string | null; proveedor?: string | null; fecha?: string | null } | null;
+};
+
+const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
+
+/** Estatus en los que hay algo que hacer o que explicar. Con el resto no molestamos al cliente. */
+export const IDENTIDAD_VISIBLE = ['por_confirmar', 'confirmada_con_problema'];
+
+/**
+ * Las dos salidas del callejón de la 068: o la CURP trae un dedazo (se corrige y
+ * la base relanza IMSS y CDA sola por `tg_curp_consultas`), o viene bien en el
+ * documento y entonces el problema está en cómo quedó registrada la cuenta.
+ */
+export function CurpAcciones({ identidad, compacto = false }: { identidad: Identidad; compacto?: boolean }) {
+  const supabase = createClient();
+  const router = useRouter();
+  const [abierto, setAbierto] = useState(false);
+  const [val, setVal] = useState('');
+  const [ok, setOk] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const cls = compacto ? 'rounded-lg bg-ink px-3 py-1 text-xs font-bold text-white disabled:opacity-50' : btnDark;
+  const clsAlt = compacto ? 'rounded-lg border border-line bg-white px-3 py-1 text-xs font-bold disabled:opacity-50' : btn;
+
+  const corregir = () => start(async () => {
+    setErr(null); setOk(null);
+    const nueva = val.trim().toUpperCase();
+    if (!CURP_RE.test(nueva)) { setErr('Revisa la CURP: son 18 caracteres, tal como vienen en tu documento.'); return; }
+    if (nueva === (identidad.curp ?? '').toUpperCase()) { setErr('Esa es la CURP que ya tenemos. Si así viene en tu documento, usa el otro botón.'); return; }
+    const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: 'curp', p_valor: nueva });
+    if (error) { setErr(mensajeError(error)); return; }
+    // `declarar` NO lanza error cuando la CURP ya es de otro expediente: emite el evento
+    // `curp_duplicada`, deja la anterior y devuelve normal. La única forma de saberlo desde
+    // aquí es releer la identidad y ver si de verdad se guardó.
+    const { data } = await supabase.schema('trol3').rpc('mi_identidad');
+    const guardada = ((data as Identidad | null)?.curp ?? '').toUpperCase();
+    if (guardada && guardada !== nueva) { setErr(mensajeError({ message: 'curp_duplicada' })); return; }
+    setOk('Listo, la corregimos. Ya estamos volviendo a buscar tu información oficial; te avisamos en cuanto llegue.');
+    setAbierto(false); setVal(''); router.refresh();
+  });
+
+  const confirmar = () => start(async () => {
+    setErr(null); setOk(null);
+    const { data, error } = await supabase.schema('trol3').rpc('confirmar_curp');
+    if (error) { setErr(mensajeError(error)); return; }
+    const r = data as { ok?: boolean; motivo?: string } | null;
+    if (!r?.ok) { setErr(r?.motivo === 'nada_que_confirmar' ? 'Tu identidad ya no necesita confirmarse; recarga la página para ver cómo quedó.' : 'No se pudo confirmar.'); return; }
+    setOk('Gracias. Con eso sabemos que hay que revisar cómo quedó registrada tu cuenta; tu experto lo toma desde aquí.');
+    router.refresh();
+  });
+
+  return (
+    <div className="w-full">
+      <div className="flex flex-wrap items-center gap-2">
+        {identidad.editable && (
+          <button disabled={pending} className={abierto ? clsAlt : cls} onClick={() => { setAbierto(!abierto); setErr(null); setOk(null); }}>
+            {abierto ? 'Cancelar' : 'Corregir'}
+          </button>
+        )}
+        {identidad.puede_confirmar && (
+          <button disabled={pending} className={identidad.editable ? clsAlt : cls} onClick={confirmar}>Así viene en mi documento</button>
+        )}
+      </div>
+
+      {abierto && identidad.editable && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            value={val}
+            onChange={(e) => setVal(e.target.value.toUpperCase())}
+            maxLength={18}
+            placeholder="CURP corregida (18 caracteres)"
+            className="w-60 rounded-lg border border-line px-2 py-1.5 font-mono text-sm uppercase"
+          />
+          <button disabled={pending || val.length !== 18} className={cls} onClick={corregir}>{pending ? 'Guardando…' : 'Guardar'}</button>
+        </div>
+      )}
+
+      {!identidad.editable && identidad.curp && (
+        <div className="mt-2 text-xs text-muted">
+          Tu CURP ya trajo información oficial, así que desde aquí ya no se puede cambiar. Si viene mal, tu experto la corrige contigo.
+          <div className="mt-2"><HablarBoton texto="Pedirle a mi experto que la revise" mensaje={`Hola, mi CURP (${identidad.curp}) necesita corregirse pero ya no puedo cambiarla desde mi expediente. Vengo de app.trol.mx.`} compacto={compacto} /></div>
+        </div>
+      )}
+
+      {ok && <p className="mt-2 text-xs text-green-700">{ok}</p>}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+/** Tarjeta de identidad en “Hoy”: sale sola cuando el IMSS no reconoció la CURP. */
+export function IdentidadCard({ identidad }: { identidad: Identidad }) {
+  const problema = identidad.estatus === 'confirmada_con_problema';
+  return (
+    <section className={`rounded-2xl border-2 bg-white p-5 ${problema ? 'border-amber-300' : 'border-red-200'}`}>
+      <div className="text-[11px] uppercase tracking-wide text-muted">Tu identidad</div>
+      <h2 className="mt-1 text-lg font-extrabold">
+        {problema ? 'Tu CURP es correcta, pero el IMSS no la reconoce' : 'Confirma que tu CURP está bien escrita'}
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        {identidad.mensaje ?? 'El IMSS no encontró a nadie con esa CURP. Casi siempre es un carácter mal capturado; corregirlo no cuesta nada y volvemos a buscar de inmediato.'}
+      </p>
+      {identidad.curp && (
+        <div className="mt-3 rounded-xl bg-cream p-3">
+          <div className="text-[11px] text-muted">La CURP que tenemos</div>
+          <div className="font-mono text-base font-bold tracking-wide">{identidad.curp}</div>
+        </div>
+      )}
+      <div className="mt-3">
+        {problema
+          ? <HablarBoton texto="Hablar con mi experto" mensaje={`Hola, confirmé que mi CURP (${identidad.curp ?? ''}) está bien y aun así el IMSS no la reconoce. Quiero que lo revisemos. Vengo de app.trol.mx.`} oscuro />
+          : <CurpAcciones identidad={identidad} />}
+      </div>
+    </section>
+  );
+}
+
 /* ---------- CTA por misión ---------- */
-export function MisionCta({ mision, campos, compacto = false }: { mision: { codigo: string; cta?: string | null; estado: string; titulo?: string; detalle?: string; clabe?: string | null }; campos: { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null }[]; compacto?: boolean }) {
+export function MisionCta({ mision, campos, identidad = null, compacto = false }: { mision: { codigo: string; cta?: string | null; estado: string; titulo?: string; detalle?: string; clabe?: string | null }; campos: { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null }[]; identidad?: Identidad | null; compacto?: boolean }) {
   const supabase = createClient();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -113,6 +240,13 @@ export function MisionCta({ mision, campos, compacto = false }: { mision: { codi
         {msg && <span className="text-xs text-green-700">{msg}</span>}
       </div>
     );
+  }
+  // La misión `curp_confirmar` (075) trae la CURP en su payload, pero quién puede
+  // corregirla y quién sólo confirmarla lo dice `mi_identidad()`: sin ella no
+  // inventamos permisos, mandamos al experto.
+  if (cta === 'curp_confirmar') {
+    if (!identidad) return <HablarBoton texto="Revisar mi CURP con mi experto" mensaje="Hola, el IMSS no reconoce mi CURP y quiero revisarla. Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro />;
+    return <CurpAcciones identidad={identidad} compacto={compacto} />;
   }
   if (cta === 'consulta_imss') {
     return (

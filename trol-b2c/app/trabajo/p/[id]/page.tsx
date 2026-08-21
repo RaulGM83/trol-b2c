@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
-import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion } from '@/components/trol3/ExpedienteAcciones';
+import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
@@ -44,6 +44,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('citas').select('*').eq('persona_id', params.id).order('inicio', { ascending: false }).limit(5),
     db.from('miembros').select('id,nombre,email,roles').eq('activo', true),
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
+  ]);
+  const [{ data: ultimaImss }, { data: proveedores }] = await Promise.all([
+    db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
+    db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
   ]);
   const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
   const [{ data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
@@ -160,6 +164,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const fechaSisecTxt = rawFechaSisec && /^\d{4}-\d{2}-\d{2}/.test(rawFechaSisec) ? fmtFecha(rawFechaSisec) : e.ley_en ? fmtFecha(e.ley_en) : null;
   const semillaAt = datosMap.get('semilla')?.obtenido_en ? fmtFecha(datosMap.get('semilla')?.obtenido_en) : null;
   const ultimaConsulta = (consultas ?? [])[0];
+  // El texto legible lo escribe `aplicar_regla_identidad` (071); el crudo del proveedor
+  // se queda en consultas.error y sólo se enseña dentro del colapsable.
+  const inconsistencia = (datosMap.get('inconsistencia_imss')?.valor ?? null) as string | null;
   const href = (t: string) => `/trabajo/p/${e.persona_id}?tab=${t}`;
   // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
   const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
@@ -241,6 +248,15 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Pedir información</h2>
               <ConsultaForm personaId={e.persona_id} />
+            </section>
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="mb-2 text-sm font-bold">Última consulta IMSS</h2>
+              <ReprocesarConsulta
+                personaId={e.persona_id}
+                ultima={(ultimaImss ?? null) as UltimaConsulta | null}
+                inconsistencia={inconsistencia}
+                proveedores={((proveedores ?? []) as Any[]).map((p) => ({ codigo: p.codigo, nombre: p.nombre, costo_unitario: p.costo_unitario == null ? null : Number(p.costo_unitario) })) as Proveedor[]}
+              />
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Contexto</h2>

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { tomarCabecera, cambiarEstadoOportunidad, asignarEspecialista, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar } from '@/app/trabajo/actions';
+import { tomarCabecera, cambiarEstadoOportunidad, asignarEspecialista, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar, reprocesarConsulta } from '@/app/trabajo/actions';
+import { mensajeError, desenrollarError } from '@/lib/trol3/errores';
 
 type R = { ok: boolean; error?: string; resultado?: unknown };
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50';
@@ -71,6 +72,110 @@ export function ConsultaForm({ personaId }: { personaId: string }) {
         const res = (r as R).resultado as { ok?: boolean; motivo?: string; proveedor?: string; costo?: number; estado?: string; error?: string } | undefined;
         setMsg(!r.ok ? (r as R).error ?? 'error' : !res?.ok ? `No enviada: ${res?.motivo === 'validado_vigente' ? 'ya hay dato oficial de menos de 90 días (marca "forzar")' : res?.motivo === 'consulta_en_curso' ? 'ya hay una consulta en curso' : res?.motivo}` : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : `Solicitada vía ${res.proveedor} (${res.costo ?? 0} MXN)`);
       })}>{pending ? 'Enviando…' : 'Solicitar'}</button>
+      {msg && <p className="text-muted">{msg}</p>}
+    </div>
+  );
+}
+
+export type UltimaConsulta = {
+  consulta_id: string | null;
+  tipo: string | null;
+  proveedor: string | null;
+  estado: string | null;
+  error: string | null;
+  costo: number | null;
+  created_at: string | null;
+  completed_at: string | null;
+  estatus_identidad: string | null;
+};
+export type Proveedor = { codigo: string; nombre: string; costo_unitario: number | null };
+
+const ESTADO_COLOR: Record<string, string> = {
+  completada: 'text-green-700', error: 'text-red-600', sin_resultado: 'text-red-600',
+  solicitada: 'text-amber-700', en_proceso: 'text-amber-700', cancelada: 'text-muted',
+};
+const IDENT_LABEL: Record<string, string> = {
+  ok: 'identidad verificada', por_confirmar: 'CURP por confirmar con el cliente', confirmada_con_problema: 'CURP confirmada, cuenta mal registrada',
+};
+
+/**
+ * Reprocesar la consulta IMSS cuando se colgó o falló. Manda una consulta real y se cobra,
+ * así que va en dos pasos con el costo del proveedor a la vista (leído de `trol3.proveedores`).
+ * El texto legible de `inconsistencia_imss` manda; el crudo del proveedor queda escondido
+ * porque en el caso RENAPO llega como JSON escapado varias veces.
+ */
+export function ReprocesarConsulta({ personaId, ultima, inconsistencia, proveedores }: {
+  personaId: string; ultima: UltimaConsulta | null; inconsistencia: string | null; proveedores: Proveedor[];
+}) {
+  const [prov, setProv] = useState(ultima?.proveedor ?? '');
+  const [motivo, setMotivo] = useState('');
+  const [confirmando, setConfirmando] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const tipo = ultima?.tipo ?? 'imss_historial';
+  const opciones = proveedores.filter((p) => ['belvo', 'jordan'].includes(p.codigo));
+  const costoDe = (codigo: string) => opciones.find((p) => p.codigo === codigo)?.costo_unitario ?? null;
+  const mxn = (n: number | null) => (n == null ? 'costo por confirmar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n));
+  const elegido = prov || ultima?.proveedor || null;
+  const crudo = desenrollarError(ultima?.error);
+  const fecha = (s: string | null | undefined) => (s ? new Date(s).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
+
+  const lanzar = () => start(async () => {
+    setMsg(null);
+    const r = await reprocesarConsulta(personaId, tipo, prov || null, motivo);
+    setConfirmando(false);
+    if (!r.ok) { setMsg(mensajeError({ message: (r as R).error })); return; }
+    const res = (r as R).resultado as { ok?: boolean; motivo?: string; proveedor?: string; costo?: number; estado?: string; error?: string } | undefined;
+    setMsg(!res?.ok ? `No enviada: ${res?.motivo ?? 'sin motivo'}`
+      : res.estado === 'error' ? `No se pudo: ${res.error}`
+      : `Reprocesada vía ${res.proveedor} (${mxn(res.costo ?? null)}).`);
+    setMotivo('');
+  });
+
+  return (
+    <div className="space-y-2 text-xs">
+      {ultima ? (
+        <div className="rounded-lg bg-cream p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={ESTADO_COLOR[ultima.estado ?? ''] ?? 'text-muted'}><b>{ultima.estado ?? '—'}</b> · {ultima.proveedor ?? 'sin proveedor'}</span>
+            <span className="text-muted">{fecha(ultima.completed_at ?? ultima.created_at)}</span>
+          </div>
+          {ultima.estatus_identidad && ultima.estatus_identidad !== 'ok' ? (
+            <div className="mt-1 text-amber-800">{IDENT_LABEL[ultima.estatus_identidad] ?? ultima.estatus_identidad}</div>
+          ) : null}
+          {inconsistencia ? <p className="mt-1 text-ink">{inconsistencia}</p> : null}
+          {crudo ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-muted">Ver el error técnico del proveedor</summary>
+              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-white p-2 text-[10px] leading-snug">{crudo}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-muted">Sin consultas de IMSS registradas todavía.</p>
+      )}
+
+      <select value={prov} onChange={(e) => { setProv(e.target.value); setConfirmando(false); }} className="w-full rounded-lg border border-line px-2 py-1.5">
+        <option value="">Proveedor según canal</option>
+        {opciones.map((p) => <option key={p.codigo} value={p.codigo}>{p.nombre} ({mxn(p.costo_unitario)})</option>)}
+      </select>
+      <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (opcional)" className="w-full rounded-lg border border-line px-2 py-1.5" />
+
+      {confirmando ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2">
+          <p className="text-amber-900">
+            Esto manda una consulta real al proveedor y se cobra
+            {elegido ? <>: <b>{mxn(costoDe(elegido))}</b> con {opciones.find((p) => p.codigo === elegido)?.nombre ?? elegido}</> : ' según el proveedor que elija el canal'}. ¿Confirmas?
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button disabled={pending} className={btnDark} onClick={lanzar}>{pending ? 'Enviando…' : 'Sí, reprocesar'}</button>
+            <button disabled={pending} className={btn} onClick={() => setConfirmando(false)}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button disabled={pending} className={btnDark + ' w-full py-2'} onClick={() => { setMsg(null); setConfirmando(true); }}>Reprocesar consulta</button>
+      )}
       {msg && <p className="text-muted">{msg}</p>}
     </div>
   );

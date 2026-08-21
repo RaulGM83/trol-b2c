@@ -59,6 +59,26 @@ export async function pedirConsulta(personaId: string, tipo: string, notificar: 
   return ok({ resultado: res });
 }
 
+/**
+ * Reproceso manual de una consulta colgada (migración 066). Cierra lo que siga abierto
+ * del mismo tipo y vuelve a pedirla con `p_forzar`: cuesta dinero y sale de verdad,
+ * por eso la UI pide confirmación antes de llamar aquí.
+ */
+export async function reprocesarConsulta(personaId: string, tipo: string, proveedor: string | null, motivo: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('reprocesar_consulta', {
+    p_persona: personaId, p_tipo: tipo, p_proveedor: proveedor || null, p_motivo: motivo || null,
+  });
+  if (error) return fail(error);
+  const res = data as { ok?: boolean; consulta_id?: string; motivo?: string; proveedor?: string; costo?: number };
+  if (res?.consulta_id) {
+    const { data: c } = await t3().from('consultas').select('estado,error').eq('id', res.consulta_id).maybeSingle();
+    if (c) Object.assign(res, { estado: c.estado, error: c.error });
+  }
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ resultado: res });
+}
+
 export async function agregarNota(personaId: string, contenido: string, canal: string, visibleCliente: boolean) {
   const m = await requireMiembro();
   const { error } = await t3().rpc('registrar_interaccion', {
@@ -142,6 +162,54 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
     });
   }
   return { ok: true as const, persona_id: pid, aviso };
+}
+
+// ── Duplicados (migración 073) ──────────────────────────────────────────────
+
+/**
+ * Fusiona uno o varios expedientes sobre el que se conserva. `fusionar_personas` se
+ * planta sola con `curps_distintas` si no son la misma persona, así que la UI y la base
+ * dicen lo mismo. Se corta en el primer fallo y se reporta lo que sí alcanzó a fusionar.
+ */
+export async function fusionarPersonas(conservar: string, absorber: string[], motivo: string) {
+  await requireMiembro();
+  if (!motivo.trim()) return fail(new Error('Escribe por qué son la misma persona.'));
+  if (!absorber.length) return fail(new Error('No hay expedientes que absorber.'));
+  const db = t3();
+  const hechas: string[] = [];
+  for (const id of absorber) {
+    const { error } = await db.rpc('fusionar_personas', { p_conservar: conservar, p_absorber: id, p_motivo: motivo });
+    if (error) return { ...fail(error), fusionadas: hechas };
+    hechas.push(id);
+  }
+  revalidatePath('/trabajo/duplicados');
+  revalidatePath(`/trabajo/p/${conservar}`);
+  return ok({ fusionadas: hechas });
+}
+
+/**
+ * Un teléfono, una CURP: cuando el número lo comparten familiares no se fusiona nada.
+ * Se ligan entre sí por `relaciones_persona` y el dueño se queda el número como principal;
+ * los demás lo conservan como contacto pero dejan de reclamarlo.
+ */
+export async function ligarFamiliares(telefono: string, dueno: string, ids: string[], nota: string) {
+  await requireMiembro();
+  if (!ids.includes(dueno)) return fail(new Error('El dueño del teléfono tiene que ser uno del grupo.'));
+  const db = t3();
+  const texto = nota.trim() || `Comparten el teléfono ${telefono}`;
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const { error } = await db.rpc('relacionar_personas', { p_a: ids[i], p_b: ids[j], p_tipo: 'familiar', p_nota: texto });
+      if (error) return fail(error);
+    }
+  }
+  const base = db.from('contactos').update({ principal: true }).eq('tipo', 'telefono').eq('normalizado', telefono);
+  const { error: e1 } = await base.eq('persona_id', dueno);
+  if (e1) return fail(e1);
+  const { error: e2 } = await db.from('contactos').update({ principal: false }).eq('tipo', 'telefono').eq('normalizado', telefono).neq('persona_id', dueno);
+  if (e2) return fail(e2);
+  revalidatePath('/trabajo/duplicados');
+  return ok();
 }
 
 export async function solicitarDiagnosticoAvanzado(personaId: string) {
