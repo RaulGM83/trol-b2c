@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import QRCode from 'qrcode';
+import { qrConLogo } from '@/lib/marca/qr';
 import { requireMiembro, t3, fmtFecha, type Any } from '@/lib/trol3/server';
 import {
   fusionarCodigos, ordenar, totales, conversion, pct, TIPOS, TIPO_LABEL, DIR_DEFAULT,
@@ -33,24 +33,32 @@ export default async function Atribucion({ searchParams }: { searchParams: { ord
   const filas = ordenar(filtradas, col, dir);
   const t = totales(filas);
 
-  // Links del equipo: los códigos de asesor, el del miembro con sesión primero.
-  const deAsesor = todas.filter((f) => f.tipo === 'asesor');
+  // Links con QR: los del equipo y los de prensa (el de El Asegurador va impreso).
+  // En papel la zona tranquila del estándar son 4 módulos; en pantalla bastan 2.
+  const MARGEN_IMPRESION = 4;
+  const conLink = todas.filter((f) => f.tipo === 'asesor' || f.tipo === 'prensa');
   const codigoPorId = new Map(((codigos ?? []) as CodigoRegistrado[]).map((c) => [c.codigo, c.miembro_id]));
   const links: LinkAsesor[] = await Promise.all(
-    deAsesor.map(async (f) => {
+    conLink.map(async (f) => {
       const url = `${BASE}/i/${f.codigo}`;
+      const impreso = f.tipo === 'prensa';
       return {
         codigo: f.codigo,
         etiqueta: f.etiqueta ?? f.miembro ?? f.codigo,
         url,
-        svg: await QRCode.toString(url, { type: 'svg', margin: 1, width: 240 }),
+        svg: await qrConLogo(url, impreso ? { margen: MARGEN_IMPRESION } : {}),
         esMio: codigoPorId.get(f.codigo) === m.id,
+        impreso,
         altas: f.altas,
         clics: f.clics,
       };
     }),
   );
-  links.sort((a, b) => Number(b.esMio) - Number(a.esMio) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+  // Primero el mío, luego el resto del equipo, y los de prensa al final.
+  links.sort((a, b) =>
+    Number(b.esMio) - Number(a.esMio) ||
+    Number(a.impreso) - Number(b.impreso) ||
+    a.etiqueta.localeCompare(b.etiqueta, 'es'));
 
   const qs = (patch: Record<string, string | null>) => {
     const sp = new URLSearchParams();
@@ -93,8 +101,8 @@ export default async function Atribucion({ searchParams }: { searchParams: { ord
       {error && <p className="text-sm text-red-600">{error.message}</p>}
 
       <section>
-        <h2 className="mb-2 text-sm font-bold">Links del equipo</h2>
-        <p className="mb-2 text-xs text-muted">Cada asesor comparte el suyo: <span className="font-mono">{BASE}/i/&lt;codigo&gt;</span>. Abre el WhatsApp del bot con el código dentro del mensaje.</p>
+        <h2 className="mb-2 text-sm font-bold">Links del equipo y prensa</h2>
+        <p className="mb-2 text-xs text-muted">Cada asesor comparte el suyo: <span className="font-mono">{BASE}/i/&lt;codigo&gt;</span>. Abre el WhatsApp del bot con el código dentro del mensaje. Los de <b>prensa</b> llevan la zona tranquila a 4 módulos porque van impresos.</p>
         <LinksEquipo links={links} />
       </section>
 

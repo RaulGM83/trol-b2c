@@ -8,6 +8,8 @@ export type LinkAsesor = {
   /** SVG del QR, generado en el servidor. */
   svg: string;
   esMio: boolean;
+  /** Va a papel: se genera con más zona tranquila. */
+  impreso?: boolean;
   altas: number;
   clics: number;
 };
@@ -48,6 +50,7 @@ export function LinksEquipo({ links }: { links: LinkAsesor[] }) {
               <div className="text-sm font-bold">
                 {l.etiqueta}
                 {l.esMio ? <span className="ml-2 rounded bg-lime px-1.5 py-0.5 text-[10px] font-semibold text-ink">tuyo</span> : null}
+                {l.impreso ? <span className="ml-2 rounded bg-cream px-1.5 py-0.5 text-[10px] font-semibold text-muted">impresión</span> : null}
               </div>
               <div className="text-[11px] text-muted">
                 {l.clics ? `${l.clics} clics · ` : ''}{l.altas} altas
