@@ -11,5 +11,5 @@ export * from './tablas-contrafactual';
 export { getHistoriaLaboral } from './historia-laboral';
 export type { EmpleoHistorial } from './historia-laboral';
 export * from './eventos-laborales';
-export { calcular as calcularAsesoriaInfonavit, tasaInfonavit, SUPUESTOS_DEFAULT as SUPUESTOS_INFONAVIT_DEFAULT, PALANCAS_DEFAULT as PALANCAS_INFONAVIT_DEFAULT, TASAS_INFONAVIT } from './infonavit-asesoria';
+export { calcular as calcularAsesoriaInfonavit, tasaInfonavit, sobreprecioMinimo, SUPUESTOS_DEFAULT as SUPUESTOS_INFONAVIT_DEFAULT, PALANCAS_DEFAULT as PALANCAS_INFONAVIT_DEFAULT, TASAS_INFONAVIT } from './infonavit-asesoria';
 export type { TitularInfonavit, ClienteInfonavit, InmuebleInfonavit, SupuestosInfonavit, PalancasInfonavit, OperacionInfonavit, FilaHorizonte, ResultadoInfonavit } from './infonavit-asesoria';

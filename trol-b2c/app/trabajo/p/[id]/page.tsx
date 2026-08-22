@@ -123,11 +123,16 @@ export default async function Expediente({ params, searchParams }: { params: { i
       });
     }
   }
-  if (aplicaInfonavit && semilla && supInfonavit) {
+  // Sin semilla también se arma: el adaptador dice qué falta y la pestaña lo pide.
+  if (aplicaInfonavit && supInfonavit) {
     const { data: proys } = await db.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('clave');
     proyectosInf = (proys ?? []) as Proyecto[];
     baseInfonavit = titularDesdeExpediente({
       semilla,
+      ley: e.ley ?? null,
+      fechaNacimiento: e.fecha_nacimiento ?? null,
+      statusEmpleo: e.status_empleo ?? null,
+      salarioDiario: datosMap.get('salario_diario')?.valor == null ? null : Number(datosMap.get('salario_diario')?.valor),
       saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
       saldoEsReportado: e.saldo_infonavit_capa === 'declarado' || e.saldo_infonavit_capa === 'validado',
       creditoVigente: e.credito_infonavit ?? null,
@@ -303,6 +308,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
           <AsesoriaInfonavit
             personaId={e.persona_id}
             historial={historialInf}
+            faltantes={baseInfonavit.faltantes}
+            desdeSemilla={baseInfonavit.desdeSemilla}
             cliente={{
               nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
               ley: e.ley ?? '—',
@@ -318,7 +325,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
           />
         ) : (
           <section className="rounded-2xl border border-line bg-white p-5 text-sm text-muted">
-            Sin semilla de cálculo no podemos derivar su salario ni su régimen. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen</Link>.
+            Faltan los supuestos globales de la asesoría Infonavit. Cárgalos en <Link href="/trabajo/proyectos" className="underline">Inmuebles</Link>.
           </section>
         )
       )}

@@ -80,6 +80,16 @@ export interface InmuebleInfonavit {
   notariales_adicionales: number;
   comision_desarrollador: number;
   aliado_cubre_notariales: boolean;
+  /**
+   * Escriturar POR ARRIBA del precio de venta, topado al avalúo, para que entre más
+   * saldo de vivienda a la operación. El diferencial se le entrega al cliente en
+   * efectivo a la firma.
+   *
+   * OJO: sube lo que se financia (saldo aplicado, crédito, retención e intereses),
+   * pero NO sube lo que el inmueble vale: la plusvalía sigue capitalizando el precio
+   * de venta real. Capitalizar la escritura inflada sobrestimaría la propuesta.
+   */
+  sobreprecio?: number;
 }
 
 export interface SupuestosInfonavit {
@@ -95,6 +105,12 @@ export interface SupuestosInfonavit {
   monto_max_credito: number;
   horizontes: number[];
   max_meses_motor: number;
+  /**
+   * Crédito Infonavit mínimo para que la operación exista. No se puede comprar con
+   * la pura subcuenta: si el saldo alcanza para todo el inmueble hay que escriturar
+   * más arriba (ver `sobreprecio`) o el escenario no es posible.
+   */
+  credito_minimo: number;
 }
 
 export interface PalancasInfonavit {
@@ -111,6 +127,7 @@ export const SUPUESTOS_DEFAULT: SupuestosInfonavit = {
   comision_venta: 0.05, base_plusvalia: 'escrituracion',
   uma_mensual: 3586.68, monto_max_credito: 2935002,
   horizontes: [18, 24, 36, 60], max_meses_motor: 96,
+  credito_minimo: 50000,
 };
 
 export const PALANCAS_DEFAULT: PalancasInfonavit = {
@@ -179,14 +196,24 @@ function derivarCliente(cliente: ClienteInfonavit, sup: SupuestosInfonavit): Cli
 }
 
 export interface OperacionInfonavit {
-  esc: number; base: number; renta_neta: number; saldo_apl: number; remanente: number;
+  /** Valor escriturado: precio de venta + sobreprecio. Es lo que se financia. */
+  esc: number;
+  /** Valor real del inmueble: lo que capitaliza la plusvalía y se cobra al revender. */
+  base: number;
+  renta_neta: number; saldo_apl: number; remanente: number;
   credito: number; pmt: number; not_credito: number; not_cliente: number;
+  /** Efectivo que se le entrega al cliente en la firma. */
+  sobreprecio: number;
   pct_salario: number; flujo_mensual: number;
 }
 
 function operacion(dc: ClienteDerivado, inm: InmuebleInfonavit, sup: SupuestosInfonavit): OperacionInfonavit {
-  const esc = inm.escrituracion;
-  const base = sup.base_plusvalia === 'avaluo' ? inm.avaluo : esc;
+  // Nunca por encima del avalúo, y nunca negativo.
+  const sobreprecio = Math.max(0, Math.min(inm.sobreprecio ?? 0, inm.avaluo - inm.escrituracion));
+  // `esc` es lo que se escritura y por tanto lo que hay que financiar.
+  const esc = inm.escrituracion + sobreprecio;
+  // `base` es lo que el inmueble vale de verdad: de ahí salen plusvalía y reventa.
+  const base = sup.base_plusvalia === 'avaluo' ? inm.avaluo : inm.escrituracion;
   const renta_neta = inm.renta * (1 - sup.mantenimiento)
                    - inm.renta * sup.gestion * (sup.aplica_gestion ? 1 : 0);
   const K = inm.notariales_credito;
@@ -202,7 +229,7 @@ function operacion(dc: ClienteDerivado, inm: InmuebleInfonavit, sup: SupuestosIn
   const not_cliente = inm.aliado_cubre_notariales ? 0 : inm.notariales_adicionales;
   return {
     esc, base, renta_neta, saldo_apl, remanente, credito, pmt,
-    not_credito: K, not_cliente,
+    not_credito: K, not_cliente, sobreprecio,
     pct_salario: dc.salario ? pmt / dc.salario : 0,
     flujo_mensual: renta_neta - pmt,
   };
@@ -267,17 +294,22 @@ function contrafactual(dc: ClienteDerivado, sup: SupuestosInfonavit, t: number):
   return saldo * Math.pow(1 + r, t / 12) + fvAportaciones(dc, sup, t);
 }
 
-function efectivoVenta(op: OperacionInfonavit, motor: SerieMotor, dc: ClienteDerivado, sup: SupuestosInfonavit, g: number, t: number): number {
+function efectivoVenta(op: OperacionInfonavit, motor: SerieMotor, dc: ClienteDerivado, sup: SupuestosInfonavit, pal: PalancasInfonavit, g: number, t: number): number {
   return op.base * Math.pow(1 + g, t / 12) * (1 - sup.comision_venta)
     - motor.saldo[t] + motor.flujo_acum[t]
     + isrDevuelto(motor, dc, sup, t)
-    + op.remanente * Math.pow(1 + sup.r_ssv, t / 12);
+    + op.remanente * Math.pow(1 + sup.r_ssv, t / 12)
+    // El efectivo de la firma ya está en su bolsa desde el mes cero y trabaja
+    // a su rendimiento alterno, no al de la subcuenta.
+    + op.sobreprecio * Math.pow(1 + pal.alterno, t / 12);
 }
 
 export interface FilaHorizonte {
   horizonte: number;
   bloques: {
     I_inmueble: number; II_financiamiento: number; III_oportunidad: number; IV_rescate: number;
+    /** Efectivo entregado en la firma, capitalizado al rendimiento alterno. */
+    V_efectivo_firma: number;
     detalle: {
       plusvalia_100: number; descuento: number; renta_acum: number; comision_venta: number;
       notariales_credito: number; notariales_cliente: number; intereses: number;
@@ -351,8 +383,12 @@ export function calcular(
     for (const ti of [dc.t1, dc.t2])
       if (ti.regimen === 97) rescate += ti.ssv * (1 - (ti.conserva_valor ?? 1));
     const b4 = rescate * Math.pow(1 + r, t / 12);
-    const ventaja = b1 + b2 + b3 + b4;
-    const efv = efectivoVenta(op, motor, dc, sup, g, t);
+    // V. El efectivo de la firma, capitalizado a su rendimiento alterno. El costo de
+    // haberlo sacado ya está en el bloque I como `descuento` negativo (se escrituró por
+    // arriba de lo que vale), así que lo que queda neto es sólo lo que ese dinero rinde.
+    const b5 = op.sobreprecio * Math.pow(1 + pal.alterno, t / 12);
+    const ventaja = b1 + b2 + b3 + b4 + b5;
+    const efv = efectivoVenta(op, motor, dc, sup, pal, g, t);
     const cf = contrafactual(dc, sup, t);
     // Si esto no da cero, hay un error de cableado: no seguir con números falsos.
     const check = ventaja - (efv - op.not_cliente - cf);
@@ -360,7 +396,7 @@ export function calcular(
     const num = op.esc + op.not_credito + op.not_cliente - rentaAc - b2 - b3 - b4;
     const equilibrio = num <= 0 ? 0
       : Math.pow(num / (op.base * (1 - sup.comision_venta)), 12 / t) - 1;
-    const efv12 = efectivoVenta(op, motor, dc, sup, g, t + 12);
+    const efv12 = efectivoVenta(op, motor, dc, sup, pal, g, t + 12);
     const marginal12 = efv ? efv12 / efv - 1 : null;
     const mesesCorte = Math.max(0, pal.corte_anios * 12 - t);
     const aDeuda = pal.pct_deuda * Math.max(0, efv);
@@ -372,6 +408,7 @@ export function calcular(
       horizonte: t,
       bloques: {
         I_inmueble: b1, II_financiamiento: b2, III_oportunidad: b3, IV_rescate: b4,
+        V_efectivo_firma: b5,
         detalle: {
           plusvalia_100: plusv100, descuento, renta_acum: rentaAc,
           comision_venta: comision, notariales_credito: -op.not_credito,
@@ -405,6 +442,9 @@ export function calcular(
   const dominante = Object.entries(fuentes).sort((a, b) => b[1] - a[1])[0][0];
 
   const senales: string[] = [];
+  if (op.credito < sup.credito_minimo) {
+    senales.push(`credito_bajo_minimo:${(sup.credito_minimo - op.credito).toFixed(0)}`);
+  }
   if (op.credito > dc.monto_max) senales.push('credito_excede_monto_maximo');
   if (op.pct_salario > 0.30) senales.push('retencion_arriba_30pct');
   if (op.flujo_mensual < 0) senales.push(`desembolso_mensual:${(-op.flujo_mensual).toFixed(0)}`);
@@ -430,5 +470,30 @@ export function calcular(
         : `conservar al menos ${sup.horizontes[sup.horizontes.length - 1]} meses`,
     },
     senales,
+  };
+}
+
+/**
+ * Cuánto hay que escriturar por arriba del precio de venta para que exista crédito.
+ *
+ * No se puede comprar un inmueble con la pura subcuenta: Infonavit siempre tiene que
+ * prestar algo. Si el saldo del cliente cubre el inmueble completo, la única salida es
+ * escriturar más arriba (topado al avalúo) y entregarle la diferencia en efectivo.
+ *
+ * `viable: false` = ni escriturando al avalúo alcanza; ese inmueble no le sirve.
+ */
+export function sobreprecioMinimo(
+  inm: Pick<InmuebleInfonavit, 'avaluo' | 'escrituracion' | 'notariales_credito'>,
+  ssvTotal: number,
+  creditoMinimo: number = SUPUESTOS_DEFAULT.credito_minimo,
+): { requerido: number; viable: boolean; escrituraMinima: number; techo: number } {
+  const techo = Math.max(0, inm.avaluo - inm.escrituracion);
+  // credito = escrituracion + sobreprecio + K − ssv ≥ minimo
+  const requerido = Math.max(0, creditoMinimo + ssvTotal - inm.notariales_credito - inm.escrituracion);
+  return {
+    requerido,
+    viable: requerido <= techo,
+    escrituraMinima: inm.escrituracion + requerido,
+    techo,
   };
 }

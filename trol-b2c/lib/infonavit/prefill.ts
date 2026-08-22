@@ -1,10 +1,14 @@
 // Puente entre el expediente trol3 y el motor de asesoría Infonavit.
 //
 // El motor pide cosas que el expediente no guarda tal cual: el salario MENSUAL
-// (el expediente trae el SBC diario), cuántos meses seguirá cotizando (es un
+// (el IMSS registra salario diario), cuántos meses seguirá cotizando (es un
 // supuesto, no un dato) y, en Ley 97, qué proporción del saldo conserva valor.
-// Aquí se hacen esas tres traducciones y se deja dicho de dónde salió cada una,
+// Aquí se hacen esas traducciones y se deja dicho de dónde salió cada una,
 // porque el asesor tiene que poder defenderlas frente al cliente.
+//
+// La semilla es el camino cómodo, no el obligatorio. Hay clientes con expediente
+// suficiente y sin consulta SISEC: para ellos armamos el titular con lo que sí
+// hay y devolvemos `faltantes` para que la pestaña lo pida en vez de bloquearse.
 import { computeLey97, conservaValorSSV } from '@trol/pension-core';
 import type { EntradaCalculo, Palancas } from '@trol/pension-core/types';
 import type { TitularInfonavit } from '@trol/pension-core';
@@ -12,6 +16,16 @@ import type { SemillaV2 } from '@/lib/imss/semilla';
 
 /** El motor trabaja en salario mensual; el IMSS registra salario diario. */
 export const DIAS_MES = 30.4;
+
+/** Lo que impide calcular hasta que alguien lo capture. */
+export type FaltanteInfonavit = 'ley' | 'fecha_nacimiento' | 'salario_diario' | 'conserva_valor';
+
+export const ETIQUETA_FALTANTE: Record<FaltanteInfonavit, { titulo: string; por_que: string }> = {
+  ley: { titulo: 'Régimen (Ley 73 o 97)', por_que: 'Cambia si el saldo se devuelve en efectivo o se convierte en pensión.' },
+  fecha_nacimiento: { titulo: 'Fecha de nacimiento', por_que: 'De la edad sale el plazo del crédito: MIN(30, 70 − edad).' },
+  salario_diario: { titulo: 'Salario diario registrado ante el IMSS', por_que: 'De ahí salen la tasa Infonavit, la aportación patronal del 5% y qué tanto de su salario se lleva la retención.' },
+  conserva_valor: { titulo: '¿Su pensión Ley 97 supera la Pensión Mínima Garantizada?', por_que: 'Sin historial salarial no podemos proyectarlo. Si quedara en PMG, el sistema consumiría su saldo y conviene rescatarlo antes.' },
+};
 
 export interface BaseInfonavit {
   titular: TitularInfonavit;
@@ -23,10 +37,20 @@ export interface BaseInfonavit {
     conserva_valor: string;
     ingreso_real: string;
   };
+  /** Vacío = se puede calcular. Con elementos = hay que capturarlos primero. */
+  faltantes: FaltanteInfonavit[];
+  /** false cuando se armó con datos sueltos del expediente en vez de la semilla. */
+  desdeSemilla: boolean;
 }
 
 export interface EntradaPrefill {
-  semilla: SemillaV2;
+  /** Camino cómodo. Si es null se arma con los campos sueltos de abajo. */
+  semilla: SemillaV2 | null;
+  ley: string | null;
+  fechaNacimiento: string | null;
+  statusEmpleo: string | null;
+  /** SBC diario declarado en el expediente (campo `salario_diario`). */
+  salarioDiario: number | null;
   /** Mejor dato del expediente: reportado > estimado (migración 056). */
   saldoInfonavit: number | null;
   saldoEsReportado: boolean;
@@ -51,12 +75,21 @@ function palancasLey97(semilla: SemillaV2, creditoVigente: boolean): Palancas {
 
 /**
  * Ley 97: cuánto del saldo de vivienda sobrevive al pasar por la pensión.
- * Se calcula con el saldo que de verdad tiene (el reportado si lo hay), no con
- * el de la semilla, porque bajo la PMG la diferencia cambia la conclusión.
+ * Se proyecta con el saldo que de verdad tiene (el reportado si lo hay), porque
+ * bajo la PMG la diferencia cambia la conclusión. Sin semilla no hay historial
+ * salarial que proyectar: entonces NO se defaultea, se pide.
  */
-function conservaValor(e: EntradaPrefill, ssv: number): { valor: number; origen: string } {
-  if (e.semilla.perfil.ley !== 'Ley97') {
-    return { valor: 1, origen: 'Ley 73: el saldo se devuelve en efectivo al pensionarse' };
+function conservaValor(
+  e: EntradaPrefill, ley: string | null, ssv: number,
+): { valor: number; origen: string; falta: boolean } {
+  if (ley !== 'Ley97') {
+    return { valor: 1, origen: 'Ley 73: el saldo se devuelve en efectivo al pensionarse', falta: false };
+  }
+  if (!e.semilla) {
+    return {
+      valor: 1, falta: true,
+      origen: 'Sin historial salarial no podemos proyectar su pensión contra la PMG: decídelo con lo que sepas de su caso',
+    };
   }
   try {
     const entrada: EntradaCalculo = {
@@ -65,33 +98,48 @@ function conservaValor(e: EntradaPrefill, ssv: number): { valor: number; origen:
       salario_60m: e.semilla.salario_60m,
       palancas: palancasLey97(e.semilla, e.creditoVigente ?? false),
     };
-    const r = computeLey97(entrada);
-    const cv = conservaValorSSV(r);
+    const cv = conservaValorSSV(computeLey97(entrada));
     const origen = cv >= 0.999
       ? 'Su pensión Ley 97 queda por encima de la PMG: el saldo conserva su valor completo'
       : cv <= 0.001
         ? 'Quedaría en Pensión Mínima Garantizada: el sistema consumiría el saldo pagando la pensión que recibiría de todos modos'
         : `Queda a caballo de la PMG: sólo ${Math.round(cv * 100)}% del saldo levanta su pensión por encima del piso`;
-    return { valor: cv, origen };
+    return { valor: cv, origen, falta: false };
   } catch {
-    // Si la proyección no corre (semilla incompleta), no inventamos: 1 y que el asesor decida.
-    return { valor: 1, origen: 'No pudimos proyectar su pensión Ley 97; se asume que conserva el valor completo (ajústalo si sabes que queda en PMG)' };
+    return {
+      valor: 1, falta: true,
+      origen: 'No pudimos proyectar su pensión Ley 97 con la semilla que hay: decídelo con lo que sepas de su caso',
+    };
   }
 }
 
 export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
-  const p = e.semilla.perfil;
-  const edad = (Date.now() - new Date(p.fecha_nacimiento).getTime()) / 86_400_000 / 365.25;
-  const salarioMensual = p.salario_diario_registrado * DIAS_MES;
-  const ssv = e.saldoInfonavit ?? e.semilla.saldos.infonavit ?? 0;
-  const cotiza = p.status_empleo === 'empleado';
+  const p = e.semilla?.perfil ?? null;
+  const faltantes: FaltanteInfonavit[] = [];
+
+  const ley = p?.ley ?? (e.ley === 'Ley97' || e.ley === 'Ley73' ? e.ley : null);
+  if (!ley) faltantes.push('ley');
+
+  const fnac = p?.fecha_nacimiento ?? e.fechaNacimiento;
+  if (!fnac) faltantes.push('fecha_nacimiento');
+  const edad = fnac ? (Date.now() - new Date(fnac).getTime()) / 86_400_000 / 365.25 : 0;
+
+  const sbc = p?.salario_diario_registrado ?? e.salarioDiario ?? 0;
+  if (!(sbc > 0)) faltantes.push('salario_diario');
+  const salarioMensual = sbc * DIAS_MES;
+
+  const ssv = e.saldoInfonavit ?? e.semilla?.saldos.infonavit ?? 0;
+  const cotiza = (p?.status_empleo ?? e.statusEmpleo) === 'empleado';
   const meses = cotiza ? e.mesesCotizandoDefault : 0;
-  const cv = conservaValor(e, ssv);
+
+  const cv = conservaValor(e, ley, ssv);
+  if (cv.falta) faltantes.push('conserva_valor');
+
   const ingresoReal = e.ingresoRealMensual ?? salarioMensual;
 
   return {
     titular: {
-      regimen: p.ley === 'Ley97' ? 97 : 73,
+      regimen: ley === 'Ley97' ? 97 : 73,
       edad: Math.round(edad * 10) / 10,
       salario_imss: salarioMensual,
       ssv,
@@ -101,7 +149,9 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
       conserva_valor: cv.valor,
     },
     origen: {
-      salario: `SBC de $${p.salario_diario_registrado.toFixed(2)} diarios × ${DIAS_MES}`,
+      salario: sbc > 0
+        ? `SBC de $${sbc.toFixed(2)} diarios × ${DIAS_MES}${p ? '' : ' (declarado en el expediente)'}`
+        : 'Falta el salario diario registrado ante el IMSS',
       ssv: e.saldoEsReportado
         ? 'Saldo reportado de su cuenta Infonavit'
         : 'Estimado nuestro a partir de su historial de salarios: para formalizar hace falta el saldo real',
@@ -113,6 +163,8 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
         ? 'Ingreso real declarado en el expediente'
         : 'A falta del ingreso real usamos el registrado ante el IMSS; si gana más, la devolución de ISR sube (captúralo)',
     },
+    faltantes,
+    desdeSemilla: Boolean(e.semilla),
   };
 }
 

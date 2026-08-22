@@ -9,8 +9,9 @@
 // Las señales NUNCA bloquean: son material de conversación, no un semáforo.
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { calcularAsesoriaInfonavit } from '@trol/pension-core';
-import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAsesoria } from '@/app/trabajo/actions';
+import { calcularAsesoriaInfonavit, sobreprecioMinimo } from '@trol/pension-core';
+import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAsesoria, declararAsesor } from '@/app/trabajo/actions';
+import { ETIQUETA_FALTANTE, type FaltanteInfonavit, DIAS_MES } from '@/lib/infonavit/prefill';
 import type {
   ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
   SupuestosInfonavit, TitularInfonavit,
@@ -29,6 +30,7 @@ export interface SupuestosGlobales {
   gestion: number; aplica_gestion: boolean; comision_venta: number; alterno: number;
   base_plusvalia: string; uma_mensual: number; monto_max_credito: number;
   horizontes: number[]; meses_cotizando_default: number; saldo_min_asesoria: number;
+  credito_minimo: number;
 }
 
 const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -38,6 +40,7 @@ const pct = (n: number | null | undefined, d = 1) => (n == null || !Number.isFin
 const card = 'rounded-2xl border border-line bg-white p-5';
 const h2 = 'text-xs font-bold uppercase tracking-wide text-muted';
 const inp = 'w-full rounded-lg border border-line px-2 py-1 text-sm';
+const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50';
 
 /** Las notas de lectura del Excel: lo que el asesor necesita para defender el número. */
 function Nota({ children }: { children: React.ReactNode }) {
@@ -105,8 +108,11 @@ type ModoCotitular = 'no' | 'cliente' | 'manual';
 type Hallazgo = { id: string; nombre: string | null; apellidos: string | null; curp: string | null; edad: number | null; ley: string | null };
 type R = { ok: boolean; error?: string; personas?: Hallazgo[]; id?: string } & Partial<CotitularCliente> & { titular?: TitularInfonavit };
 
-export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, proyectos, supuestos, historial }: {
+export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, proyectos, supuestos, historial, faltantes, desdeSemilla }: {
   personaId: string;
+  /** Lo que hay que capturar antes de poder calcular. Vacío = listo. */
+  faltantes: FaltanteInfonavit[];
+  desdeSemilla: boolean;
   cliente: { nombre: string; ley: string; edad: number | null; cotiza: boolean; creditoVigente: boolean | null };
   base: TitularInfonavit;
   origen: Origen;
@@ -115,9 +121,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   supuestos: SupuestosGlobales;
   historial: AsesoriaGuardada[];
 }) {
-  const disponibles = proyectos.filter((p) => p.disponible);
-  const [proyectoId, setProyectoId] = useState(disponibles[0]?.id ?? '');
-  const proyecto = disponibles.find((p) => p.id === proyectoId) ?? null;
+  const creditoMin = Number(supuestos.credito_minimo ?? 50000);
+  const enCatalogo = proyectos.filter((p) => p.disponible);
+  const [proyectoId, setProyectoId] = useState(enCatalogo[0]?.id ?? '');
   const [t1, setT1] = useState<TitularInfonavit>(base);
   const [modoCotitular, setModoCotitular] = useState<ModoCotitular>('no');
   const [q, setQ] = useState('');
@@ -139,11 +145,20 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     meses_cotizando: supuestos.meses_cotizando_default, ingreso_real: 0, deducciones_usadas: 0, conserva_valor: 1,
   });
   const [pal, setPal] = useState<PalancasInfonavit>({
-    plusvalia: proyecto?.plusvalia ?? 0.06,
+    plusvalia: (enCatalogo.find((p) => p.id === proyectoId) ?? enCatalogo[0])?.plusvalia ?? 0.06,
     alterno: supuestos.alterno,
     pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 10,
   });
   const [verInterno, setVerInterno] = useState(false);
+  // Escriturar por arriba del precio de venta, topado al avalúo. El diferencial se
+  // le entrega al cliente en efectivo a la firma.
+  const [sobreprecio, setSobreprecio] = useState(0);
+  // Faltantes que el asesor resuelve aquí mismo, sin salir de la pestaña.
+  const [sbcNuevo, setSbcNuevo] = useState('');
+  const [pmgDecidida, setPmgDecidida] = useState(false);
+  const [msgFalta, setMsgFalta] = useState<string | null>(null);
+  const [resolviendo, resolver] = useTransition();
+  const pendientes = faltantes.filter((f) => !(f === 'conserva_valor' && pmgDecidida));
   const [aliadoVende, setAliadoVende] = useState(true);
   const [aliadoRenta, setAliadoRenta] = useState(true);
 
@@ -156,24 +171,36 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     mantenimiento: supuestos.mantenimiento, gestion: supuestos.gestion, aplica_gestion: supuestos.aplica_gestion,
     comision_venta: supuestos.comision_venta, uma_mensual: supuestos.uma_mensual,
     monto_max_credito: supuestos.monto_max_credito, horizontes: supuestos.horizontes,
+    credito_minimo: Number(supuestos.credito_minimo ?? 50000),
     base_plusvalia: supuestos.base_plusvalia === 'avaluo' ? 'avaluo' : 'escrituracion',
   }), [supuestos]);
+
+  const clienteMotor: ClienteInfonavit = { titulares: conCotitular ? [t1, t2] : [t1] };
+
+  // No se puede comprar con la pura subcuenta: Infonavit siempre presta algo. Si ni
+  // escriturando al avalúo queda el crédito mínimo, ese inmueble no le sirve a esta
+  // persona y no se ofrece.
+  const ssvTotal = clienteMotor.titulares.reduce((acc, x) => acc + (x.ssv || 0), 0);
+  const disponibles = enCatalogo.filter((p) => sobreprecioMinimo(p, ssvTotal, creditoMin).viable);
+  const proyecto = disponibles.find((p) => p.id === proyectoId) ?? disponibles[0] ?? null;
+  // Cuánto hay que escriturar por arriba para que la operación exista.
+  const minimo = proyecto ? sobreprecioMinimo(proyecto, ssvTotal, creditoMin) : null;
+  const faltaSobreprecio = Boolean(minimo && sobreprecio < minimo.requerido);
 
   const inmueble: InmuebleInfonavit | null = proyecto && {
     avaluo: proyecto.avaluo, escrituracion: proyecto.escrituracion, costo_aliado: proyecto.costo_aliado ?? proyecto.escrituracion,
     renta: proyecto.renta, plusvalia: proyecto.plusvalia, notariales_credito: proyecto.notariales_credito,
     notariales_adicionales: proyecto.notariales_adicionales, comision_desarrollador: proyecto.comision_desarrollador,
     aliado_cubre_notariales: proyecto.aliado_cubre_notariales,
+    sobreprecio,
   };
-
-  const clienteMotor: ClienteInfonavit = { titulares: conCotitular ? [t1, t2] : [t1] };
 
   const { r, error } = useMemo(() => {
     if (!inmueble) return { r: null, error: null as string | null };
     try { return { r: calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, pal), error: null }; }
     catch (e) { return { r: null as ResultadoInfonavit | null, error: e instanceof Error ? e.message : 'Error de cálculo' }; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proyectoId, t1, t2, conCotitular, pal, supMotor]);
+  }, [proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
 
   // Sensibilidad: la plusvalía es el supuesto que más mueve la conclusión y casi nunca
   // tiene respaldo de mercado. Ver la ventaja a varias plusvalías evita venderla como certeza.
@@ -187,10 +214,18 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
       } catch { return { g, filas: [] }; }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proyectoId, t1, t2, conCotitular, pal, supMotor]);
+  }, [proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
 
   if (!disponibles.length) {
-    return <section className={card}><p className="text-sm text-muted">No hay inmuebles disponibles en el catálogo. Cárgalos en <b>Proyectos Infonavit</b> antes de armar una asesoría.</p></section>;
+    return (
+      <section className={card}>
+        <p className="text-sm">
+          {enCatalogo.length === 0
+            ? <>No hay inmuebles disponibles en el catálogo. Cárgalos en <b>Inmuebles</b> antes de armar una asesoría.</>
+            : <>Con un saldo de <b>{money(ssvTotal)}</b> ninguno de los inmuebles del catálogo deja el crédito mínimo de {money(creditoMin)}, ni escriturando al avalúo. <b>No se puede comprar sólo con la subcuenta</b>: hace falta un inmueble más caro.</>}
+        </p>
+      </section>
+    );
   }
 
   const hs = r?.tabla.map((f) => f.horizonte) ?? supuestos.horizontes;
@@ -246,12 +281,81 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         )}
       </section>
 
+      {pendientes.length > 0 ? (
+        <section className={card}>
+          <h2 className={h2}>Faltan datos para armar el escenario</h2>
+          <p className="mt-1 text-xs text-muted">
+            Este expediente no tiene consulta del IMSS, pero sí lo suficiente para el proyecto Infonavit.
+            Captura lo que falta y la pestaña calcula igual.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {pendientes.map((f) => (
+              <li key={f} className="rounded-xl border border-line p-3">
+                <div className="text-sm font-semibold">{ETIQUETA_FALTANTE[f].titulo}</div>
+                <p className="mt-0.5 text-[11px] text-muted">{ETIQUETA_FALTANTE[f].por_que}</p>
+
+                {f === 'salario_diario' && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input value={sbcNuevo} onChange={(ev) => setSbcNuevo(ev.target.value)} inputMode="decimal"
+                      placeholder="Salario diario ante el IMSS" className="w-56 rounded-lg border border-line px-2 py-1 text-sm" />
+                    {Number(sbcNuevo) > 0 && (
+                      <span className="text-xs text-muted">= {money(Number(sbcNuevo) * DIAS_MES)} al mes</span>
+                    )}
+                    <button disabled={resolviendo || !(Number(sbcNuevo) > 0)} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                      onClick={() => resolver(async () => {
+                        const res = (await declararAsesor(personaId, 'salario_diario', Number(sbcNuevo), 'declarado')) as R;
+                        setMsgFalta(res.ok ? null : res.error ?? 'error');
+                      })}>Guardar en el expediente</button>
+                  </div>
+                )}
+
+                {f === 'ley' && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(['Ley73', 'Ley97'] as const).map((l) => (
+                      <button key={l} disabled={resolviendo} className={btn}
+                        onClick={() => resolver(async () => {
+                          const res = (await declararAsesor(personaId, 'ley', l, 'declarado')) as R;
+                          setMsgFalta(res.ok ? null : res.error ?? 'error');
+                        })}>{l === 'Ley73' ? 'Ley 73' : 'Ley 97'}</button>
+                    ))}
+                  </div>
+                )}
+
+                {f === 'fecha_nacimiento' && (
+                  <p className="mt-2 text-xs text-muted">
+                    Captúrala en <span className="font-semibold">Información</span>; desde ahí se guarda con su procedencia.
+                  </p>
+                )}
+
+                {f === 'conserva_valor' && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button disabled={resolviendo} className={btn}
+                      onClick={() => { set1('conserva_valor', 1); setPmgDecidida(true); }}>
+                      Sí, la supera: conserva todo su saldo
+                    </button>
+                    <button disabled={resolviendo} className={btn}
+                      onClick={() => { set1('conserva_valor', 0); setPmgDecidida(true); }}>
+                      No, quedaría en PMG: el saldo se consumiría
+                    </button>
+                    <button disabled={resolviendo} className={btn}
+                      onClick={() => { set1('conserva_valor', 0.5); setPmgDecidida(true); }}>
+                      A caballo: ajusto el % a mano
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {msgFalta && <p className="mt-2 text-xs text-red-600">{msgFalta}</p>}
+        </section>
+      ) : (
+      <>
       {/* ---------------- Selección y palancas ---------------- */}
       <section className={card}>
         <h2 className={h2}>Selección y palancas</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
-            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
+            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); setSobreprecio(0); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
               {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
             </select>
           </Campo>
@@ -303,6 +407,26 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
             {proyecto.notas ? <> · {proyecto.notas}</> : null}
           </p>
+        )}
+        {proyecto && proyecto.avaluo > proyecto.escrituracion && (
+          <div className="mt-3 rounded-xl border border-line bg-cream/60 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-muted">
+                Escriturar por arriba del precio de venta · tope {money(proyecto.avaluo - proyecto.escrituracion)} (el avalúo)
+              </span>
+              <span className="text-xs">
+                Se le entregan <b>{money(sobreprecio)}</b> en efectivo a la firma
+              </span>
+            </div>
+            <input type="range" min={0} max={proyecto.avaluo - proyecto.escrituracion} step={5000}
+              value={sobreprecio} onChange={(ev) => setSobreprecio(Number(ev.target.value))}
+              className="mt-2 w-full" />
+            <p className="mt-1 text-[11px] text-muted">
+              Entra más saldo de vivienda a la operación en vez de quedarse al {pct(supuestos.r_ssv, 0)} en Infonavit.
+              Sube lo que se escritura y por tanto el crédito, la retención y los intereses;{' '}
+              <b>no sube lo que el inmueble vale</b>: la plusvalía sigue corriendo sobre {money(proyecto.escrituracion)}.
+            </p>
+          </div>
         )}
         <Nota>
           El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
@@ -395,6 +519,22 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         )}
       </section>
 
+      {faltaSobreprecio && minimo && (
+        <section className="rounded-2xl border-2 border-amber-300 bg-amber-50/50 p-5">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-amber-800">No se puede comprar sólo con la subcuenta</h2>
+          <p className="mt-2 text-sm">
+            Su saldo de <b>{money(ssvTotal)}</b> alcanza para el inmueble completo, así que no quedaría crédito
+            Infonavit y la operación no existe. Para que haya al menos {money(creditoMin)} de crédito hay que
+            escriturar en <b>{money(minimo.escrituraMinima)}</b>: {money(minimo.requerido)} por arriba del precio de
+            venta, que se le entregan en efectivo el día de la firma.
+          </p>
+          <button className="mt-3 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white"
+            onClick={() => setSobreprecio(minimo.requerido)}>
+            Escriturar en {money(minimo.escrituraMinima)}
+          </button>
+        </section>
+      )}
+
       {error && (
         <section className={card}>
           <p className="text-sm text-red-700"><b>El cálculo no cuadra:</b> {error}</p>
@@ -402,7 +542,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         </section>
       )}
 
-      {r && (
+      {!faltaSobreprecio && r && (
         <>
           {/* ---------------- La operación ---------------- */}
           <section className={card}>
@@ -418,6 +558,8 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               <Mini label="Remanente en Infonavit" v={money(r.operacion.remanente)} />
               <Mini label="Renta neta" v={money(r.operacion.renta_neta)} />
               <Mini label="Se liquida el crédito" v={r.mes_liquida_credito ? `mes ${r.mes_liquida_credito}` : `> ${supuestos.horizontes[supuestos.horizontes.length - 1]} meses`} />
+              {r.operacion.sobreprecio > 0 && <Mini label="Efectivo a la firma" v={money(r.operacion.sobreprecio)} />}
+              {r.operacion.sobreprecio > 0 && <Mini label="Escriturado" v={money(r.operacion.esc)} />}
             </div>
             {r.senales.length > 0 && (
               <ul className="mt-3 flex flex-wrap gap-2">
@@ -459,6 +601,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <Fila indent label="rendimiento del saldo aplicado" vals={r.tabla.map((f) => f.bloques.detalle.oportunidad_saldo)} negativo />
                   <Fila indent label="aportaciones netas" vals={r.tabla.map((f) => f.bloques.detalle.aportaciones_netas)} negativo />
                   <Fila fuerte label="IV. Saldo rescatado (Ley 97 bajo PMG)" vals={r.tabla.map((f) => f.bloques.IV_rescate)} />
+                  {r.operacion.sobreprecio > 0 && (
+                    <Fila fuerte label="V. Efectivo de la firma, a su rendimiento alterno" vals={r.tabla.map((f) => f.bloques.V_efectivo_firma)} />
+                  )}
                   <tr className="border-t border-line"><td className="py-2 pr-3 font-bold">Ventaja del esquema a la venta</td>
                     {r.tabla.map((f) => <td key={f.horizonte} className={`py-2 text-right font-bold tabular-nums ${f.ventaja_venta < 0 ? 'text-red-700' : 'text-green-700'}`}>{money(f.ventaja_venta)}</td>)}
                   </tr>
@@ -599,6 +744,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             </section>
           )}
         </>
+      )}
+
+      </>
       )}
 
       {/* ---------------- Guardar e historial ---------------- */}

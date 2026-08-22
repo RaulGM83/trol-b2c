@@ -10,6 +10,7 @@ import {
   type ClienteInfonavit, type InmuebleInfonavit, type TitularInfonavit,
 } from '../infonavit-asesoria';
 import { CASOS_GOLDEN } from './fixture-infonavit-goldens';
+import { sobreprecioMinimo } from '../infonavit-asesoria';
 import { conservaValorSSV } from '../ley97';
 import type { ResultadoLey97 } from '../types';
 
@@ -305,5 +306,132 @@ describe('acumulados expuestos para el escenario resumido', () => {
     const r = calcular(cliente(titular({ ssv: 2_000_000 })), inmueble({ escrituracion: 1_000_000 }));
     expect(r.operacion.credito).toBe(0);
     expect(r.tabla[3].aportaciones_aplicadas).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Escriturar por arriba del precio de venta (topado al avalúo) para que entre
+// más saldo de vivienda, entregando el diferencial en efectivo a la firma.
+// ---------------------------------------------------------------------------
+describe('sobreprecio de escrituración', () => {
+  // Laureles con el perfil de un cliente cuyo saldo supera el precio del inmueble.
+  const laureles = (sobreprecio: number) => inmueble({
+    avaluo: 1_050_000, escrituracion: 870_000, renta: 4_500,
+    notariales_credito: 30_000, notariales_adicionales: 23_800,
+    aliado_cubre_notariales: true, sobreprecio,
+  });
+  const david = titular({ regimen: 97, edad: 56, ssv: 907_000, salario_imss: 45_000, conserva_valor: 1 });
+
+  it('sin sobreprecio nada cambia', () => {
+    const a = calcular(cliente(david), laureles(0));
+    const b = calcular(cliente(david), inmueble({
+      avaluo: 1_050_000, escrituracion: 870_000, renta: 4_500,
+      notariales_credito: 30_000, notariales_adicionales: 23_800, aliado_cubre_notariales: true,
+    }));
+    expect(a.operacion.sobreprecio).toBe(0);
+    montoCerca(a.tabla[3].ventaja_venta, b.tabla[3].ventaja_venta);
+  });
+
+  it('se topa al avalúo aunque se pida más', () => {
+    const r = calcular(cliente(david), laureles(500_000));
+    montoCerca(r.operacion.sobreprecio, 1_050_000 - 870_000);
+    montoCerca(r.operacion.esc, 1_050_000);
+  });
+
+  it('saca saldo de Infonavit: baja el remanente y sube el crédito', () => {
+    const sin = calcular(cliente(david), laureles(0));
+    const con = calcular(cliente(david), laureles(180_000));
+    // Sin sobreprecio le quedan $7,000 atorados; con él entra todo el saldo.
+    montoCerca(sin.operacion.remanente, 907_000 - 870_000 - 30_000);
+    expect(con.operacion.remanente).toBe(0);
+    expect(con.operacion.credito).toBeGreaterThan(sin.operacion.credito);
+    montoCerca(con.operacion.credito, 1_050_000 + 30_000 - 907_000);
+  });
+
+  // Lo que más importa: escriturar arriba NO hace que el inmueble valga más.
+  it('la plusvalía sigue capitalizando el precio de venta, no la escritura inflada', () => {
+    const sin = calcular(cliente(david), laureles(0));
+    const con = calcular(cliente(david), laureles(180_000));
+    expect(con.operacion.base).toBe(870_000);
+    expect(con.operacion.esc).toBe(1_050_000);
+    // misma plusvalía en pesos: el activo es el mismo
+    montoCerca(con.tabla[3].bloques.detalle.plusvalia_100, sin.tabla[3].bloques.detalle.plusvalia_100);
+    // y el sobreprecio aparece como descuento NEGATIVO: se financió más de lo que vale
+    montoCerca(con.tabla[3].bloques.detalle.descuento, -180_000);
+  });
+
+  it('el efectivo de la firma entra capitalizado al rendimiento alterno', () => {
+    const con = calcular(cliente(david), laureles(180_000), null, { alterno: 0.08 });
+    const b5 = con.tabla[3].bloques.V_efectivo_firma; // 60 meses
+    montoCerca(b5, 180_000 * Math.pow(1.08, 5));
+  });
+
+  // Si el bloque V estuviera mal cableado, `calcular` lanzaría: la verificación
+  // interna compara bloques contra efectivo − notariales − contrafactual.
+  it('la verificación interna aguanta con sobreprecio en toda la batería', () => {
+    let corridas = 0;
+    for (const sp of [0, 50_000, 180_000, 400_000])
+      for (const ssv of [200_000, 907_000, 2_000_000])
+        for (const regimen of [73, 97])
+          for (const alterno of [0, 0.08, 0.15]) {
+            expect(() => calcular(
+              cliente(titular({ regimen, ssv, conserva_valor: regimen === 97 ? 0.6 : 1 })),
+              laureles(sp), null, { alterno },
+            )).not.toThrow();
+            corridas++;
+          }
+    expect(corridas).toBe(72);
+  });
+
+  it('con alterno en cero el sobreprecio es neutro: sólo devuelve lo que costó', () => {
+    // El costo (descuento negativo) y el efectivo se cancelan si el dinero no rinde.
+    const con = calcular(cliente(david), laureles(180_000), null, { alterno: 0 });
+    montoCerca(con.tabla[0].bloques.detalle.descuento + con.tabla[0].bloques.V_efectivo_firma, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// No se puede comprar con la pura subcuenta: siempre tiene que haber crédito.
+// ---------------------------------------------------------------------------
+describe('crédito mínimo', () => {
+  const laureles = { avaluo: 1_050_000, escrituracion: 870_000, notariales_credito: 30_000 };
+
+  it('quien no alcanza a cubrir el inmueble no necesita sobreprecio', () => {
+    const m = sobreprecioMinimo(laureles, 400_000, 50_000);
+    expect(m.requerido).toBe(0);
+    expect(m.viable).toBe(true);
+  });
+
+  it('David necesita escriturar en $927,000 para que exista crédito', () => {
+    // 50,000 + 907,000 − 30,000 − 870,000 = 57,000 de sobreprecio
+    const m = sobreprecioMinimo(laureles, 907_000, 50_000);
+    expect(m.requerido).toBe(57_000);
+    expect(m.escrituraMinima).toBe(927_000);
+    expect(m.viable).toBe(true); // el techo es 180,000
+  });
+
+  it('con saldo muy grande el inmueble deja de servir aunque se escriture al avalúo', () => {
+    const m = sobreprecioMinimo(laureles, 1_200_000, 50_000);
+    expect(m.viable).toBe(false);
+    expect(m.requerido).toBeGreaterThan(m.techo);
+  });
+
+  it('la señal avisa cuánto falta para llegar al mínimo', () => {
+    const r = calcular(
+      cliente(titular({ ssv: 907_000 })),
+      inmueble({ ...laureles, renta: 4_500, notariales_adicionales: 23_800, aliado_cubre_notariales: true }),
+    );
+    expect(r.operacion.credito).toBe(0);
+    expect(r.senales).toContain('credito_bajo_minimo:50000');
+  });
+
+  it('con el sobreprecio mínimo la señal desaparece', () => {
+    const m = sobreprecioMinimo(laureles, 907_000, 50_000);
+    const r = calcular(
+      cliente(titular({ ssv: 907_000 })),
+      inmueble({ ...laureles, renta: 4_500, notariales_adicionales: 23_800, aliado_cubre_notariales: true, sobreprecio: m.requerido }),
+    );
+    montoCerca(r.operacion.credito, 50_000);
+    expect(r.senales.some((x) => x.startsWith('credito_bajo_minimo'))).toBe(false);
   });
 });

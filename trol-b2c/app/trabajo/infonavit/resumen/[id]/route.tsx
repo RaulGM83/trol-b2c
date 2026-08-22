@@ -107,11 +107,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           {/* ---- precio ---- */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', backgroundColor: CREAM, padding: '16px 20px', marginTop: 24 }}>
             <div style={{ fontSize: 24, color: GRAY }}>Precio de escrituración</div>
-            <div style={{ fontSize: 34, fontWeight: 700, color: DARK }}>{mx(inm.escrituracion)}</div>
+            <div style={{ fontSize: 34, fontWeight: 700, color: DARK }}>{mx(op.esc)}</div>
           </div>
 
           {/* ---- con qué se paga ---- */}
           <Titulo t="Con qué se paga" />
+          {Number(op.sobreprecio ?? 0) > 0 ? (
+            <Fila k="Recibe en efectivo el día de la firma" v={mx(op.sobreprecio)}
+              sub="Se escritura por arriba del precio de venta y la diferencia se le entrega" />
+          ) : null}
           <Fila k="Su subcuenta de vivienda" v={mx(op.saldo_apl)}
             sub={remanente > 0 ? `Le quedan ${mx(remanente)} en su subcuenta` : undefined} />
           {credito > 0 ? <Fila k="Crédito Infonavit" v={mx(credito)} sub={`Retención de ${mx(op.pmt)} al mes`} /> : null}

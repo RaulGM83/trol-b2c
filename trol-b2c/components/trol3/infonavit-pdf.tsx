@@ -114,7 +114,10 @@ export function infonavitDoc(a: Any) {
           <View style={s.two}>
             <View style={s.col}>
               <Row l="Saldo de vivienda que entra como enganche" v={mx(op.saldo_apl)} />
-              <Row l="Valor de escrituración del inmueble" v={mx(inm.escrituracion)} />
+              <Row l="Valor de escrituración del inmueble" v={mx(op.esc)} />
+              {Number(op.sobreprecio ?? 0) > 0 && (
+                <Row l="Efectivo que recibe el día de la firma" v={mx(op.sobreprecio)} />
+              )}
               {hayCredito
                 ? <Row l={`Crédito Infonavit (incluye ${mx(op.not_credito)} de gastos)`} v={mx(op.credito)} />
                 : <Row l="Crédito Infonavit requerido" v="Ninguno: su saldo alcanza" />}

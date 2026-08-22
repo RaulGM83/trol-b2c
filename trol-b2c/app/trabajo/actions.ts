@@ -398,9 +398,12 @@ export async function cargarCotitular(personaId: string) {
   if (!e) return fail(new Error('No encontramos ese expediente.'));
   const map = new Map(((datos ?? []) as Any[]).map((d) => [d.campo, d]));
   const semilla = parseSemillaV2(map.get('semilla')?.valor);
-  if (!semilla) return fail(new Error('Ese expediente todavía no tiene información del IMSS: captura sus datos a mano o pide su consulta primero.'));
   const base = titularDesdeExpediente({
     semilla,
+    ley: e.ley ?? null,
+    fechaNacimiento: e.fecha_nacimiento ?? null,
+    statusEmpleo: e.status_empleo ?? null,
+    salarioDiario: map.get('salario_diario')?.valor == null ? null : Number(map.get('salario_diario')?.valor),
     saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
     saldoEsReportado: e.saldo_infonavit_capa === 'declarado' || e.saldo_infonavit_capa === 'validado',
     creditoVigente: e.credito_infonavit ?? null,
@@ -413,6 +416,7 @@ export async function cargarCotitular(personaId: string) {
     nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
     titular: base.titular,
     origen: base.origen,
+    faltantes: base.faltantes,
     saldoCapa: e.saldo_infonavit_capa ?? null,
     creditoVigente: e.credito_infonavit ?? null,
   });
