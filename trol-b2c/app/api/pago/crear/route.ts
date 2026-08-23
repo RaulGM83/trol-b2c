@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { clienteDePago } from '@/lib/pago/cliente';
 
 // Crea una orden pendiente y una preferencia de Mercado Pago; devuelve el init_point.
 export async function POST(req: Request) {
@@ -26,12 +27,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'no_auth' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: cliente } = await admin
-    .from('clientes')
-    .select('id')
-    .eq('auth_user_id', user.id)
-    .limit(1)
-    .maybeSingle();
+  const cliente = await clienteDePago(admin, user.id);
   if (!cliente) return NextResponse.json({ error: 'sin_cliente' }, { status: 400 });
 
   const { data: prod } = await admin
