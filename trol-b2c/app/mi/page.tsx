@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
+import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
 import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
 
 // No importar constantes con métodos desde módulos 'use client': en el server
@@ -25,7 +25,13 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login?next=/mi');
   const pid = await getPersonaMia();
-  if (!pid) return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
+  if (!pid) {
+    // Sesión del equipo (asesor entra a /mi, p.ej. abriendo un magic link de
+    // cliente en su navegador): su casa es /trabajo, no un expediente.
+    const miembro = await getMiembro();
+    if (miembro) redirect('/trabajo');
+    return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
+  }
   const db = t3();
   await db.rpc('mi_bienvenida');
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad')]);
