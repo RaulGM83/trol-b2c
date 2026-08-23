@@ -9,12 +9,21 @@ import { createClient } from '@/lib/supabase/client';
 import { WA, BOOKING_URL } from '@/lib/whatsapp';
 import { CasoResumen } from './CasoResumen';
 import { CardBrick } from './CardBrick';
-import { Stepper } from './Stepper';
 
 type Via = 'pago' | 'puntos';
 type Metodo = 'spei' | 'tarjeta';
 
-/** Pantalla 3 del Inc 0 — Checkout integrado con el caso a la vista (§13, §16). */
+/** Encabezado propio del checkout, mismo lenguaje visual que /mi. */
+function CheckoutHeader() {
+  return (
+    <header className="mb-5 flex items-center justify-between">
+      <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span>
+      <Link href="/mi" className="text-xs text-muted hover:underline">← Mi expediente</Link>
+    </header>
+  );
+}
+
+/** Checkout integrado a /mi, con el caso a la vista cuando existe (§13, §16). */
 export function Checkout({
   vm,
   producto,
@@ -22,7 +31,7 @@ export function Checkout({
   saldoPuntos = 0,
   mixInicial = false,
 }: {
-  vm: DiagnosticoVM;
+  vm: DiagnosticoVM | null;
   producto: Producto;
   via: Via;
   saldoPuntos?: number;
@@ -123,7 +132,7 @@ export function Checkout({
   if (spei) {
     return (
       <main className="mx-auto max-w-xl px-5 py-6">
-        <Stepper activo={3} />
+        <CheckoutHeader />
         <h1 className="mb-1 text-2xl font-extrabold tracking-tight">Transfiere por SPEI</h1>
         <p className="mb-4 text-sm text-muted">
           Tu acceso a <b className="text-ink">{producto.nombre}</b> se activa solo en cuanto recibamos tu transferencia.
@@ -187,7 +196,7 @@ export function Checkout({
   if (pagado) {
     return (
       <main className="mx-auto max-w-xl px-5 py-6">
-        <Stepper activo={3} />
+        <CheckoutHeader />
         <div className="rounded-2xl bg-ink p-6 text-center text-white">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lime text-xl font-extrabold text-ink">
             ✓
@@ -208,7 +217,7 @@ export function Checkout({
         {/* Siguiente paso según el producto (§16) */}
         <div className="mt-4 flex flex-col gap-2">
           {producto.tipo === 'herramienta' && (
-            <Link href="/calculadora" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
+            <Link href="/mi?tab=calculadora" className="rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink">
               Abrir {producto.nombre}
             </Link>
           )}
@@ -245,8 +254,8 @@ export function Checkout({
             </div>
           )}
 
-          <Link href="/diagnostico" className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
-            Volver a mi diagnóstico
+          <Link href="/mi" className="rounded-xl border border-line bg-white px-4 py-3 text-center text-sm font-bold text-ink">
+            Volver a mi expediente
           </Link>
         </div>
       </main>
@@ -255,24 +264,17 @@ export function Checkout({
 
   return (
     <main className="mx-auto max-w-xl px-5 py-6">
-      <header className="mb-6 flex items-center gap-2">
-        <span className="text-xl font-extrabold tracking-tight">
-          tr<span className="text-lime">o</span>l
-        </span>
-        <Link href="/mejor-jugada" className="text-xs text-muted hover:underline">
-          ← volver
-        </Link>
-      </header>
-
-      <Stepper activo={3} />
+      <CheckoutHeader />
       <h1 className="mb-3 text-2xl font-extrabold tracking-tight">
         {esPuntos ? 'Confirmar con puntos' : 'Pagar'}
       </h1>
 
-      {/* El caso a la vista */}
-      <div className="mb-4">
-        <CasoResumen vm={vm} />
-      </div>
+      {/* El caso a la vista, cuando ya existe el cálculo */}
+      {vm && (
+        <div className="mb-4">
+          <CasoResumen vm={vm} />
+        </div>
+      )}
 
       {/* Producto */}
       <section className="mb-4 rounded-2xl border border-line bg-white p-5">

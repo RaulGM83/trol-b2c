@@ -1,9 +1,10 @@
-// Pantalla 3 del Incremento 0 — Checkout integrado.
-// En producción: webhook "pagado" → corre workflow_id → genera/abre producto →
-// cashback (§14). Aquí simula el pago en el cliente.
-import Link from 'next/link';
+// Checkout integrado a la experiencia /mi. El webhook "pagado" corre el
+// fulfillment (procesar_pago_orden → cashback → beneficios trol3, mig. 082).
+// No exige semilla: quien viene de /mi puede pagar aunque su cálculo legado
+// no exista; el resumen del caso sólo se muestra cuando sí lo hay.
 import { redirect } from 'next/navigation';
 import { Checkout } from '@/components/Checkout';
+import { createClient } from '@/lib/supabase/server';
 import { getSesionCliente } from '@/lib/cliente';
 import { getProducto } from '@/lib/productos';
 import { getSaldoPuntos } from '@/lib/puntos';
@@ -15,26 +16,20 @@ export default async function CheckoutPage({
 }: {
   searchParams: { p?: string; via?: string; mix?: string };
 }) {
-  const sesion = await getSesionCliente();
-  if (!sesion.vm) {
-    return (
-      <main className="mx-auto max-w-xl px-5 py-10 text-center">
-        <p className="text-sm text-muted">Tu diagnóstico aún no está listo.</p>
-        <Link href="/login" className="mt-4 inline-block rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white">
-          Volver a entrar
-        </Link>
-      </main>
-    );
-  }
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect(`/login?next=${encodeURIComponent(`/checkout?p=${searchParams.p ?? ''}`)}`);
+
   const producto = getProducto(searchParams.p);
   // La asesoría básica es gratis: no pasa por checkout.
   if (producto.precioMXN === 0) redirect('/asesoria');
 
+  const sesion = await getSesionCliente();
   const via = searchParams.via === 'puntos' ? 'puntos' : 'pago';
   const saldoPuntos = await getSaldoPuntos();
   return (
     <Checkout
-      vm={sesion.vm}
+      vm={sesion.real ? sesion.vm : null}
       producto={producto}
       via={via}
       saldoPuntos={saldoPuntos}
