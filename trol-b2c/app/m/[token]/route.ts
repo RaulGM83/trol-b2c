@@ -25,6 +25,8 @@ const soloDigitos = (s: string) => s.replace(/\D/g, '');
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   const url = new URL(req.url);
   const campania = (url.searchParams.get('c') ?? 'magic').slice(0, 40);
+  // Destino: d=mi → expediente trol3 (/mi); default el portal de diagnóstico.
+  const destino = url.searchParams.get('d') === 'mi' ? '/mi' : '/diagnostico';
   const fallback = (tel?: string) =>
     NextResponse.redirect(new URL(`/login${tel ? `?tel=${tel}` : ''}`, url.origin));
 
@@ -38,7 +40,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     const {
       data: { user: yaDentro },
     } = await sesionPrevia.auth.getUser();
-    if (yaDentro) return NextResponse.redirect(new URL('/diagnostico', url.origin));
+    if (yaDentro) return NextResponse.redirect(new URL(destino, url.origin));
 
     const admin = createAdminClient();
     const hash = crypto.createHash('sha256').update(token).digest('hex');
@@ -109,7 +111,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       .eq('id', mt.id);
     await admin.from('links_campania').insert({ cliente_id: cli.id, campania, evento: 'magic' });
 
-    return NextResponse.redirect(new URL('/diagnostico', url.origin));
+    return NextResponse.redirect(new URL(destino, url.origin));
   } catch {
     return fallback();
   }

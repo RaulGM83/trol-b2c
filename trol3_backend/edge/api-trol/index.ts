@@ -7,6 +7,7 @@
 //   /interaccion     {persona_id|telefono, canal, direccion, contenido, actor?, visible_cliente?, meta?}
 //   /handoff         {persona_id|telefono, motivo?}
 //   /consulta        {persona_id|telefono, tipo, actor?, actor_id?, pagador?, notificar?, motivo?, forzar?, proveedor?}
+//   /mi-link         {persona_id|telefono, campania?}                          -> {mi_link} (acceso a /mi por WhatsApp)
 //   /consulta/resultado {consulta_id, estado, datos?, documentos?, resultado?, error?, fecha_dato?}
 //                       documentos: [{tipo, nombre, base64?|storage_path?|url?, gating?}] — el base64 se sube a la bóveda
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
@@ -127,7 +128,21 @@ Deno.serve(async (req) => {
         if (b.apellidos && (data as { persona_id?: string })?.persona_id) {
           await db.from("personas").update({ apellidos: String(b.apellidos) }).eq("id", (data as { persona_id: string }).persona_id).is("apellidos", null);
         }
-        return json(data);
+        // Magic link al expediente (/m/<token>?d=mi): el bot lo manda al WhatsApp
+        // del cliente, así que poseerlo = teléfono validado. Best-effort.
+        let mi_link: string | null = null;
+        try {
+          const { data: link } = await db.rpc("generar_mi_link", { p_persona: (data as { persona_id: string }).persona_id, p_campania: b.campania ?? "alta" });
+          mi_link = (link as string) ?? null;
+        } catch { /* sin link no se bloquea el alta */ }
+        return json({ ...(data as object), mi_link });
+      }
+      case "/mi-link": {
+        // Link de acceso a /mi para un cliente existente (lo pide el bot bajo demanda).
+        const pid = await personaId(b);
+        const { data, error } = await db.rpc("generar_mi_link", { p_persona: pid, p_campania: b.campania ?? "mi-link" });
+        if (error) throw error;
+        return json({ ok: true, persona_id: pid, mi_link: data });
       }
       case "/declarar": {
         const pid = await personaId(b);

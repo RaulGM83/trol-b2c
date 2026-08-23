@@ -22,6 +22,9 @@ export function SitioHeader() {
           <Link href="/calcula" className="hidden hover:text-lime sm:block">
             Calculadora
           </Link>
+          <a href="https://app.trol.mx/login?next=/mi" className="hidden hover:text-lime sm:block">
+            Mi expediente
+          </a>
           <a
             href="/i/sitio"
             className="rounded-full bg-lime px-4 py-2 font-semibold text-ink hover:opacity-90"
