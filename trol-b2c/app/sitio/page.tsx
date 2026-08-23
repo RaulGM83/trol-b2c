@@ -79,12 +79,12 @@ export default function SitioHome() {
           </div>
           <div className="mt-12 grid max-w-xl grid-cols-2 gap-6 border-t border-white/15 pt-8">
             <div>
-              <p className="text-3xl font-extrabold text-lime">14,000+</p>
+              <p className="text-3xl font-extrabold text-lime">15,000+</p>
               <p className="text-sm text-white/70">personas con diagnóstico Trol</p>
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-lime">8x</p>
-              <p className="text-sm text-white/70">mejora promedio en la pensión proyectada</p>
+              <p className="text-3xl font-extrabold text-lime">hasta 8x</p>
+              <p className="text-sm text-white/70">de mejora en la pensión proyectada</p>
             </div>
           </div>
         </div>
