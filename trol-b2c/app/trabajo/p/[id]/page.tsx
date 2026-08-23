@@ -151,6 +151,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // Link legible del expediente (nombre-últimos4tel), como el de referidos; /e/ acepta slug o uuid.
   const { data: slugExp } = await db.rpc('slug_expediente', { p_persona: e.persona_id });
   const urlExpediente = `${SITE}/e/${(slugExp as string | null) ?? e.persona_id}?c=bot`;
+  // Link mágico directo a /mi (081): entra sin OTP, 7 días / 25 usos. Sólo
+  // debe mandarse al WhatsApp del propio cliente (poseerlo = teléfono validado).
+  const { data: miLink } = await db.rpc('mi_link_asesor', { p_persona: e.persona_id });
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
@@ -249,7 +252,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <HistorialLaboral historial={historialLaboral} />
           </div>
           <aside className="space-y-4">
-            <CompartirLinks expediente={urlExpediente} referido={urlReferido} />
+            <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} />
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Pedir información</h2>
               <ConsultaForm personaId={e.persona_id} />

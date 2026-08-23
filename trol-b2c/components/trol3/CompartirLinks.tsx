@@ -28,13 +28,14 @@ function Copiable({ label, url }: { label: string; url: string }) {
   );
 }
 
-export function CompartirLinks({ expediente, referido }: { expediente: string; referido?: string | null }) {
+export function CompartirLinks({ directo = null, expediente, referido }: { directo?: string | null; expediente: string; referido?: string | null }) {
   return (
     <section className="rounded-2xl border border-line bg-white p-5">
       <h2 className="mb-2 text-sm font-bold">Links para compartir</h2>
-      <Copiable label="Su expediente" url={expediente} />
+      {directo ? <Copiable label="Su expediente · entra directo (7 días)" url={directo} /> : null}
+      <Copiable label={directo ? 'Link permanente (pide código SMS)' : 'Su expediente'} url={expediente} />
       {referido ? <Copiable label="Invitar amigos (referido)" url={referido} /> : null}
-      <p className="mt-2 text-[11px] text-muted">Cópialos y mándalos por su WhatsApp (Tako). El de referido le da puntos por cada persona que llegue a diagnóstico.</p>
+      <p className="mt-2 text-[11px] text-muted">Mándalos SOLO por el WhatsApp del propio cliente (Tako): el directo abre su expediente sin código. El de referido le da puntos por cada persona que llegue a diagnóstico.</p>
     </section>
   );
 }
