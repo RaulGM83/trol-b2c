@@ -307,10 +307,10 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
         </section>
       )}
 
-      {/* Camino secundario: solo si hubo error de datos o falta el historial */}
+      {/* Camino secundario: el cliente nos manda su propio Reporte de Semanas */}
       <section className="mt-4 rounded-2xl border border-line bg-white p-5">
         <div className="text-sm font-bold text-ink">
-          {publica ? '¿Tuviste un error o no encontramos tu historial?' : '¿Tarda o no encontramos tu historial?'}
+          {publica ? '¿Prefieres mandarnos tu historial tú mismo?' : '¿Quieres adelantar tu cálculo?'}
         </div>
         <p className="mt-1 text-sm text-muted">
           Mándanos tu <b className="text-ink">Reporte de Semanas Cotizadas</b> del IMSS y armamos tu cálculo oficial nosotros.
