@@ -33,6 +33,13 @@ export function SitioHeader() {
           </a>
         </nav>
       </div>
+      {/* En móvil los links de arriba van ocultos: segunda fila propia. */}
+      <nav className="mx-auto flex max-w-5xl items-center gap-5 overflow-x-auto px-5 pb-3 text-sm text-white/90 sm:hidden">
+        <Link href="/asesorias" className="shrink-0 hover:text-lime">Asesorías</Link>
+        <Link href="/blog" className="shrink-0 hover:text-lime">Blog</Link>
+        <Link href="/calcula" className="shrink-0 hover:text-lime">Calculadora</Link>
+        <a href="https://app.trol.mx/login?next=/mi" className="shrink-0 font-semibold text-lime">Mi expediente</a>
+      </nav>
     </header>
   );
 }
@@ -54,6 +61,9 @@ export function SitioFooter() {
             <Link href="/calcula" className="hover:text-lime">
               Calcula tu pensión
             </Link>
+            <a href="https://app.trol.mx/login?next=/mi" className="hover:text-lime">
+              Mi expediente
+            </a>
             <a href="https://landing.trol.mx/privacidad/" className="hover:text-lime">
               Aviso de privacidad
             </a>

@@ -106,8 +106,8 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
             <div className="flex items-center rounded-lg border border-line focus-within:border-ink">
               <span className="px-3 text-sm text-muted">$</span>
               <input
-                type="number" step={500} value={inp.salarioMensual}
-                onChange={(e) => set('salarioMensual', +e.target.value)}
+                type="number" step={500} value={inp.salarioMensual || ''}
+                onChange={(e) => set('salarioMensual', e.target.value === '' ? 0 : +e.target.value)}
                 className="w-full rounded-r-lg py-2 pr-3 text-sm outline-none"
               />
             </div>
@@ -144,8 +144,8 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
               <div className="flex items-center rounded-lg border border-line focus-within:border-ink">
                 <span className="px-2 text-sm text-muted">$</span>
                 <input
-                  type="number" step={10000} value={inp.saldoAfore ?? 0}
-                  onChange={(e) => set('saldoAfore', +e.target.value)}
+                  type="number" step={10000} value={inp.saldoAfore || ''}
+                  onChange={(e) => set('saldoAfore', e.target.value === '' ? 0 : +e.target.value)}
                   className="w-full rounded-r-lg py-2 pr-2 text-sm outline-none"
                 />
               </div>
@@ -154,8 +154,8 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
               <div className="flex items-center rounded-lg border border-line focus-within:border-ink">
                 <span className="px-2 text-sm text-muted">$</span>
                 <input
-                  type="number" step={10000} value={inp.saldoInfonavit ?? 0}
-                  onChange={(e) => set('saldoInfonavit', +e.target.value)}
+                  type="number" step={10000} value={inp.saldoInfonavit || ''}
+                  onChange={(e) => set('saldoInfonavit', e.target.value === '' ? 0 : +e.target.value)}
                   className="w-full rounded-r-lg py-2 pr-2 text-sm outline-none"
                 />
               </div>
@@ -364,12 +364,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Input({ value, onChange, disabled = false }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+  // `value || ''`: al borrar el campo no se queda un 0 pegado adelante ("05000").
   return (
     <input
       type="number"
-      value={value}
+      value={value || ''}
       disabled={disabled}
-      onChange={(e) => onChange(+e.target.value)}
+      onChange={(e) => onChange(e.target.value === '' ? 0 : +e.target.value)}
       className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink disabled:bg-cream disabled:text-muted"
     />
   );
