@@ -5,9 +5,11 @@ const soloDigitos = (s: string) => s.replace(/\D/g, '');
 const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Captura de lead nuevo (sin cuenta): crea el contacto en HubSpot y arranca
-// Cálculos vía un webhook de n8n (LEAD_WEBHOOK_URL). La app no toca HubSpot
-// directo: reusa la integración existente del back.
+// Captura de lead nuevo (sin cuenta): alta directa en trol3 (persona + CURP).
+// Declarar el CURP dispara solo la consulta IMSS (tg_curp_consultas) y de ahí
+// el pipeline de cálculo y el WhatsApp con el resultado. Antes esto iba a un
+// webhook de n8n que solo creaba el contacto en HubSpot y ahí moría (se
+// detectó el 23-ago con la prueba de Vero, ver claude/18).
 //
 // Este endpoint es el PRIMER evento server-side que conoce la identidad del
 // lead (CURP + teléfono + referidor juntos), así que es donde se ancla la
@@ -22,8 +24,6 @@ export async function POST(req: Request) {
   const origen = String(body.origen ?? 'calcula').slice(0, 40);
   // /alta sí captura el nombre; /calcula no (queda ''), como hasta ahora.
   const nombreCompleto = String(body.nombre ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
-  const [nombre = '', ...resto] = nombreCompleto ? nombreCompleto.split(' ') : [];
-  const apellido = resto.join(' ');
   const campania = String(body.campania ?? 'tako').slice(0, 40);
   const referrer = body.referrer ? String(body.referrer).slice(0, 64) : undefined;
 
@@ -39,36 +39,55 @@ export async function POST(req: Request) {
   // leads dejaron su CURP y no quedó rastro en ningún lado.
   await persistir({ curp, correo, telefono, nombreCompleto, campania, referrer });
 
-  const webhook = process.env.LEAD_WEBHOOK_URL;
-  if (!webhook) return NextResponse.json({ ok: false, error: 'no_config' }, { status: 503 });
-
-  // Contrato del webhook "Nuevo cliente Booster Asesoria" (Tako/HubSpot):
-  // nombre, apellido, correo, curp, mobil, entry_channel (rama del Switch),
-  // conversationId (→ id_booster), status. Abrimos una rama nueva para la
-  // herramienta web vía entry_channel = LEAD_ENTRY_CHANNEL.
-  const entry_channel = process.env.LEAD_ENTRY_CHANNEL || 'calculadora_web';
+  // ---- Alta real en trol3 -------------------------------------------------
+  // alta_por_telefono deduplica por teléfono (y enlaza al legacy); declarar el
+  // CURP dispara la consulta IMSS si no hay una vigente. Para un cliente que ya
+  // tiene datos oficiales recientes, pedir_consulta responde validado_vigente y
+  // no se gasta otra consulta.
   try {
-    const r = await fetch(webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        curp,
-        correo,
-        mobil: telefono,
-        nombre,
-        apellido,
-        entry_channel,
-        conversationId: `web-${campania}`,
-        status: 'nuevo',
-        referrer,
-        origen,
-        ts: new Date().toISOString(),
-      }),
+    const admin = createAdminClient();
+    const t3 = admin.schema('trol3');
+    const { data: alta, error: e1 } = await t3.rpc('alta_por_telefono', {
+      p_tel: telefono,
+      p_canal: 'web',
+      p_actor: 'cliente',
+      p_nombre: nombreCompleto || null,
+      p_campania: campania || origen,
+      p_verificacion: 'web',
     });
-    if (!r.ok) return NextResponse.json({ ok: false, error: 'webhook_error' }, { status: 502 });
+    if (e1) throw e1;
+    const pid = (alta as { persona_id?: string } | null)?.persona_id;
+    if (!pid) throw new Error('sin_persona');
+    const { error: e2 } = await t3.rpc('declarar', {
+      p_persona: pid,
+      p_campo: 'curp',
+      p_valor: curp,
+      p_actor: 'cliente',
+      p_actor_id: pid,
+      p_capa: 'declarado',
+    });
+    // `dato_validado` = ya tenemos su CURP oficial: no es un error del lead.
+    if (e2 && !/dato_validado/i.test(e2.message)) throw e2;
+    // Refresco/arranque explícito por si el CURP ya existía (el trigger solo
+    // dispara cuando el dato es nuevo). Best-effort: deduplica sola.
+    try {
+      await t3.rpc('pedir_consulta', {
+        p_persona: pid,
+        p_tipo: 'imss_historial',
+        p_actor: 'cliente',
+        p_actor_id: pid,
+        p_pagador: 'cliente',
+        p_notificar: true,
+        p_motivo: `calculadora web (${origen})`,
+        p_forzar: false,
+        p_proveedor: null,
+      });
+    } catch {
+      /* validado_vigente o en curso: perfecto */
+    }
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ ok: false, error: 'webhook_error' }, { status: 502 });
+    return NextResponse.json({ ok: false, error: 'alta_error' }, { status: 502 });
   }
 }
 
