@@ -291,6 +291,8 @@ export function MisionCta({ mision, campos, identidad = null, compacto = false }
         })}>Guardar</button>}
         {val === '__nose' && <span className="text-xs text-muted">Sin problema: la buscamos por ti al consultar la CONSAR.</span>}
         <Link href="/encuesta" className={clsAlt}>Evaluar mi AFORE (+50)</Link>
+        <Link href="/comparativo" className={clsAlt}>Comparar con mi historia real</Link>
+        <Link href="/comparador" className={clsAlt}>Ver todas las AFOREs</Link>
         {msg && <span className="text-xs text-green-700">{msg}</span>}
       </div>
     );

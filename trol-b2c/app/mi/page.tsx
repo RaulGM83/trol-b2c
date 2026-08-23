@@ -9,7 +9,10 @@ import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, Ahorr
 const IDENTIDAD_VISIBLE = ['por_confirmar', 'confirmada_con_problema'];
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
-import { getSemillaV2Cliente } from '@/lib/cliente';
+import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
+import type { DiagnosticoVM } from '@/lib/diagnostico';
+import { NegativaLey73 } from '@/components/NegativaLey73';
+import { NegativaPension } from '@/components/NegativaPension';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi expediente · Trol' };
@@ -59,6 +62,18 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const yaCubierto = (p: Any) => Array.isArray(p.beneficios) && p.beneficios.length > 0 && p.beneficios.every((b: string) => beneficios.includes(b));
   const leyTxt = e.ley === 'Ley97' ? 'Ley 97' : e.ley === 'Ley73' ? 'Ley 73' : '';
   const semanasTxt = e.semanas ? `${fmtNum(e.semanas)} semanas ${e.semanas_capa === 'validado' ? 'oficiales' : 'que nos dijiste'}` : null;
+  // Glosario por ley: para_ley null = para todas; sin ley conocida sólo lo genérico.
+  const explLey = ((expl ?? []) as Any[]).filter((x) => !x.para_ley || x.para_ley === e.ley);
+  // Negativa (portada del diagnóstico viejo): cuando el motor dice que el
+  // escenario base NO alcanza pensión, eso es un resultado y se explica, no
+  // se deja el hueco del monto. Sólo se consulta si hay semilla.
+  let vmNeg: DiagnosticoVM | null = null;
+  if (e.tiene_semilla) {
+    try {
+      const ses = await getSesionCliente();
+      if (ses.real && ses.vm && ses.vm.status !== 'viable') vmNeg = ses.vm;
+    } catch {}
+  }
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-5">
@@ -71,7 +86,12 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         <div className="space-y-4">
           <section className="rounded-3xl bg-ink p-5 text-white">
             <div className="text-sm text-white/70">Hola{nombre ? `, ${nombre}` : ''}. Tu pensión, en claro:</div>
-            {e.pension_base ? (
+            {vmNeg ? (
+              <>
+                <p className="mt-2 text-sm">Con tus datos de hoy, el escenario base no alcanza pensión. Abajo te explicamos por qué, qué pasa con tu dinero y cómo se revierte.</p>
+                <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
+              </>
+            ) : e.pension_base ? (
               <>
                 <div className="mt-2 flex items-end gap-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-white/60">Hoy</div><div className="text-3xl font-extrabold">{fmtMXN(e.pension_base)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
@@ -90,13 +110,34 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
           {identidadVisible ? <IdentidadCard identidad={identidadVisible} /> : null}
 
+          {vmNeg ? (
+            vmNeg.razon73 ? (
+              <div>
+                <NegativaLey73 razon={vmNeg.razon73} pensionSiReactiva={vmNeg.pensionSiReactiva} regimenEfectivo={vmNeg.regimenEfectivo} pensionLey97={vmNeg.pensionHoy} edadProyecto={vmNeg.escenarioMaximo.edad} />
+                {vmNeg.escenarioMaximo.monto != null && (
+                  <div className="mt-2 rounded-xl bg-ink px-4 py-3 text-sm text-white/80">Reactivando y cotizando hasta los {vmNeg.escenarioMaximo.edad}: <b className="text-lime">{fmtMXN(vmNeg.escenarioMaximo.monto)}</b> al mes</div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <NegativaPension razon={vmNeg.razon97} salida={vmNeg.salida} reversibleCotizando={vmNeg.reversibleCotizando} edadProyecto={vmNeg.escenarioMaximo.edad} />
+                {vmNeg.escenarioMaximo.monto != null && (
+                  <div className="mt-2 rounded-xl bg-ink px-4 py-3 text-sm text-white/80">Si completas tus semanas cotizando hasta los {vmNeg.escenarioMaximo.edad}: <b className="text-lime">{fmtMXN(vmNeg.escenarioMaximo.monto)}</b> al mes</div>
+                )}
+              </div>
+            )
+          ) : null}
+
           {jugada ? (
             <section className="rounded-2xl bg-lime p-5 text-ink">
               <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">{(jugada as Any).recomendada ? `Tu mejor jugada · la recomienda ${(jugada as Any).experto ?? 'tu experto'}` : 'Tu mejor jugada (por confirmar con tu experto)'}</div>
               <h2 className="mt-1 text-xl font-extrabold">{(jugada as Any).titulo}</h2>
               <p className="mt-1 text-sm">{(jugada as Any).texto}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/70">{(jugada as Any).valor ? <span>hasta {fmtMXN((jugada as Any).valor)} al año</span> : null}{(jugada as Any).urgencia ? <span>· antes del {fmtFecha((jugada as Any).urgencia)}</span> : null}</div>
-              <div className="mt-3"><HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi expediente mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro /></div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi expediente mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro />
+                {e.tiene_semilla ? <Link href="/mejor-jugada" className="rounded-xl border border-ink/25 px-4 py-2.5 text-sm font-bold text-ink">Ver los números →</Link> : null}
+              </div>
             </section>
           ) : null}
 
@@ -124,7 +165,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
           <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} />
 
-          <Explicaciones items={(expl ?? []).filter((x: Any) => e.ley !== 'Ley97' || !['conservacion', 'mod40'].includes(x.clave)).slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
+          <Explicaciones items={explLey.slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
 
           {(e.interacciones ?? []).length ? (
             <section className="rounded-2xl border border-line bg-white p-5">
@@ -195,7 +236,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               );
             })}
           </section>
-          <Explicaciones items={expl ?? []} leidas={(leidas as string[]) ?? []} titulo="Glosario: por qué importa cada dato" />
+          <Explicaciones items={explLey} leidas={(leidas as string[]) ?? []} titulo="Glosario: por qué importa cada dato" />
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">¿Y si…?</h2>
             {beneficios.includes('calculadora') && e.tiene_semilla ? (
@@ -290,6 +331,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           <p className="text-xs text-muted">¿Ya pagaste por otro medio? Tu experto puede habilitarte los beneficios desde su lado; escríbele.</p>
         </div>
       )}
+
+      <p className="mt-8 text-center text-[11px] leading-relaxed text-muted">El trámite ante el IMSS es gratis. Trol no pide anticipos en efectivo ni garantiza montos.</p>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl justify-around px-2 py-2 text-[11px]">
