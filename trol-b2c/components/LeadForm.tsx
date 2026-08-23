@@ -22,7 +22,7 @@ export function LeadForm({ campania = 'tako', origen = 'calcula' }: { campania?:
     const c = curp.trim().toUpperCase();
     const t = soloDigitos(tel).slice(-10);
     if (!CURP_RE.test(c)) return setError('Revisa tu CURP (18 caracteres).');
-    if (!correo.includes('@') || !correo.includes('.')) return setError('Escribe un correo válido.');
+    if (correo && (!correo.includes('@') || !correo.includes('.'))) return setError('Escribe un correo válido (o déjalo vacío).');
     if (t.length < 10) return setError('Escribe tu celular a 10 dígitos.');
     if (!acepta) return setError('Acepta los Términos y el Aviso de Privacidad.');
 
@@ -58,7 +58,7 @@ export function LeadForm({ campania = 'tako', origen = 'calcula' }: { campania?:
         </div>
         <h3 className="text-lg font-extrabold">¡Listo! Vamos por tu cálculo exacto</h3>
         <p className="mt-1 text-sm text-white/70">
-          Estamos trayendo tu historial del IMSS. Te contactamos por WhatsApp y correo con tu diagnóstico.
+          Estamos trayendo tu historial del IMSS. Te contactamos por WhatsApp con tu diagnóstico.
         </p>
       </div>
     );
@@ -84,7 +84,7 @@ export function LeadForm({ campania = 'tako', origen = 'calcula' }: { campania?:
           type="email"
           value={correo}
           onChange={(e) => setCorreo(e.target.value)}
-          placeholder="Correo electrónico"
+          placeholder="Correo electrónico (opcional)"
           className="w-full rounded-lg border border-line px-3 py-2 text-sm"
         />
         <div className="flex items-center gap-2">

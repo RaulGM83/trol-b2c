@@ -32,7 +32,7 @@ const ACTOS = [
       'Con la cuenta en orden, tu expediente detecta qué te aplica hoy — y un asesor te lo explica sin tecnicismos.',
     puntos: [
       'Modalidad 40: si te conviene, cuánto aportar y cuándo',
-      'Infonavit: Mejoravit, Solución Hogar y devolución de vivienda',
+      'Aprovecha tu Infonavit: liquidez, pagar deudas, comprar un inmueble o mejorar tu pensión',
       'Compara tu AFORE y protege lo que ya construiste',
       'Pensión hoy, si ya cumples los requisitos',
     ],

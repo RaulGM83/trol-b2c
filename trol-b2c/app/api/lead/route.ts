@@ -27,7 +27,8 @@ export async function POST(req: Request) {
   const campania = String(body.campania ?? 'tako').slice(0, 40);
   const referrer = body.referrer ? String(body.referrer).slice(0, 64) : undefined;
 
-  if (!CURP_RE.test(curp) || !correo.includes('@') || telefono.length !== 10) {
+  // Correo opcional desde la decomisión de HubSpot: si viene, debe ser válido.
+  if (!CURP_RE.test(curp) || (correo !== '' && !correo.includes('@')) || telefono.length !== 10) {
     return NextResponse.json({ ok: false, error: 'datos_invalidos' }, { status: 400 });
   }
 
@@ -125,7 +126,7 @@ async function persistir(args: {
     await admin.from('clientes').upsert(
       {
         curp,
-        email: correo,
+        email: correo || null,
         telefono,
         nombre: nombreCompleto || null,
       },

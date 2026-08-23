@@ -18,7 +18,7 @@ export default function BlogIndex() {
             Guías de <span className="text-lime">pensiones</span>
           </h1>
           <p className="mt-3 max-w-xl text-white/80">
-            Lo esencial para entender y mejorar tu retiro, explicado en cristiano por el equipo Trol.
+            Lo esencial para entender y mejorar tu retiro, contado claro y al grano por el equipo Trol.
           </p>
         </div>
       </section>
