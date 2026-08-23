@@ -2,7 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, IDENTIDAD_VISIBLE, type Identidad } from '@/components/trol3/MiAcciones';
+import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
+
+// No importar constantes con métodos desde módulos 'use client': en el server
+// llegan como Proxy y llamar .includes() revienta el render (digest 32375732).
+const IDENTIDAD_VISIBLE = ['por_confirmar', 'confirmada_con_problema'];
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { getSemillaV2Cliente } from '@/lib/cliente';
