@@ -11,6 +11,20 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 const HOSTS_SITIO = new Set(['trol.mx', 'www.trol.mx', 'lp.trol.mx']);
 const APEX = 'https://trol.mx';
 
+// Slugs del blog de HubSpot que se migraron a /blog (mismos slugs).
+const SLUGS_BLOG_MIGRADOS = new Set([
+  'modalidad-40-imss-2026-todo-lo-que-necesitas-saber',
+  'requisitos-para-la-pension-imss-en-2026',
+  'pension-minima-garantizada-del-imss-alcanzara-10-636-54',
+  'asignaciones-familiares-en-pension-imss-2026',
+  'infonavit-y-el-cobro-en-casos-de-incapacidad-laboral',
+  'simulador-de-pensiones-sinavid-estima-tu-monto-mensual',
+  'embargo-de-afore-para-pension-alimenticia-en-2026',
+  'pensionados-deben-presentar-certificado-de-supervivencia',
+  'auditorias-del-imss-en-modalidad-40-lo-que-debes-saber',
+  'tope-doble-pension-imss-2026-decision-de-la-scjn',
+]);
+
 function sitioPublico(request: NextRequest, host: string): NextResponse | null {
   const { pathname } = request.nextUrl;
 
@@ -25,9 +39,11 @@ function sitioPublico(request: NextRequest, host: string): NextResponse | null {
   }
   if (esLpVieja) return NextResponse.redirect(new URL('/asesorias', APEX), 301);
 
-  // Blog decomisado: todo a la home (decisión 23-ago, tráfico ~nulo).
+  // Blog: los 10 evergreen migrados conservan su slug en /blog; el resto va al índice.
   if (pathname === '/trol-financiero-blog' || pathname.startsWith('/trol-financiero-blog/')) {
-    return NextResponse.redirect(new URL('/', APEX), 301);
+    const slug = decodeURIComponent(pathname.split('/')[2] ?? '');
+    const destino = SLUGS_BLOG_MIGRADOS.has(slug) ? `/blog/${slug}` : '/blog';
+    return NextResponse.redirect(new URL(destino, APEX), 301);
   }
 
   // El aviso de privacidad vive en el WordPress propio.
@@ -37,6 +53,9 @@ function sitioPublico(request: NextRequest, host: string): NextResponse | null {
 
   if (pathname === '/') return NextResponse.rewrite(new URL('/sitio', request.url));
   if (pathname === '/asesorias') return NextResponse.rewrite(new URL('/sitio/asesorias', request.url));
+  if (pathname === '/blog' || pathname.startsWith('/blog/')) {
+    return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
+  }
 
   return null; // resto de rutas: comportamiento normal de la app
 }

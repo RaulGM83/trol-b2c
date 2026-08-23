@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { estimarDireccional, type InputManual } from '@/lib/estimacion';
-import { WA } from '@/lib/whatsapp';
+import { WA, waLink } from '@/lib/whatsapp';
 import { LeadForm } from './LeadForm';
 import { BadgeNegativa } from './NegativaPension';
 
@@ -50,11 +50,13 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
 
   return (
     <main className="mx-auto max-w-md px-5 py-7">
-      <header className="mb-6 flex items-center gap-2">
-        <span className="text-xl font-extrabold tracking-tight">
-          tr<span className="text-lime">o</span>l
-        </span>
-      </header>
+      {!publica && (
+        <header className="mb-6 flex items-center gap-2">
+          <span className="text-xl font-extrabold tracking-tight">
+            tr<span className="text-lime">o</span>l
+          </span>
+        </header>
+      )}
 
       {/* Encabezado: leads fríos (público) vs cliente en espera del SISEC */}
       <div className="mb-6 rounded-2xl bg-ink p-5 text-white">
@@ -275,6 +277,21 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
                 </tbody>
               </table>
             </div>
+
+            {/* CTA principal: se manda el cálculo a su WhatsApp → número real
+                capturado sin formulario y conversación abierta con el bot. */}
+            {!todoNegativa && (
+              <a
+                href={waLink(
+                  `Hola, hice mi cálculo en trol.mx: nací en ${inp.anioNacimiento}, llevo ${inp.semanas.toLocaleString('es-MX')} semanas y mi salario es $${Math.round(inp.salarioMensual).toLocaleString('es-MX')}. Me estimó ${money(mejor?.pension ?? null)}/mes retirándome a los ${mejor?.edad ?? 65} años (${esLey97 ? 'Ley 97' : 'Ley 73'}). Quiero mi cálculo exacto con mi historial del IMSS. ref:calcula`,
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 block rounded-xl bg-lime px-4 py-3 text-center text-sm font-bold text-ink"
+              >
+                Recibe este cálculo en tu WhatsApp · hazlo exacto gratis
+              </a>
+            )}
 
             {/* Con negativa el caso no es autoservicio: rutea a asesoría. */}
             {todoNegativa && (

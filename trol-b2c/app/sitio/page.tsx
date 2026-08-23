@@ -3,44 +3,53 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'El Trol Financiero · Tu experto en pensiones',
   description:
-    'Diagnóstico gratuito de tu pensión del IMSS con tus datos oficiales. Modalidad 40, Infonavit, AFORE y asesoría experta por WhatsApp.',
+    'Pon tu cuenta del IMSS en orden, aprovecha tus oportunidades (Modalidad 40, Infonavit, AFORE) y planea cómo incrementar tu retiro. Diagnóstico gratis por WhatsApp.',
   alternates: { canonical: 'https://trol.mx' },
 };
 
-const PASOS = [
+// La home cuenta el viaje del cliente en 3 actos, que son el producto mismo:
+// 1) poner la cuenta en orden → 2) aprovechar oportunidades → 3) planear el retiro.
+const ACTOS = [
   {
     n: '1',
-    titulo: 'Escríbenos por WhatsApp',
-    texto: 'Con tu CURP consultamos tu información oficial del IMSS en minutos, sin trámites.',
+    kicker: 'Primero',
+    titulo: 'Pon tu cuenta en orden',
+    intro:
+      'Todo empieza con tu diagnóstico gratuito: con tu CURP traemos tu información oficial del IMSS y revisamos que tu historia esté completa y sin errores.',
+    puntos: [
+      'Tus semanas cotizadas reales y tu ley (73 o 97)',
+      'Errores de CURP o NSS que traban cualquier trámite',
+      'Derechos suspendidos y cómo reactivarlos',
+      'Tu AFORE y tu Infonavit en el mismo expediente',
+    ],
+    cta: { texto: 'Ordena tu cuenta gratis', href: '/i/sitio' },
   },
   {
     n: '2',
-    titulo: 'Recibe tu diagnóstico gratis',
-    texto: 'Cuánto te tocaría de pensión hoy, cuánto podría ser, y qué oportunidades tienes abiertas.',
+    kicker: 'Después',
+    titulo: 'Aprovecha tus oportunidades',
+    intro:
+      'Con la cuenta en orden, tu expediente detecta qué te aplica hoy — y un asesor te lo explica sin tecnicismos.',
+    puntos: [
+      'Modalidad 40: si te conviene, cuánto aportar y cuándo',
+      'Infonavit: Mejoravit, Solución Hogar y devolución de vivienda',
+      'Compara tu AFORE y protege lo que ya construiste',
+      'Pensión hoy, si ya cumples los requisitos',
+    ],
+    cta: { texto: 'Descubre tus oportunidades', href: '/asesorias' },
   },
   {
     n: '3',
-    titulo: 'Un experto te acompaña',
-    texto: 'Te explicamos tu mejor jugada y te acompañamos en cada trámite hasta lograrla.',
-  },
-];
-
-const SERVICIOS = [
-  {
-    titulo: 'Diagnóstico personalizado',
-    texto: 'Evaluación gratuita de tu pensión actual contra tu pensión potencial, con datos oficiales.',
-  },
-  {
-    titulo: 'Modalidad 40',
-    texto: 'Calculamos si te conviene, cuánto aportar y cuándo, para multiplicar tu pensión Ley 73.',
-  },
-  {
-    titulo: 'Infonavit y créditos',
-    texto: 'Tu saldo de vivienda también es retiro: Mejoravit, Solución Hogar y devolución de subcuenta.',
-  },
-  {
-    titulo: 'AFORE e inversiones',
-    texto: 'Compara tu AFORE, ordena tu ahorro y protege lo que ya construiste.',
+    kicker: 'Y siempre',
+    titulo: 'Planea e incrementa tu retiro',
+    intro:
+      'Elige tu mejor jugada: escenarios por edad de retiro, cuánto podrías recibir y el plan para llegar ahí, acompañado en cada trámite.',
+    puntos: [
+      'Escenarios por edad: retirarte a los 60, 63 o 65 cambia todo',
+      'Un plan de aportaciones que sí puedas sostener',
+      'Tu asesor te acompaña hasta ver el depósito de tu pensión',
+    ],
+    cta: { texto: 'Calcula tus escenarios', href: '/calcula' },
   },
 ];
 
@@ -71,7 +80,7 @@ export default function SitioHome() {
               Recibe tu diagnóstico gratis
             </a>
             <a
-              href="https://app.trol.mx/calcula"
+              href="/calcula"
               className="rounded-full border border-white/30 px-6 py-3 font-semibold text-white hover:border-lime hover:text-lime"
             >
               Calcula tu pensión
@@ -90,36 +99,43 @@ export default function SitioHome() {
         </div>
       </section>
 
-      {/* Cómo funciona */}
-      <section className="mx-auto max-w-5xl px-5 py-16">
-        <h2 className="text-2xl font-extrabold sm:text-3xl">Así de simple</h2>
-        <div className="mt-8 grid gap-6 sm:grid-cols-3">
-          {PASOS.map((p) => (
-            <div key={p.n} className="rounded-2xl border border-line bg-white p-6">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-lime font-extrabold text-ink">
-                {p.n}
-              </span>
-              <h3 className="mt-4 font-bold">{p.titulo}</h3>
-              <p className="mt-2 text-sm text-muted">{p.texto}</p>
-            </div>
-          ))}
-        </div>
+      {/* El viaje en 3 actos */}
+      <section className="mx-auto max-w-5xl px-5 pt-16">
+        <h2 className="text-2xl font-extrabold sm:text-3xl">Tu retiro, paso a paso</h2>
+        <p className="mt-3 max-w-xl text-muted">
+          No es un trámite: es un camino. Así te acompañamos de principio a fin.
+        </p>
       </section>
-
-      {/* Servicios */}
-      <section className="border-y border-line bg-white">
-        <div className="mx-auto max-w-5xl px-5 py-16">
-          <h2 className="text-2xl font-extrabold sm:text-3xl">En qué te ayudamos</h2>
-          <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            {SERVICIOS.map((s) => (
-              <div key={s.titulo} className="rounded-2xl bg-cream p-6">
-                <h3 className="font-bold">{s.titulo}</h3>
-                <p className="mt-2 text-sm text-muted">{s.texto}</p>
+      {ACTOS.map((a, i) => (
+        <section key={a.n} className={i === 1 ? 'border-y border-line bg-white' : ''}>
+          <div className="mx-auto grid max-w-5xl gap-8 px-5 py-14 sm:grid-cols-2 sm:items-center">
+            <div className={i === 1 ? 'sm:order-2' : ''}>
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-lg font-extrabold text-lime">
+                  {a.n}
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-muted">{a.kicker}</span>
               </div>
-            ))}
+              <h3 className="mt-4 text-2xl font-extrabold">{a.titulo}</h3>
+              <p className="mt-3 text-muted">{a.intro}</p>
+              <a
+                href={a.cta.href}
+                className="mt-6 inline-block rounded-full bg-lime px-6 py-3 font-semibold text-ink hover:opacity-90"
+              >
+                {a.cta.texto}
+              </a>
+            </div>
+            <ul className={`space-y-3 ${i === 1 ? 'sm:order-1' : ''}`}>
+              {a.puntos.map((p) => (
+                <li key={p} className={`flex items-start gap-3 rounded-xl p-4 ${i === 1 ? 'bg-cream' : 'border border-line bg-white'}`}>
+                  <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-lime" />
+                  <span className="text-sm font-medium">{p}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
-      </section>
+        </section>
+      ))}
 
       {/* Equipo */}
       <section className="mx-auto max-w-5xl px-5 py-16">
