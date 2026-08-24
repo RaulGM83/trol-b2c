@@ -3,6 +3,8 @@
 // (ver SEMILLA_CALCULO_PENSIONAL_V2.md en el proyecto Producto B2B)
 // ============================================================================
 
+import type { SerieINPC } from './inpc';
+import type { LineasCapturaMod40 } from './mod40-lineas';
 import type { VentanaMod40 } from './mod40-ventana';
 
 export type Ley = 'Ley73' | 'Ley97';
@@ -85,6 +87,12 @@ export interface EntradaCalculo {
   palancas: Palancas;
   /** Fecha de cálculo (default: hoy). Fijarla permite tests reproducibles. */
   hoy?: Date;
+  /**
+   * Serie INPC para las actualizaciones de la línea de captura del Mod 40.
+   * El servidor la lee de `trol3.inpc_mensual`; sin ella el motor usa el
+   * fallback embebido de `inpc.ts`, que puede ir un mes atrás del INEGI.
+   */
+  serieINPC?: SerieINPC;
 }
 
 export interface DesgloseRetro {
@@ -251,6 +259,13 @@ export interface ProyectoMod40 {
   ventana: VentanaMod40;
   /** Avisos en lenguaje llano (ventana, conservación, edad, retro parcial). */
   avisos: string[];
+  /**
+   * La línea de captura con precisión diaria, con su desglose mes a mes.
+   * `pagoImss` es su resumen; esto trae el detalle y la trazabilidad del INPC.
+   * NO va al snapshot (son 60+ filas por variante): del snapshot se congela
+   * sólo la serie INPC del tramo.
+   */
+  lineas: LineasCapturaMod40;
   /** Sin proyecto: escenario base. */
   sinProyecto: { pensionMensual: number; valorPension: number; valorTotal: number };
   /** Con proyecto. */

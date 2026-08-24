@@ -6,7 +6,6 @@
 
 import {
   AJUSTE_EDAD,
-  COSTO_MOD40_RETRO,
   CUANTIAS_LEY73,
   PMG_LEY73,
   REDONDEO_INCREMENTO,
@@ -15,6 +14,7 @@ import {
   URV,
 } from './tablas';
 import { computeLey73 } from './ley73';
+import { lineasCapturaMod40, type LineasCapturaMod40 } from './mod40-lineas';
 import { ventanaMod40, type RegistroHistorialMod40, type VentanaMod40 } from './mod40-ventana';
 import type { EntradaCalculo, ProyectoMod40 } from './types';
 import {
@@ -26,7 +26,6 @@ import {
   diasDelMes,
   diasEntre,
   inicioMes,
-  inpcMes,
   lookupAprox,
   mesAnterior,
   parseISO,
@@ -35,7 +34,10 @@ import {
 } from './util';
 
 const MESES_BASE_250 = 57;
-const MAX_MESES_RETRO = 60; // filas 5:64
+// Art. 219 LSS: el retro "de libro" son 5 años. El Excel validado contra
+// líneas reales del IMSS NO topa ahí (sus casos cobran 62 y 63 meses), así
+// que este número dejó de ser un corte y quedó como umbral de AVISO.
+const MESES_RETRO_ART219 = 60;
 const GESTORIAS = 80_000; // I13
 const FINANCIAMIENTO_MESES = 6; // I19
 const FINANCIAMIENTO_TASA = 0.047; // I20
@@ -110,49 +112,69 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   const mesesFuturos = 0; // R4 (R26 = 0% en la hoja)
   const mesesPasados = Math.max(MESES_BASE_250 - mesesFuturos - mesesRetroN, 0); // R3
 
-  // ---- Serie retroactiva (T..AA), anclada en el MES DE RETIRO hacia atrás ----
   const salarioRetro = porAnio(UMA, ultimaCot.getUTCFullYear()) * umasProyecto; // U
-  const t5 = inicioMes(fechaRetiro); // T5
-  const inpcT5 = inpcMes(t5);
+
+  // ---- Línea de captura del IMSS, con precisión DIARIA ---------------------
+  // Antes esto era una serie de meses completos anclada en el MES DE RETIRO:
+  // mover la fecha de trámite dentro de la quincena no cambiaba un peso. Ahora
+  // lo calcula `lineasCapturaMod40`, que va del mes de la baja al mes del
+  // trámite prorrateando los dos extremos por días — la fórmula validada al
+  // centavo contra líneas de captura reales (ver `claude/21`).
+  const lineas: LineasCapturaMod40 = lineasCapturaMod40({
+    ultimaCotizacion: ultimaCot,
+    fechaTramite,
+    umas: umasProyecto,
+    sdi: salarioRetro,
+    serieINPC: entrada.serieINPC,
+  });
+  const cuotaBase = lineas.retro; // I7
+  const actualizaciones = lineas.actualizaciones; // I8
+  const recargos = lineas.recargos; // I9
+  // Z: el 2% de retiro que se acredita en la AFORE sale de lo que DE VERDAD se
+  // paga, así que va prorrateado igual que la cuota.
+  const retiro97 = lineas.detalle.reduce(
+    (a, d) => a + salarioRetro * d.dias * d.prorrateo * 0.02,
+    0,
+  );
+  const pagoImssTotal = lineas.total; // I10
+
+  // La serie mensual sigue viva SOLO para el lado de la pensión (el salario
+  // mínimo promedio del tramo retroactivo, R11). Esa parte no cambió: se mide
+  // hasta el MES DE RETIRO, que es hasta donde cuentan las semanas.
   const serie: Date[] = [];
-  let m = t5;
-  while (serie.length < MAX_MESES_RETRO) {
+  let m = inicioMes(fechaRetiro); // T5
+  while (serie.length < MESES_RETRO_ART219) {
     serie.push(m);
     if (diasEntre(ultimaCot, m) < 0) break;
     m = mesAnterior(m);
   }
-  let cuotaBase = 0, // ΣW → I7
-    actualizaciones = 0, // ΣX → I8
-    recargos = 0, // ΣY → I9
-    retiro97 = 0; // ΣZ (2% que va a la AFORE)
-  const costoPairs = Object.entries(COSTO_MOD40_RETRO)
-    .map(([k, v]) => [Number(k), v] as [number, number])
-    .sort((a, b) => a[0] - b[0]);
-  serie.forEach((mes, i) => {
-    const vMensual = salarioRetro * diasDelMes(mes); // V
-    const w = lookupAprox(mes.getUTCFullYear(), costoPairs)[1] * vMensual; // W
-    const x = (inpcT5 / inpcMes(mes) - 1) * w; // X
-    const y = i === 0 ? 0 : (w + x) * 0.0147 * (diasEntre(mes, t5) / DIAS_MES_PENSION); // Y
-    cuotaBase += w;
-    actualizaciones += x;
-    recargos += y;
-    retiro97 += vMensual * 0.02; // Z
-  });
-  const pagoImssTotal = cuotaBase + actualizaciones + recargos; // I10
 
   // ---- Ventana de reingreso y avisos (nunca bloquean) --------------------
   const ventana: VentanaMod40 = ventanaMod40(entrada.historial, fechaTramite, {
     limiteExpediente: entrada.limiteInscripcionMod40,
     sbcReingreso: salarioRetro,
   });
-  const avisos = [...ventana.avisos];
+  const avisos = [...ventana.avisos, ...lineas.avisos];
 
-  // Corte del retro: la serie está topada a 60 meses (art. 219). Si el hueco
-  // desde la baja es mayor, lo que se puede cubrir es solo una parte.
-  const mesesDescubiertos = enMeses(diasEntre(ultimaCot, fechaTramite));
-  if (serie.length >= MAX_MESES_RETRO && mesesDescubiertos > MAX_MESES_RETRO) {
+  // La línea cubre HASTA LA FECHA DE TRÁMITE. Si el retiro es posterior (el
+  // cliente aún no cumple la edad), las semanas de ese hueco sí cuentan para la
+  // pensión de abajo, pero NO están cobradas aquí: se pagan mes a mes como
+  // Mod 40 vigente. Modelarlas es trabajo aparte (ver `claude/10`, pendientes).
+  const mesesHastaRetiro =
+    (fechaRetiro.getUTCFullYear() - fechaTramite.getUTCFullYear()) * 12 +
+    (fechaRetiro.getUTCMonth() - fechaTramite.getUTCMonth());
+  if (mesesHastaRetiro > 0) {
     avisos.push(
-      `A esta fecha solo puedes cubrir ${MAX_MESES_RETRO} meses (5 años): desde tu baja han pasado ${mesesDescubiertos}. El resto del periodo ya no es recuperable.`,
+      `La línea de captura cubre hasta la fecha de trámite. Los ${mesesHastaRetiro} meses que faltan para el retiro se cotizan mes a mes en Modalidad 40 y NO están incluidos en este monto.`,
+    );
+  }
+
+  // El tramo pasa de los 5 años del art. 219. La línea se cobra completa
+  // (así viene en las líneas reales que sirvieron de referencia), pero el
+  // asesor tiene que saber que ese excedente es terreno discutible.
+  if (lineas.meses > MESES_RETRO_ART219) {
+    avisos.push(
+      `El periodo a cubrir son ${lineas.meses} meses, más de los 5 años del art. 219. La línea incluye el excedente; confírmalo con la subdelegación antes de comprometerlo.`,
     );
   }
 
@@ -285,6 +307,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     fechaTramite,
     ventana,
     avisos,
+    lineas,
     sinProyecto: {
       pensionMensual: pensionSinProyecto,
       valorPension: valorPensionSin,
@@ -297,7 +320,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
       valorTotal: valorTotalCon,
     },
     pagoImss: {
-      meses: serie.length,
+      meses: lineas.meses,
       cuotaBase,
       actualizaciones,
       recargos,

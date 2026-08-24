@@ -8,6 +8,7 @@ import { computeLey97 } from '../ley97';
 import { computeProyectoMod40 } from '../mod40-proyecto';
 import { computeTransicion } from '../transicion';
 import type { EntradaCalculo, Palancas } from '../types';
+import { INPC_MENSUAL } from '../inpc';
 import { HOY_EXCEL, perfilMoja, saldosMoja, salario60mMoja } from './fixture-moja';
 
 const cerca = (actual: number, esperado: number, pct = 0.005) => {
@@ -59,18 +60,26 @@ describe('Ley 73 (hoja Calculadora 73)', () => {
     expect(r.pensionMensual).toBe(41300);
   });
 
-  it('costo Mod40 retroactivo (D47..D49)', () => {
+  // GOLDEN v2 (24-ago-2026): el retro de la Ley 73 salió de su propia serie de
+  // meses completos y pasó a `lineasCapturaMod40` — la MISMA función que usa el
+  // proyecto Mod 40. Antes cada pestaña calculaba lo suyo y coincidían por
+  // construcción; con el prorrateo diario habrían dejado de coincidir, así que
+  // ahora comparten implementación. Valores viejos: 345,876.68 / 17,924.27 /
+  // 87,043.39 (total 450,844.34 → 436,033.05, −3.3 %).
+  it('costo Mod40 retroactivo (D47..D49) — v2 día a día', () => {
     expect(r.retro).not.toBeNull();
-    cerca(r.retro!.cuotaBase, 345876.6812, 0.02);
-    cerca(r.retro!.actualizaciones, 17924.26648, 0.02);
-    cerca(r.retro!.recargos, 87043.38976, 0.02);
+    expect(r.retro!.meses).toBe(34);
+    cerca(r.retro!.cuotaBase, 333002.5471, 0.001);
+    cerca(r.retro!.actualizaciones, 18957.6756, 0.001);
+    cerca(r.retro!.recargos, 84072.8237, 0.001);
   });
 
-  it('costo estrategia futura (D50/D53/D54)', () => {
+  it('costo estrategia futura (D50/D53/D54) — v2', () => {
+    // La cotización futura NO se tocó: sigue clavada en el valor del Excel.
     cerca(r.costoEstrategiaFutura, 38974.282, 0.02);
     cerca(r.costoMensualPrimerMes, 13132.6385, 0.02);
     expect(r.modalidadPrimerMes).toBe(40);
-    cerca(r.costoTotal, 489818.6194, 0.02);
+    cerca(r.costoTotal, 475007.3285, 0.001);
   });
 
   it('pensión negativa con pocas semanas', () => {
@@ -328,29 +337,56 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     cerca(r.conProyecto.pensionMensual, 40600, 0.01);
   });
 
-  it('pago al IMSS (I7..I10)', () => {
-    cerca(r.pagoImss.cuotaBase, 403175.3954, 0.03);
-    cerca(r.pagoImss.actualizaciones, 23598.14867, 0.06);
-    cerca(r.pagoImss.recargos, 117647.1721, 0.04);
-    cerca(r.pagoImss.total, 544420.7162, 0.03);
+  // ---- GOLDENS v2 (24-ago-2026, líneas de captura día a día) --------------
+  // El pago al IMSS y todo lo que cuelga de él (gastos admin, comisión,
+  // financiamiento, total, efectivo neto) se movieron con `lineasCapturaMod40`.
+  // Dos causas, las dos deliberadas:
+  //  1. El tramo ya no llega al MES DE RETIRO sino al MES DE TRÁMITE. MOJA
+  //     tiene 59.58 años y `edadRetiro: 60`, así que el retiro cae ~5 meses
+  //     después: pasó de 39 meses cobrados a 34. Esos 5 meses no son retro —
+  //     se cotizan mes a mes en Mod 40 y hoy salen sólo como aviso.
+  //  2. Los extremos van prorrateados por días y el INPC sale de la serie de
+  //     `trol3.inpc_mensual`, no de la del Excel de junio.
+  // Los valores viejos (cuotaBase 403,175.40 · total 544,420.72 · totalAPagar
+  // 1,040,194.36) quedan aquí escritos a propósito: si algún día se decide
+  // volver a cobrar hasta el retiro, este es el número al que hay que regresar.
+  it('pago al IMSS (I7..I10) — v2 día a día', () => {
+    expect(r.pagoImss.meses).toBe(34);
+    cerca(r.pagoImss.cuotaBase, 333002.5471, 0.001);
+    cerca(r.pagoImss.actualizaciones, 18957.6756, 0.001);
+    cerca(r.pagoImss.recargos, 84072.8237, 0.001);
+    cerca(r.pagoImss.total, 436033.0465, 0.001);
   });
 
-  it('costos del despacho (I13..I16)', () => {
+  it('el pago al IMSS es exactamente la línea de captura del desglose', () => {
+    cerca(r.pagoImss.total, r.lineas.total, 0);
+    expect(r.lineas.detalle).toHaveLength(r.pagoImss.meses);
+    // Último mes del tramo = el de la baja (2023-09), prorrateado por los días
+    // posteriores a ella (baja el 16 de un mes de 30).
+    const ultimo = r.lineas.detalle[r.lineas.detalle.length - 1];
+    expect(ultimo.mes).toBe('2023-09');
+    expect(ultimo.prorrateo).toBeCloseTo((30 - 16) / 30, 9);
+  });
+
+  it('avisa que el hueco hasta el retiro NO está cobrado', () => {
+    expect(r.avisos.some((a) => a.includes('cubre hasta la fecha de trámite'))).toBe(true);
+  });
+
+  it('costos del despacho (I13..I16) — v2', () => {
     expect(r.costos.gestorias).toBe(80000);
-    cerca(r.costos.gastosAdministrativos, 163326.2148, 0.03);
-    cerca(r.costos.comisionApertura, 23632.40793, 0.03);
+    cerca(r.costos.gastosAdministrativos, 130809.914, 0.001);
+    cerca(r.costos.comisionApertura, 19405.2888, 0.001);
   });
 
-  it('financiamiento y total a pagar (I21/I25)', () => {
-    cerca(r.financiamiento.interes, 228808.9736, 0.03);
-    cerca(r.totalAPagar, 1040194.36, 0.03);
+  it('financiamiento y total a pagar (I21/I25) — v2', () => {
+    cerca(r.financiamiento.interes, 187882.0063, 0.001);
+    cerca(r.totalAPagar, 854136.3026, 0.001);
   });
 
-  it('crédito DXN y efectivo (I26..I28)', () => {
+  it('crédito DXN y efectivo (I26..I28) — v2', () => {
     cerca(r.creditoDxn.credito, 40600 * 9, 0.01); // I26 = L8 × 9 (antes ×8)
     cerca(r.creditoDxn.retroactivo, 243600, 0.01); // I27 = L8 × 6
-    // efectivoNeto del Excel viejo (471,794) − 1 mes de pensión por el ×9
-    cerca(r.creditoDxn.efectivoNeto, 431194.36, 0.05);
+    cerca(r.creditoDxn.efectivoNeto, 245136.3026, 0.001);
   });
 
   it('comparativo sin/con proyecto (F8/F9/F10/L9/M8)', () => {
@@ -369,6 +405,55 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     // La base interna (pct=0, edad 60) debe parecerse al Escenario Base de n8n (7639)
     cerca(r2.sinProyecto.pensionMensual, 7600, 0.05);
     cerca(r2.conProyecto.pensionMensual, 40600, 0.01);
+  });
+
+  it('la Ley 73 y el proyecto Mod 40 cobran EXACTAMENTE la misma línea', () => {
+    // El asesor ve las dos pestañas en la misma pantalla. Si divergen, una de
+    // las dos está mintiendo. Comparten `lineasCapturaMod40` justo por esto.
+    const l73 = computeLey73({
+      ...base,
+      palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
+    });
+    expect(l73.retro).not.toBeNull();
+    expect(l73.retro!.meses).toBe(r.pagoImss.meses);
+    cerca(l73.retro!.cuotaBase, r.pagoImss.cuotaBase, 0);
+    cerca(l73.retro!.actualizaciones, r.pagoImss.actualizaciones, 0);
+    cerca(l73.retro!.recargos, r.pagoImss.recargos, 0);
+    cerca(l73.retro!.total, r.pagoImss.total, 0);
+  });
+
+  it('la serie INPC entra por parámetro y mueve las actualizaciones', () => {
+    const conSerie = computeProyectoMod40({
+      ...base,
+      palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
+      pensionEscenarioBase: 7639,
+      edadEscenarioBase: 60,
+      // Sólo el mes del trámite 20 % arriba: sube el numerador de todas las
+      // actualizaciones y no toca la cuota base.
+      serieINPC: Object.fromEntries(
+        Object.entries(INPC_MENSUAL).map(([m, p]) => [
+          m,
+          { indice: m === '2026-06' ? p.indice * 1.2 : p.indice, proyectado: p.proyectado },
+        ]),
+      ),
+    })!;
+    expect(conSerie.pagoImss.actualizaciones).toBeGreaterThan(r.pagoImss.actualizaciones);
+    cerca(conSerie.pagoImss.cuotaBase, r.pagoImss.cuotaBase, 0);
+  });
+
+  it('mover la fecha de trámite por DÍAS mueve la línea (el bug que se arregló)', () => {
+    const dia = (iso: string) =>
+      computeProyectoMod40({
+        ...base,
+        fechaTramite: new Date(`${iso}T00:00:00.000Z`),
+        palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
+        pensionEscenarioBase: 7639,
+        edadEscenarioBase: 60,
+      })!.pagoImss.total;
+    const a = dia('2026-06-08');
+    const b = dia('2026-06-15');
+    expect(b).toBeGreaterThan(a);
+    expect(b - a).toBeGreaterThan(1000);
   });
 
   it('umasProyecto reduce el costo del proyecto', () => {
@@ -405,14 +490,17 @@ describe('Ley 73 — cliente CAFE (Excel corregido)', () => {
     cerca(r.detalle.factorSalarial, 6.037884385, 0.01);
   });
 
-  it('pensión (D43) y costos retro (D47..D51)', () => {
+  // GOLDEN v2: mismo cambio que arriba. Valores viejos 284,727.27 / 11,109.05 /
+  // 53,958.78 (total 349,795.10 → 327,044.31, −6.5 %). La pensión no se mueve.
+  it('pensión (D43) y costos retro (D47..D51) — v2 día a día', () => {
     cerca(r.pensionMensual!, 21600, 0.01);
-    cerca(r.retro!.cuotaBase, 284727.2678, 0.03);
-    cerca(r.retro!.actualizaciones, 11109.05092, 0.06);
-    cerca(r.retro!.recargos, 53958.77972, 0.06);
+    expect(r.retro!.meses).toBe(26);
+    cerca(r.retro!.cuotaBase, 266572.7353, 0.001);
+    cerca(r.retro!.actualizaciones, 11047.4639, 0.001);
+    cerca(r.retro!.recargos, 49424.111, 0.001);
     // Edad = 60 hoy → sin meses futuros → costo estrategia 0
     cerca(r.costoEstrategiaFutura, 0);
-    cerca(r.costoTotal, 349795.0985, 0.03);
+    cerca(r.costoTotal, 327044.3103, 0.001);
   });
 });
 
@@ -429,26 +517,41 @@ describe('Proyecto Mod40 — cliente CAFE (Excel corregido)', () => {
     cerca(r.multiplicadorPension, 2.4545, 0.04);
   });
 
-  it('pago al IMSS (I7..I10)', () => {
-    cerca(r.pagoImss.cuotaBase, 284727.2678, 0.03);
-    cerca(r.pagoImss.actualizaciones, 11109.05092, 0.08);
-    cerca(r.pagoImss.recargos, 53958.77972, 0.06);
-    cerca(r.pagoImss.total, 349795.0985, 0.03);
+  // ---- GOLDENS v2 (24-ago-2026) ------------------------------------------
+  // CAFE tiene 60.0 años exactos, así que el retiro cae en el mismo mes del
+  // trámite: aquí NO se pierden meses (27 → 26, sólo por el corte del mes) y
+  // la baja del 31-may-2024 deja prorrateo 0 en su mes. Lo que mueve el número
+  // es el prorrateo de los extremos y la serie INPC nueva: total de
+  // 349,795.10 → 327,044.31 (−6.5 %).
+  it('pago al IMSS (I7..I10) — v2 día a día', () => {
+    expect(r.pagoImss.meses).toBe(26);
+    cerca(r.pagoImss.cuotaBase, 266572.7353, 0.001);
+    cerca(r.pagoImss.actualizaciones, 11047.4639, 0.001);
+    cerca(r.pagoImss.recargos, 49424.111, 0.001);
+    cerca(r.pagoImss.total, 327044.3103, 0.001);
   });
 
-  it('costos: gastos admin escalonado 35/30/25 + comisión (I14/I15)', () => {
-    // Pago IMSS 349,795 < 375,000 → 35% (regla de negocio; el Excel FAVH trae
-    // 30% plano por error)
-    cerca(r.costos.gastosAdministrativos, 122428.28, 0.03);
-    cerca(r.costos.comisionApertura, 16566.7, 0.03);
+  it('baja el último día del mes: ese mes no se cobra', () => {
+    // ultima_cotizacion_valida = 2024-05-31 → no queda ningún día después.
+    const ultimo = r.lineas.detalle[r.lineas.detalle.length - 1];
+    expect(ultimo.mes).toBe('2024-05');
+    expect(ultimo.prorrateo).toBe(0);
+    expect(ultimo.total).toBe(0);
   });
 
-  it('financiamiento, total y DXN (I21/I25/I26..I28)', () => {
-    cerca(r.financiamiento.interes, 160398.8, 0.03);
-    cerca(r.totalAPagar, 729194.93, 0.03);
+  it('costos: gastos admin escalonado 35/30/25 + comisión (I14/I15) — v2', () => {
+    // Pago IMSS 327,044 < 375,000 → sigue en el 35% (regla de negocio; el
+    // Excel FAVH trae 30% plano por error)
+    cerca(r.costos.gastosAdministrativos, 114465.5086, 0.001);
+    cerca(r.costos.comisionApertura, 15645.2946, 0.001);
+  });
+
+  it('financiamiento, total y DXN (I21/I25/I26..I28) — v2', () => {
+    cerca(r.financiamiento.interes, 151477.742, 0.001);
+    cerca(r.totalAPagar, 688638.9024, 0.001);
     cerca(r.creditoDxn.credito, 21600 * 9, 0.01); // I26 = L8 × 9
     cerca(r.creditoDxn.retroactivo, 129600, 0.01); // I27 = L8 × 6
-    cerca(r.creditoDxn.efectivoNeto, 405194.93, 0.05);
+    cerca(r.creditoDxn.efectivoNeto, 364638.9024, 0.001);
   });
 
   it('efectivo sin proyecto usa SAR92 + 30% RCV (regla de negocio, no el 9% del Excel)', () => {

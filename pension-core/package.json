@@ -9,7 +9,9 @@
     ".": "./src/index.ts",
     "./semilla": "./src/semilla.ts",
     "./tablas": "./src/tablas.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./inpc": "./src/inpc.ts",
+    "./mod40-lineas": "./src/mod40-lineas.ts"
   },
   "scripts": {
     "test": "vitest run",

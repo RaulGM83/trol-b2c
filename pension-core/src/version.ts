@@ -13,4 +13,8 @@
 // Formato: fecha del cambio + contador dentro del día, ordenable como string.
 // ============================================================================
 
-export const ENGINE_VERSION = '2026.08.24.1';
+// 2026.08.24.2 — líneas de captura día a día: el retro se calcula con
+// `lineasCapturaMod40` (prorrateo diario de los extremos, ancla en la fecha de
+// TRÁMITE y serie INPC de `trol3.inpc_mensual`). Mueve el pago al IMSS y todo
+// lo que cuelga de él. Ver `claude/21-lineas-captura-dia-a-dia-spec.md`.
+export const ENGINE_VERSION = '2026.08.24.2';

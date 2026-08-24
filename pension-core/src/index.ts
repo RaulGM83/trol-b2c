@@ -6,6 +6,20 @@ export { computeLey97, conservaValorSSV } from './ley97';
 export { computeTransicion } from './transicion';
 export type { ResultadoTransicion } from './transicion';
 export { computeProyectoMod40 } from './mod40-proyecto';
+export { lineasCapturaMod40, mesesDelTramo, CUOTA_MOD40_POR_ANIO, TASA_RECARGOS_MENSUAL } from './mod40-lineas';
+export type { EntradaLineasCaptura, LineasCapturaMod40, MesLineaCaptura } from './mod40-lineas';
+export {
+  INPC_MENSUAL,
+  INPC_INDICES,
+  INPC_PRIMER_MES_PROYECTADO,
+  INPC_TASA_PROYECCION_MENSUAL,
+  INPC_SEMILLA,
+  claveINPC,
+  inpcDe,
+  serieINPCDesdeFilas,
+  recortarSerieINPC,
+} from './inpc';
+export type { SerieINPC, PuntoINPC, LecturaINPC } from './inpc';
 export type { EntradaProyecto } from './mod40-proyecto';
 export { ventanaMod40, modalidadDeRegistro } from './mod40-ventana';
 export type {

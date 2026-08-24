@@ -7,7 +7,6 @@ import {
   AJUSTE_EDAD,
   COSTO_MOD10,
   COSTO_MOD40_FUTURO,
-  COSTO_MOD40_RETRO,
   CUANTIAS_LEY73,
   PMG_LEY73,
   REDONDEO_INCREMENTO,
@@ -15,6 +14,7 @@ import {
   UMA,
 } from './tablas';
 import type { DesgloseRetro, EntradaCalculo, ResultadoLey73 } from './types';
+import { lineasCapturaMod40 } from './mod40-lineas';
 import {
   addDias,
   addMeses,
@@ -25,7 +25,6 @@ import {
   diasDelMes,
   diasEntre,
   inicioMes,
-  inpcMes,
   lookupAprox,
   mesAnterior,
   parseISO,
@@ -174,28 +173,27 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   }
 
   // ---- Costo Mod40 retroactivo (P/Q/R → D47..D49) ----
+  // Es la MISMA línea de captura que cotiza el proyecto Mod 40, así que sale de
+  // la misma función: si aquí se recalculara aparte, la pestaña "Calculadora 73"
+  // y la de "Mod40 Retroactivo" cobrarían distinto por lo mismo. Precisión
+  // diaria y prorrateo de los extremos desde el 24-ago-2026 (`claude/21`).
   let retro: DesgloseRetro | null = null;
   if (recuperaRetro) {
-    const m5 = inicioMes(hoy);
-    const inpcHoy = inpcMes(m5);
-    let cuotaBase = 0,
-      actualizaciones = 0,
-      recargos = 0;
-    serieRetro.forEach((m, i) => {
-      const salarioMensual = salarioRetroMes(m) * diasDelMes(m); // O
-      const p = lookupAprox(m.getUTCFullYear(), objToPairs(COSTO_MOD40_RETRO))[1] * salarioMensual; // P
-      const q = (inpcHoy / inpcMes(m) - 1) * p; // Q
-      const r = i === 0 ? 0 : (p + q) * 0.0147 * (diasEntre(m, m5) / DIAS_MES_PENSION); // R
-      cuotaBase += p;
-      actualizaciones += q;
-      recargos += r;
+    const lineas = lineasCapturaMod40({
+      ultimaCotizacion: ultimaCot,
+      fechaTramite: hoy,
+      umas: 25,
+      // 'MINIMO' hace que el salario del tramo no sea plano: va mes a mes.
+      sdiPorMes:
+        palancas.salarioCotizacionRetro === 'MINIMO' ? salarioRetroMes : undefined,
+      serieINPC: entrada.serieINPC,
     });
     retro = {
-      meses: serieRetro.length,
-      cuotaBase,
-      actualizaciones,
-      recargos,
-      total: cuotaBase + actualizaciones + recargos,
+      meses: lineas.meses,
+      cuotaBase: lineas.retro,
+      actualizaciones: lineas.actualizaciones,
+      recargos: lineas.recargos,
+      total: lineas.total,
     };
   }
 
@@ -270,10 +268,4 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     modalidadPrimerMes,
     costoTotal: (retro?.total ?? 0) + costoEstrategiaFutura, // D51
   };
-}
-
-function objToPairs(rec: Record<number, number>): Array<[number, number]> {
-  return Object.entries(rec)
-    .map(([k, v]) => [Number(k), v] as [number, number])
-    .sort((a, b) => a[0] - b[0]);
 }
