@@ -3,6 +3,8 @@
 // (ver SEMILLA_CALCULO_PENSIONAL_V2.md en el proyecto Producto B2B)
 // ============================================================================
 
+import type { VentanaMod40 } from './mod40-ventana';
+
 export type Ley = 'Ley73' | 'Ley97';
 export type Sexo = 'H' | 'M';
 
@@ -240,6 +242,15 @@ export interface ResultadoLey97 {
 }
 
 export interface ProyectoMod40 {
+  /** Fecha de inicio de trámite con la que se calculó todo el proyecto. */
+  fechaTramite: Date;
+  /**
+   * Ventana de reingreso (art. 219 / 220 LSS) a esa fecha. Informativa: una
+   * ventana vencida NO anula los números, solo los acompaña de un aviso.
+   */
+  ventana: VentanaMod40;
+  /** Avisos en lenguaje llano (ventana, conservación, edad, retro parcial). */
+  avisos: string[];
   /** Sin proyecto: escenario base. */
   sinProyecto: { pensionMensual: number; valorPension: number; valorTotal: number };
   /** Con proyecto. */

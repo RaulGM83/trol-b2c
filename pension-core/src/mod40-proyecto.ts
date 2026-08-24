@@ -15,6 +15,7 @@ import {
   URV,
 } from './tablas';
 import { computeLey73 } from './ley73';
+import { ventanaMod40, type RegistroHistorialMod40, type VentanaMod40 } from './mod40-ventana';
 import type { EntradaCalculo, ProyectoMod40 } from './types';
 import {
   addDias,
@@ -54,17 +55,40 @@ export interface EntradaProyecto extends EntradaCalculo {
   umasProyecto?: number;
   /** Semanas extra a sumar al cálculo (C29 de la hoja, ej. semanas por reconocer). */
   semanasExtra?: number;
+  /**
+   * Fecha en que se inicia el trámite (default: `hoy`, y a su vez `new Date()`).
+   * Es el ancla de TODO el proyecto: mueve la ventana retroactiva, los meses de
+   * pago, el año de UMA aplicable, la edad y las semanas acumuladas. Omitirla
+   * deja el cálculo idéntico al de siempre ("a hoy").
+   */
+  fechaTramite?: Date;
+  /**
+   * Historial laboral, para clasificar la última baja y su ventana de reingreso
+   * (art. 219 / 220 LSS). Sin él no hay `ventana` y solo se avisa que no se
+   * pudo confirmar la modalidad.
+   */
+  historial?: RegistroHistorialMod40[] | null;
+  /**
+   * `limite_inscripcion_mod40` del expediente. Es el mejor dato: trol3 ya
+   * corrigió ahí el límite de 12 meses. Si viene, manda sobre el cálculo local.
+   */
+  limiteInscripcionMod40?: string | Date | null;
 }
+
+/** Días entre dos fechas en meses "de calendario" aproximados, para copy. */
+const enMeses = (dias: number) => Math.round(dias / DIAS_MES);
 
 export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | null {
   const { perfil, saldos, salario_60m, palancas } = entrada;
-  const hoy = entrada.hoy ?? new Date();
-  const anioHoy = hoy.getUTCFullYear();
+  // Ancla única del proyecto. `fechaTramite` gana; si no viene, se conserva el
+  // comportamiento histórico ("a hoy") para que los goldens no se muevan.
+  const fechaTramite = entrada.fechaTramite ?? entrada.hoy ?? new Date();
+  const anioTramite = fechaTramite.getUTCFullYear();
 
   const fnac = parseISO(perfil.fecha_nacimiento);
-  const edadActual = diasEntre(fnac, hoy) / DIAS_ANIO; // C12
+  const edadActual = diasEntre(fnac, fechaTramite) / DIAS_ANIO; // C12 (a la fecha de trámite)
   const edadProyecto = Math.max(palancas.edadRetiro, Math.max(60, edadActual)); // F16
-  const fechaRetiro = addDias(hoy, (edadProyecto - edadActual) * DIAS_ANIO_RETIRO - 1); // F17
+  const fechaRetiro = addDias(fechaTramite, (edadProyecto - edadActual) * DIAS_ANIO_RETIRO - 1); // F17
 
   const ultimaCotValida = parseISO(perfil.fechas.ultima_cotizacion_valida);
   const ultimaCotMod40 = perfil.fechas.ultima_cotizacion_mod40
@@ -72,12 +96,12 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     : null;
   const ultimaCot =
     perfil.status_empleo === 'empleado'
-      ? hoy
+      ? fechaTramite
       : ultimaCotMod40 && ultimaCotMod40 > ultimaCotValida
         ? ultimaCotMod40
         : ultimaCotValida; // O15
 
-  const aplica = perfil.aplica_mod40 && diasEntre(hoy, ultimaCot) < 1; // F19
+  const aplica = perfil.aplica_mod40 && diasEntre(fechaTramite, ultimaCot) < 1; // F19
   if (!aplica) return null;
 
   const umasProyecto = entrada.umasProyecto ?? UMAS_PROYECTO_DEFAULT; // F21
@@ -116,6 +140,38 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   });
   const pagoImssTotal = cuotaBase + actualizaciones + recargos; // I10
 
+  // ---- Ventana de reingreso y avisos (nunca bloquean) --------------------
+  const ventana: VentanaMod40 = ventanaMod40(entrada.historial, fechaTramite, {
+    limiteExpediente: entrada.limiteInscripcionMod40,
+    sbcReingreso: salarioRetro,
+  });
+  const avisos = [...ventana.avisos];
+
+  // Corte del retro: la serie está topada a 60 meses (art. 219). Si el hueco
+  // desde la baja es mayor, lo que se puede cubrir es solo una parte.
+  const mesesDescubiertos = enMeses(diasEntre(ultimaCot, fechaTramite));
+  if (serie.length >= MAX_MESES_RETRO && mesesDescubiertos > MAX_MESES_RETRO) {
+    avisos.push(
+      `A esta fecha solo puedes cubrir ${MAX_MESES_RETRO} meses (5 años): desde tu baja han pasado ${mesesDescubiertos}. El resto del periodo ya no es recuperable.`,
+    );
+  }
+
+  // Conservación de derechos (art. 150) medida a la fecha de trámite, no a hoy.
+  const finConservacion = perfil.fechas.fin_conservacion_derechos
+    ? parseISO(perfil.fechas.fin_conservacion_derechos)
+    : null;
+  if (finConservacion && diasEntre(fechaTramite, finConservacion) < 0) {
+    avisos.push(
+      `A la fecha de trámite tu conservación de derechos ya venció (fue el ${finConservacion.toISOString().slice(0, 10)}). Reactivarla exige volver a cotizar antes de pensionarte.`,
+    );
+  }
+
+  if (edadActual < 60) {
+    avisos.push(
+      `A la fecha de trámite tendrías ${edadActual.toFixed(1)} años: la pensión Ley 73 arranca a los 60, así que el proyecto se calcula a esa edad.`,
+    );
+  }
+
   // ---- Pensión con proyecto (R6..R24 → L8) ----
   const prom = (vals: number[], n: number) => {
     const v = vals.slice(0, Math.max(n, 0));
@@ -129,7 +185,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   ); // R11
   const salarioCot250 = (mesesPasados * scPasado + mesesRetroN * salarioRetro) / MESES_BASE_250; // R8
   const salarioMin250 =
-    (mesesPasados * smPasado + mesesFuturos * porAnio(SALARIO_MINIMO, anioHoy - 1) + mesesRetroN * smRetro) /
+    (mesesPasados * smPasado + mesesFuturos * porAnio(SALARIO_MINIMO, anioTramite - 1) + mesesRetroN * smRetro) /
     60; // R12
   const factor = Math.max(1, salarioCot250 / salarioMin250); // R13
 
@@ -160,7 +216,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   const [, ajuste] = lookupAprox(Math.round(edadProyecto), AJUSTE_EDAD as Array<[number, number]>); // R24
   const pensionCalc = ((cuantiaBasica + incrementos + asignaciones) * ajuste) / 12; // R15
   const pmg = porAnio(PMG_LEY73, ultimaCot.getUTCFullYear()); // R16 (pct futuro = 0)
-  const tope = porAnio(UMA, anioHoy) * 25 * DIAS_MES_PENSION; // R17
+  const tope = porAnio(UMA, anioTramite) * 25 * DIAS_MES_PENSION; // R17
   const pensionConProyecto = negativa
     ? 0
     : round(Math.min(tope, Math.max(pensionCalc, pmg)), -2); // L8
@@ -192,6 +248,9 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   if (pensionBase === undefined) {
     const base = computeLey73({
       ...entrada,
+      // El escenario base se mide a la MISMA fecha de trámite: comparar "con
+      // proyecto" en 2027 contra "sin proyecto" hoy sería tramposo.
+      hoy: fechaTramite,
       palancas: {
         ...palancas,
         edadRetiro: edadProyecto,
@@ -223,6 +282,9 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   const valorTotalCon = round(valorPensionCon + efectivoCon, -3); // L12
 
   return {
+    fechaTramite,
+    ventana,
+    avisos,
     sinProyecto: {
       pensionMensual: pensionSinProyecto,
       valorPension: valorPensionSin,
