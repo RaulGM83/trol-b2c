@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
 import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib/trol3/documentos';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/escenario';
+import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
@@ -237,9 +239,32 @@ export async function revocarBeneficio(personaId: string, id: string) {
   return ok();
 }
 
-export async function autorizarViraal(personaId: string, payload: Any) {
+/**
+ * Escribe el snapshot inmutable y devuelve su id, o un mensaje de error.
+ *
+ * Va ANTES de registrar la autorización a propósito: la fila de
+ * `trol3.escenarios` es la evidencia de lo que se autorizó, y una autorización
+ * sin snapshot es justo el agujero que esto viene a tapar. Si falla, no se
+ * registra nada.
+ */
+async function guardarSnapshot(
+  sujeto: SujetoEscenario,
+  snapshot: SnapshotEscenario | null | undefined,
+): Promise<{ id: string | null; error: string | null }> {
+  if (!snapshot) {
+    // Sin semilla no hay proyecto que congelar (la mesa cae a los valores del
+    // expediente). Se deja pasar, pero el PDF dirá que no hay escenario.
+    return { id: null, error: null };
+  }
+  const r = await guardarEscenarioAutorizado(t3(), sujeto, snapshot);
+  return r.ok ? { id: r.id, error: null } : { id: null, error: r.error };
+}
+
+export async function autorizarViraal(personaId: string, payload: Any, snapshot?: SnapshotEscenario | null) {
   await requireMiembro();
   const p = payload ?? {};
+  const snap = await guardarSnapshot({ personaId }, snapshot);
+  if (snap.error) return fail(`no se pudo guardar el escenario: ${snap.error}`);
   const { data, error } = await t3().rpc('guardar_autorizacion_viraal', {
     p_persona: personaId,
     p_nivel: p.nivel ?? null,
@@ -251,13 +276,15 @@ export async function autorizarViraal(personaId: string, payload: Any) {
     p_precio: p.precio ?? null,
     p_costo: p.costo ?? null,
     p_ingreso: p.ingreso ?? null,
-    p_inputs: p.inputs ?? {},
+    // El id del escenario viaja en los inputs para que el PDF lo imprima: es el
+    // folio con el que después se busca la fila inmutable.
+    p_inputs: { ...(p.inputs ?? {}), escenario_id: snap.id },
     p_resultado: p.resultado ?? {},
     p_nota: p.nota ?? null,
   });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
-  return ok({ id: data });
+  return ok({ id: data, escenarioId: snap.id });
 }
 
 // ── Consultas de aliados (B2B) ──────────────────────────────────────────────
@@ -279,9 +306,11 @@ export async function gestionarConsultaAliado(
   return ok({ consulta: data });
 }
 
-export async function autorizarViraalAliado(consultaId: string, payload: Any) {
+export async function autorizarViraalAliado(consultaId: string, payload: Any, snapshot?: SnapshotEscenario | null) {
   await requireMiembro();
   const p = payload ?? {};
+  const snap = await guardarSnapshot({ consultaAliadoId: consultaId }, snapshot);
+  if (snap.error) return fail(`no se pudo guardar el escenario: ${snap.error}`);
   const { data, error } = await t3().rpc('guardar_autorizacion_viraal_aliado', {
     p_consulta: consultaId,
     p_nivel: p.nivel ?? null,
@@ -293,13 +322,13 @@ export async function autorizarViraalAliado(consultaId: string, payload: Any) {
     p_precio: p.precio ?? null,
     p_costo: p.costo ?? null,
     p_ingreso: p.ingreso ?? null,
-    p_inputs: p.inputs ?? {},
+    p_inputs: { ...(p.inputs ?? {}), escenario_id: snap.id },
     p_resultado: p.resultado ?? {},
     p_nota: p.nota ?? null,
   });
   if (error) return fail(error);
   revalidatePath(`/trabajo/aliados/${consultaId}`);
-  return ok({ id: data });
+  return ok({ id: data, escenarioId: snap.id });
 }
 
 // ── Bóveda de documentos ────────────────────────────────────────────────────

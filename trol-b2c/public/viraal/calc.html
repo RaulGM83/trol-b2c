@@ -126,6 +126,8 @@
 
     <fieldset>
       <legend>Proyecto</legend>
+      <div class="row"><label for="fechaTramite">Fecha de inicio de trámite</label><input type="date" id="fechaTramite"></div>
+      <p class="hint" id="fechaHint">Fecha a la que se calculó la línea de captura y la pensión. Queda congelada en la autorización.</p>
       <div class="row"><label for="imss">Línea de captura IMSS</label><input type="number" id="imss" step="1000" value="659349"></div>
       <div class="row"><label for="gest">Gestorías al cliente</label><input type="number" id="gest" step="1000" value="80000"></div>
       <div class="row"><label for="pAdmin">Gastos admin. % <span id="tablaFlag"></span></label><input type="number" id="pAdmin" step="0.5" value="30" readonly></div>
@@ -285,6 +287,13 @@
   const pc=(n,d)=>isFinite(n)?(n*100).toFixed(d===undefined?1:d)+'%':'—';
   const v=id=>{const x=parseFloat($(id).value);return isFinite(x)?x:0;};
 
+  // La fecha NO entra a IDS: IDS son números (v() hace parseFloat). Viaja aparte,
+  // como string, y se estampa en `inputs` junto a pAdmin.
+  const hoyLocal=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+  const HOY=hoyLocal();
+  $('fechaTramite').value=HOY;
+  const embebida=window.parent!==window;
+
   const IDS=['imss','gest','pApert','tasaCli','plazo','mDxnB','mDxnE','comB','comE','canB','canE',
              'pGest','pAsesor','tasaFon','pension','saldos','mRetroB','mRetroE',
              'pisoAdmin','uAmbar','uNaranja','pisoCred','aporta'];
@@ -356,6 +365,12 @@
     $('pAdmin').value=(''+aUso).replace(/\.0$/,'');
     $('pAdmin').readOnly=(adminManual===null);
     $('tablaFlag').innerHTML=t.hueco?'<span class="flag warn" style="margin-left:4px">tramo sin política</span>':'';
+    const fTram=$('fechaTramite').value||HOY;
+    $('fechaHint').textContent = fTram===HOY
+      ? 'Hoy. Los números de arriba se calcularon a esta fecha y queda congelada en la autorización.'
+      : (embebida
+          ? `Trámite al ${fTram} (no hoy). La línea de captura y la pensión se recalcularon a esa fecha.`
+          : `Trámite al ${fTram} (no hoy). Captura a mano la línea y la pensión que correspondan a esa fecha.`);
     $('tablaHint').textContent=adminManual===null
       ? `Tabla: ${aTabla}% para una línea de captura de ${mx(v('imss'))}.`
       : `Ajustado a mano. Tabla diría ${aTabla}%.`;
@@ -428,7 +443,7 @@
     r.value=Math.min(v('aporta'),r.max);
 
     window.__VIRAAL__={
-      inputs:(function(){const o={};IDS.forEach(id=>o[id]=v(id));o.pAdmin=v('pAdmin');return o;})(),
+      inputs:(function(){const o={};IDS.forEach(id=>o[id]=v(id));o.pAdmin=v('pAdmin');o.fechaTramite=$('fechaTramite').value||HOY;return o;})(),
       nivel:lvl, escenario:name,
       banda:(auto?'verde':(rige.mCosto>=uA?'ambar':(rige.mCosto>=uN?'naranja':'rojo'))),
       margen:rige.margen, margen_costo:rige.mCosto, margen_credito:rige.mCred,
@@ -439,10 +454,19 @@
 
   IDS.forEach(id=>$(id).addEventListener('input',()=>{if(id==='aporta')$('aportaR').value=$('aporta').value;render();}));
   $('aportaR').addEventListener('input',()=>{$('aporta').value=$('aportaR').value;render();});
+  $('fechaTramite').addEventListener('change',()=>{
+    const f=$('fechaTramite').value;
+    if(!f){$('fechaTramite').value=HOY;return;}
+    // Embebida: el motor de pensiones vive fuera, así que se le pide a la
+    // pantalla contenedora que recalcule y vuelva a prellenar.
+    if(embebida) parent.postMessage({type:'viraal_fecha', fecha:f}, '*');
+    render();
+  });
   // Regla: la administración manual solo puede BAJAR respecto a la tabla (descuento), nunca superarla.
   $('pAdmin').addEventListener('input',()=>{const t=tabla(v('imss')).p; adminManual=Math.min(t, v('pAdmin')); if(v('pAdmin')>t) $('pAdmin').value=t; render();});
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
     const p=PRESETS[b.dataset.preset];for(const k in p)$(k).value=p[k];
+    $('fechaTramite').value=$('fechaTramite').value||HOY;
     $('aportaR').value=p.aporta;adminManual=null;last=null;render();
   }));
   $('btnAdmin').addEventListener('click',()=>{

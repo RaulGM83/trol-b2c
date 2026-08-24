@@ -4,7 +4,6 @@ import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { GestionAliado } from '@/components/trol3/GestionAliado';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
-import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
@@ -41,9 +40,15 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
   const afore = corr?.disponible_afore ?? ((toNum(saldosCalc.rcv97) ?? 0) + (toNum(saldosCalc.sar92) ?? 0) || null);
   const infonavit = corr?.infonavit ?? toNum(saldosCalc.infonavit);
   const saldosLiq = (afore != null || infonavit != null) ? (Number(afore ?? 0) + Number(infonavit ?? 0)) : null;
-  // Mesa Viraal: proyecto A HOY calculado con la semilla del aliado (línea IMSS = pago al IMSS, no el costo total),
-  // con variante de recuperación de semanas descontadas. Fallback: escenario mod40_retro_hoy del pipeline.
-  const viraalDatos = semilla ? mesaViraalDesdeSemilla(semilla, saldosLiq) : null;
+  // Mesa Viraal: el proyecto lo recalcula la mesa en vivo con la semilla del aliado
+  // (línea IMSS = pago al IMSS, no el costo total) a la fecha de trámite que elija el
+  // asesor. Fallback: escenario mod40_retro_hoy del pipeline.
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const historialAliado = (calc?.historial ?? null) as Any[] | null;
+  // Aquí NO se pasa `limite_inscripcion_mod40`: la consulta del aliado trae el
+  // límite de 5 años de la semilla, y para una baja de Mod 40 el bueno es el de
+  // 12 meses (art. 220). Sin expediente de trol3 que lo corrija, manda el
+  // cálculo local sobre el historial.
   const escHoy = (calc?.escenarios?.mod40_retro_hoy ?? {}) as Any;
   const prefill: Record<string, number | null> = {
     imss: toNum(escHoy.costo_imss) ?? toNum(diag.costo_retroactivo_hoy),
@@ -149,6 +154,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
                 calculoGeneradoAt={fmtFecha(c.creada_en)}
                 mod40Aplica={diag.mod40 === 'Sí' || !!semilla.perfil.aplica_mod40}
                 calculoPensional={calc}
+                historialLaboral={historialAliado}
                 saldosCorregidos={corr}
                 guardarScope="consulta_aliado"
               />
@@ -160,7 +166,18 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
         </section>
       )}
 
-      {tab === 'autorizar' && <MesaViraal consultaAliadoId={c.id} prefill={prefill} historial={viraalHist} datos={viraalDatos} />}
+      {tab === 'autorizar' && (
+        <MesaViraal
+          consultaAliadoId={c.id}
+          prefill={prefill}
+          historial={viraalHist}
+          semilla={semilla}
+          saldosLiquidos={saldosLiq}
+          historialLaboral={historialAliado}
+          limiteInscripcionMod40={null}
+          hoyIso={hoyIso}
+        />
+      )}
     </div>
   );
 }

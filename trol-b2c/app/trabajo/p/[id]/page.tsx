@@ -9,7 +9,6 @@ import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
-import { mesaViraalDesdeSemilla } from '@/lib/viraal/prefill';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
@@ -63,6 +62,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const opsAbiertas = (ops ?? []).filter((o: Any) => !['no_aplica', 'perdida', 'ganada'].includes(o.estado));
   const opsCerradas = (ops ?? []).filter((o: Any) => ['no_aplica', 'perdida', 'ganada'].includes(o.estado));
   const semilla = parseSemillaV2(datosMap.get('semilla')?.valor);
+  // Límite de inscripción a Mod 40: el MEJOR dato del expediente. trol3 ya
+  // corrigió ahí la ventana de 12 meses del art. 220 (la semilla trae los 5
+  // años del 219), así que la calculadora tiene que leerlo de aquí y no
+  // recalcularlo distinto — una sola verdad.
+  const limiteMod40 = (() => {
+    const v = datosMap.get('limite_inscripcion_mod40')?.valor;
+    return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+  })();
   // Saldos corregidos por el asesor (portal) viven en public.clientes.saldos_corregidos
   let saldosCorregidos: SaldosCorregidos | null = null;
   let mod40AplicaLegacy: boolean | null = null;
@@ -79,6 +86,13 @@ export default async function Expediente({ params, searchParams }: { params: { i
       const { data: cod } = await admin.schema('trol3').rpc('codigo_referido', { p_cliente: e.legacy_cliente_id });
       codigoReferido = (cod as string) ?? null;
     }
+  }
+  // Sin espejo legacy la historia laboral vive en la propia semilla de trol3.
+  // Sin ella no se puede clasificar la última baja y la Mod 40 avisa que no
+  // pudo confirmar la modalidad, en vez de inventar una ventana.
+  if (historialLaboral.length === 0) {
+    const h = (datosMap.get('semilla')?.valor as { historial?: Any[] } | undefined)?.historial;
+    if (Array.isArray(h)) historialLaboral = h;
   }
   // ---- Asesoría Infonavit: la pestaña abre con saldo arriba del umbral y cotizando.
   // El crédito vigente NO bloquea: aparece como señal dentro de la pestaña.
@@ -162,7 +176,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const saldosLiq = (afLiq != null || infLiq != null) ? (Number(afLiq ?? 0) + Number(infLiq ?? 0)) : null;
   // Mesa Viraal: proyecto Mod40 retroactivo A HOY calculado con la semilla (línea IMSS, gestorías, pensión, saldos)
   // y variante con recuperación de semanas descontadas. Fallback: valores del expediente.
-  const viraalDatos = semilla ? mesaViraalDesdeSemilla(semilla, saldosLiq) : null;
+  // El proyecto ya no se calcula aquí: la mesa lo recalcula en vivo con la
+  // fecha de trámite que elija el asesor. `hoyIso` fija el default en el
+  // servidor para que no dependa del reloj del navegador.
+  const hoyIso = new Date().toISOString().slice(0, 10);
   const viraalPrefill: Record<string, number | null> = {
     imss: e.costo_retro ?? null,
     pension: (e.pension_mod40_retro ?? e.pension_maxima) ?? null,
@@ -295,6 +312,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 calculoGeneradoAt={semillaAt}
                 mod40Aplica={mod40AplicaLegacy ?? !!(e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
                 calculoPensional={datosMap.get('semilla')?.valor}
+                historialLaboral={historialLaboral}
+                limiteInscripcionMod40={limiteMod40}
                 saldosCorregidos={saldosCorregidos}
                 guardarScope={e.legacy_cliente_id ? 'cliente' : null}
               />
@@ -376,7 +395,16 @@ export default async function Expediente({ params, searchParams }: { params: { i
       {tab === 'viraal' && (
         <div className="space-y-2">
           {avisoSaldoEstimado && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">La liquidez de la mesa incluye {e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} de Infonavit que <b>nadie ha confirmado</b>: es nuestro estimado. Confírmalo en <Link href={href('resumen')} className="underline">Resumen</Link> antes de comprometer un plan de pagos.</p>}
-          <MesaViraal personaId={e.persona_id} prefill={viraalPrefill} historial={viraalHist} datos={viraalDatos} />
+          <MesaViraal
+            personaId={e.persona_id}
+            prefill={viraalPrefill}
+            historial={viraalHist}
+            semilla={semilla}
+            saldosLiquidos={saldosLiq}
+            historialLaboral={historialLaboral}
+            limiteInscripcionMod40={limiteMod40}
+            hoyIso={hoyIso}
+          />
         </div>
       )}
 

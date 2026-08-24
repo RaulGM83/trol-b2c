@@ -50,14 +50,33 @@ export function viraalDoc(a: Any) {
   const c = (a.cliente ?? {}) as Record<string, Any>;
   const esBase = (a.nivel ?? '') === 'Nivel 1';
   const fecha = new Date(a.created_at).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+  // Fecha de inicio de trámite: la manda la mesa (`fecha_tramite`); si el caso
+  // se autorizó desde la calculadora suelta, viene del iframe (`fechaTramite`).
+  // Sin ella, el caso es anterior a la 24-ago-2026 y se calculó "a hoy".
+  const fechaTramite: string | null = (i.fecha_tramite ?? i.fechaTramite ?? null) as string | null;
+  const ventana = (i.ventana_mod40 ?? null) as Record<string, Any> | null;
+  const avisos = Array.isArray(i.avisos) ? (i.avisos as string[]) : [];
+  // Folio del snapshot inmutable en trol3.escenarios. Es lo que permite volver
+  // a estos números exactos dentro de un año, aunque el motor y la semilla
+  // hayan cambiado. Las autorizaciones anteriores al 24-ago-2026 no lo traen.
+  const escenarioId = (i.escenario_id ?? null) as string | null;
+  const motorVersion = (i.motor_version ?? null) as string | null;
   return (
     <Document title={`Viraal · Autorización ${a.id}`}>
       <Page size="A4" style={s.page}>
         <Text style={s.eyebrow}>VIRAAL · MESA DE AUTORIZACIÓN</Text>
         <Text style={s.h1}>Escenario autorizado</Text>
-        <Text style={s.sub}>{fecha}{a.miembro ? ` · autorizó ${a.miembro}` : ''} · folio {a.id}</Text>
+        <Text style={s.sub}>
+          {fecha}{a.miembro ? ` · autorizó ${a.miembro}` : ''} · folio {a.id}
+          {escenarioId ? ` · escenario ${escenarioId}` : ''}
+        </Text>
 
         <Text style={s.cliente}>{[c.nombre, c.apellidos].filter(Boolean).join(' ') || '(sin nombre)'}{c.curp ? `   ·   CURP ${c.curp}` : ''}{c.nss ? `   ·   NSS ${c.nss}` : ''}</Text>
+        <Text style={s.sub}>
+          Trámite calculado al {fechaTramite ?? 'día de la autorización'}
+          {ventana?.fecha_limite ? `   ·   ventana de reingreso hasta ${ventana.fecha_limite}${ventana.plazo === '12m' ? ' (12 meses, art. 220)' : ventana.plazo === '5a' ? ' (5 años, art. 219)' : ''}` : ''}
+          {ventana?.estado === 'vencida' ? '   ·   VENCIDA a esa fecha' : ventana?.estado === 'por_vencer' ? '   ·   POR VENCER' : ''}
+        </Text>
 
         <View style={s.escWrap}>
           <Text style={s.escLbl}>Escenario que rige:</Text>
@@ -101,6 +120,9 @@ export function viraalDoc(a: Any) {
             <Line l="Tasa al cliente %/mes" v={(i.tasaCli ?? '—') + '%'} />
             <Line l="Plazo de fondeo (meses)" v={String(i.plazo ?? '—')} />
             <Line l="Aportación día 1" val={i.aporta} />
+            <Line l="Fecha de inicio de trámite" v={fechaTramite ?? '—'} />
+            <Line l="Escenario guardado" v={escenarioId ?? 'sin snapshot'} />
+            <Line l="Versión del motor" v={motorVersion ?? '—'} />
           </View>
           <View style={s.col}>
             <Line l="Pensión mensual estimada" val={i.pension} />
@@ -112,6 +134,15 @@ export function viraalDoc(a: Any) {
             <Line l="Tasa de fondeo %/mes" v={(i.tasaFon ?? '—') + '%'} />
           </View>
         </View>
+
+        {avisos.length ? (
+          <View>
+            <Text style={s.secTitle}>Avisos a la fecha de trámite</Text>
+            {avisos.map((t, k) => (
+              <Text key={k} style={s.nota}>· {t}</Text>
+            ))}
+          </View>
+        ) : null}
 
         {a.nota ? <Text style={s.nota}>Nota: {a.nota}</Text> : null}
 

@@ -1,6 +1,6 @@
 # Trol 3.0 — Contexto para continuar en un chat nuevo
 
-Punto de entrada único. Actualizado **21-ago-2026** (cierre de la sesión de ese día). Los detalles de cada tema viven en los docs `claude/11` … `claude/17`; aquí está el mapa.
+Punto de entrada único. Actualizado **24-ago-2026**. Los detalles de cada tema viven en los docs `claude/11` … `claude/20`; aquí está el mapa.
 
 ---
 
@@ -84,6 +84,31 @@ El disparador: Vero reportó 5 clientes sin reporte. El diagnóstico real fue qu
 
 **074–075 — preparación de UI.** `mi_identidad()` (curp, estatus, mensaje, editable, puede\_confirmar, último intento), vista `v_ultima_consulta_imss` para el asesor, y misión **"Confirma tu CURP"** en `mi_misiones` con sus dos variantes. Se corrigió el copy de "info oficial", que decía "puede haber una inconsistencia en tu cuenta" incluso cuando solo había un dedazo.
 
+### Sesión 24-ago — Fecha de trámite libre en Mod 40 (`claude/20-fecha-tramite-mod40-spec.md`)
+
+El spec vive en `claude/20`. El lado Supabase se hizo en la sesión de chat (campo `ultima_modalidad`, `derivar_ultima_modalidad` + trigger, límite de 12 meses en `limite_inscripcion_mod40`, `evaluar_persona` con ventana, backfill de 181 personas). Aquí quedó el lado del repo:
+
+- **`pension-core/src/mod40-ventana.ts`** (nuevo, copiado tal cual a `trol-b2c/lib/imss/`): `ventanaMod40(historial, fechaTramite, opts)` clasifica la última cotización y devuelve `{ ultimaBaja, ultimaModalidad, plazo '5a'|'12m', fechaLimite, estado vigente|por_vencer|vencida, sinBaja, ultimoSbc, diasRestantes, retroAplica, avisos }`. La detección es **espejo literal** del `CASE` de `trol3.derivar_ultima_modalidad` (nombre de patrón O RP terminado en `9999940`): si se toca una, se toca la otra.
+- **`fechaTramite` en `computeProyectoMod40`.** Ancla única: edad, fecha de retiro, ventana retroactiva, meses de pago, año de UMA y el escenario base interno. **Omitirla deja el cálculo idéntico al de siempre** — los 118 goldens pasan bit a bit (hay un test que lo compara campo por campo). El resultado gana `fechaTramite`, `ventana` y `avisos`.
+- **UI**: selector de fecha \+ caja de avisos compartidos en `components/trol3/FechaTramite.tsx`, usados por la **Mesa Viraal** (que ahora recalcula **en vivo** en el cliente: la página pasa `semilla`/`historialLaboral`/`limiteInscripcionMod40` en vez del `datos` precalculado) y por la **pestaña Calculadoras** (`Mod40Panel`). `public/viraal/calc.html` tiene su propio campo de fecha que viaja en `inputs`.
+- **Congelado**: la fecha entra a los `inputs` de la autorización Viraal junto con `ventana_mod40` y `avisos`, y el PDF (`viraal-pdf.tsx`) los imprime.
+- **29 tests nuevos** en `pension-core/src/__tests__/mod40-ventana.test.ts`. Probado además contra dos expedientes reales de producción.
+
+**Lo que NO quedó** (ver "Pendientes"): la persistencia de la fecha como override de escenario en la base, y el flag del n8n de aliados.
+
+### Sesión 24-ago (tarde) — Escenarios autorizados como snapshot inmutable
+
+Cierra el pendiente que dejó la mañana. La fecha de trámite libre creó un problema nuevo: un proyecto autorizado el martes con fecha de octubre ya no se puede reconstruir el jueves — el motor cambia, la semilla se refresca y la ventana del art. 220 se corre sola con el calendario. **Lo que se autorizó tiene que quedar escrito, no derivable.**
+
+- **Migración `20260824180000_escenarios_snapshot_autorizacion.sql`** (escrita, **NO aplicada** — la aplica Raúl). Reconstruye `trol3.escenarios`, que existía con otro diseño (escenario editable del cliente), vacía y sin uso. Trae un bloque que **aborta si la tabla tiene filas**.
+- **Columnas**: `id`, `tipo`, `persona_id` \| `consulta_aliado_id` (exactamente uno), `inputs`, `resultado`, `ventana`, `creado_por`, `creado_en`. Sin `updated_at` a propósito.
+- **Inmutable con tres candados**: RLS sin política de escritura, `revoke` de privilegios de tabla, y un **trigger** `before update/delete/truncate` — el trigger es el que importa, porque `service_role` (que la app usa vía `t3admin()`) se salta RLS.
+- **`trol3.autorizar_escenario(...)`** es la única puerta de entrada (security definer). Valida miembro, sujeto único, existencia y que `inputs` traiga `motor_version`.
+- **`ENGINE_VERSION`** en `pension-core/src/version.ts`, re-exportada por `trol-b2c/lib/imss/version.ts` junto con `MOTOR_ID`. Se guardan las **dos** porque `lib/imss` es un fork de `pension-core` y es el que calcula los Mod 40 de la app: guardar solo la versión mentiría sobre qué código produjo los montos.
+- **`lib/viraal/snapshot.ts`** es puro: arma el snapshot con UNA corrida del motor, y de esa misma corrida sale el prefill de la mesa. El objeto que se imprime en el PDF es el mismo que viaja a la RPC.
+- **trol-b2c estrena runner de pruebas** (vitest + `vitest.config.ts` con el alias `@`): antes solo `pension-core` tenía tests. 17 nuevos, incluido el round-trip.
+- El PDF de Viraal imprime el id del escenario y la versión del motor.
+
 ### Migraciones aplicadas (vivas)
 
 > **Ojo con la numeración:** los números **056–061 están duplicados**. Se aplicaron dos juegos en paralelo desde chats distintos: el de Infonavit (19-ago) y el de ISSSTE (20-ago). Además la 065 se aplicó *antes* que las 056/057 de ISSSTE. Guiarse por `supabase_migrations.schema_migrations`, no por el número.
@@ -126,12 +151,19 @@ UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espe
    - **Validar el registro de clics con tráfico real.** `clics_invitacion` está en cero: probado end-to-end pero sin un solo clic de verdad todavía. Hasta que entre tráfico, toda la columna clic→alta dice "sin datos de clic".  
    - **Contratación del referido (300 pts, `referido_contrata`)**: no está automatizada. Hoy la carga el administrador a mano. Los 100 de `referido_diagnostico` sí se otorgan solos al capturar la CURP.  
 2. **Un teléfono, una CURP**: falta el `principal` **único** por número (índice), el reparto de los 51 casos de familiares y la revisión de los ~18 candidatos que quedan. La UI ya está en `/trabajo/duplicados` (fusionar, ligar como familiares y elegir dueño del número). En Tako: preguntar con quién habla cuando el número tenga más de un expediente activo.  
-3. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
-4. **Agenda propia sobre Google Calendar** (opción 2).  
-5. **Estado de cuenta AFORE parseable**.  
-6. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
-7. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
-8. Decomisión final de HubSpot y apagar el dual-write a `public`. Son **cuatro** los workflows que cierran contra trol3 y hay que migrar juntos: `Datosbelvo`, `HistoriaBelvo`, `jordan_webhook` y `cliente-refrescar-sisec`.
+3. **Fecha de trámite — lo que quedó abierto** (`claude/20`):
+   - **n8n Calculadora Trol (B2B)**: el flag aplica/no-aplica que se manda a aliados sigue con la regla vieja de 5 años. Misma detección \+ 12 meses.
+   - **Mod 40 vigente (sin baja)**: la ventana ya lo marca (`retroAplica: false`) y lo avisa, pero el motor sigue armando su serie de meses como si fuera retroactivo. Modelarlo como prospectiva pura es trabajo aparte.
+   - **UMA por año del tramo**: el spec pedía la UMA de *cada* año de la serie; el motor sigue anclando `salarioRetro` al año de la última cotización. Cambiarlo movería los goldens, así que se dejó y se anota.
+   - Barrido automático de fechas óptimas (v2).
+   - **Aplicar la migración de escenarios**: `20260824180000_escenarios_snapshot_autorizacion.sql` está escrita y verificada contra la base real dentro de una transacción con `rollback` (19 asserts), pero **no aplicada**. Hasta que se aplique, autorizar desde la mesa devuelve el error de la RPC inexistente.
+   - **Nadie lee todavía `trol3.escenarios`**: se escribe y el PDF imprime el id, pero no hay pantalla que liste los escenarios de un expediente ni que compare un snapshot contra el motor de hoy (`recomputarDesdeInputs` ya existe para eso).
+4. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
+5. **Agenda propia sobre Google Calendar** (opción 2).  
+6. **Estado de cuenta AFORE parseable**.  
+7. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
+8. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
+9. Decomisión final de HubSpot y apagar el dual-write a `public`. Son **cuatro** los workflows que cierran contra trol3 y hay que migrar juntos: `Datosbelvo`, `HistoriaBelvo`, `jordan_webhook` y `cliente-refrescar-sisec`.
 
 ---
 
@@ -166,4 +198,6 @@ UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espe
 - **`exception when others then return` convierte el fallo en silencio absoluto.** Es lo que hizo que el bug anterior tardara en verse: la ruta redirigía bien, la RPC devolvía sin error y la tabla se quedaba vacía. Si una función es best-effort, que al menos deje `raise warning` antes de tragarse la excepción. Con este patrón viven hoy `registrar_clic`, `tg_puntos_referidor` y `tg_public_procesos`.  
 - **`pedir_consulta` dispara de verdad.** `tg_consulta_despachar` hace el POST al proveedor en el mismo INSERT: llamarla "para probar" cuesta dinero y manda una consulta real.  
 - Los datos de catálogo **no los atrapa ningún test**: un flag mal sembrado solo se ve simulando.
+- **`historial[].salario_base` llega como STRING en unas semillas y como NUMBER en otras** (`"2828.5"` vs `1500`). Una comparación `typeof x === 'number'` deja el campo en null sin fallar: fue exactamente lo que mató el aviso del art. 65 hasta que se corrió contra un expediente real. Todo lo que lea el historial crudo tiene que coercionar.
+- **El `limite_inscripcion_mod40` de la SEMILLA son 5 años; el del EXPEDIENTE son 12 meses.** trol3 lo corrige en `trol3.datos`, así que quien tenga expediente debe leerlo de `v_mejor_dato` — pasar el de la semilla como "mejor dato" pisa la regla correcta con la vieja. En las consultas de aliados no hay expediente: ahí manda el cálculo local sobre el historial y **no** se pasa límite.
 

@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
-import type { MesaViraalData } from '@/lib/viraal/prefill';
+import { AvisosMod40, FechaTramiteInput } from '@/components/trol3/FechaTramite';
+import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
+import type { SemillaV2 } from '@/lib/imss/semilla';
+import { mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
 
 type Prefill = Record<string, number | null>;
 type Autorizacion = {
@@ -28,31 +31,86 @@ const BANDA: Record<string, { label: string; cls: string }> = {
   rojo: { label: 'Rojo · no autorizar', cls: 'bg-red-100 text-red-700' },
 };
 
-export function MesaViraal({ personaId, consultaAliadoId, prefill, historial, datos }: { personaId?: string; consultaAliadoId?: string; prefill: Prefill; historial: Autorizacion[]; datos?: MesaViraalData | null }) {
+export function MesaViraal({
+  personaId,
+  consultaAliadoId,
+  prefill,
+  historial,
+  semilla,
+  saldosLiquidos = null,
+  historialLaboral = null,
+  limiteInscripcionMod40 = null,
+  hoyIso,
+}: {
+  personaId?: string;
+  consultaAliadoId?: string;
+  prefill: Prefill;
+  historial: Autorizacion[];
+  /** Semilla del cliente: la mesa recalcula el proyecto en vivo con ella. */
+  semilla?: SemillaV2 | null;
+  /** AFORE disponible + Infonavit, ya corregidos por el asesor si los capturó. */
+  saldosLiquidos?: number | null;
+  /** Historia laboral, para clasificar la última baja (art. 219 / 220 LSS). */
+  historialLaboral?: RegistroHistorialMod40[] | null;
+  /** `limite_inscripcion_mod40` del expediente: manda sobre el cálculo local. */
+  limiteInscripcionMod40?: string | null;
+  /** Hoy según el servidor, para que el default no dependa del reloj del navegador. */
+  hoyIso: string;
+}) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [alto, setAlto] = useState(1600);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  // Variante del proyecto: sin/con recuperación de semanas descontadas (siempre "a día de hoy").
+  // Variante del proyecto: sin/con recuperación de semanas descontadas.
   const [recuperar, setRecuperar] = useState(false);
   const [listo, setListo] = useState(false);
+  // Fecha de inicio de trámite: default hoy, la mueve el asesor y todo se
+  // recalcula. Se congela en los `inputs` de la autorización.
+  const [fechaTramite, setFechaTramite] = useState(hoyIso);
+
+  const datos = useMemo(() => {
+    if (!semilla) return null;
+    const f = parseFechaTramite(fechaTramite) ?? parseFechaTramite(hoyIso) ?? new Date();
+    return mesaViraalDesdeSemilla(semilla, saldosLiquidos, f, {
+      historial: historialLaboral,
+      limiteInscripcionMod40,
+    });
+  }, [semilla, saldosLiquidos, fechaTramite, hoyIso, historialLaboral, limiteInscripcionMod40]);
+
   const variante = datos ? (recuperar && datos.con ? datos.con : datos.sin) : null;
   const prefillActivo: Prefill = variante ? { ...prefill, ...variante.prefill } : prefill;
 
+  // El listener de `message` se registra una vez y congelaría los valores del
+  // primer render: la autorización guardaría la fecha original aunque el asesor
+  // la haya movido. Este ref siempre trae lo de AHORA.
+  const vivo = useRef({ datos, variante, recuperar, fechaTramite, prefillActivo });
+  vivo.current = { datos, variante, recuperar, fechaTramite, prefillActivo };
+
   useEffect(() => {
-    if (listo) ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: prefillActivo }, '*');
+    // La fecha viaja al iframe como string: la calculadora la muestra y la
+    // arrastra a `inputs`, pero quien la manda es esta pantalla.
+    if (listo) {
+      ref.current?.contentWindow?.postMessage(
+        { type: 'viraal_prefill', payload: { ...prefillActivo, fechaTramite } },
+        '*',
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recuperar, listo]);
+  }, [recuperar, listo, fechaTramite, datos]);
 
   useEffect(() => {
     function onMsg(e: MessageEvent) {
-      const d = (e.data ?? {}) as { type?: string; height?: number; payload?: Record<string, unknown> };
+      const d = (e.data ?? {}) as { type?: string; height?: number; fecha?: string; payload?: Record<string, unknown> };
       if (!d.type) return;
       if (d.type === 'viraal_ready') {
         setListo(true);
-        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: prefillActivo }, '*');
+        const v = vivo.current;
+        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: { ...v.prefillActivo, fechaTramite: v.fechaTramite } }, '*');
       } else if (d.type === 'viraal_height' && d.height) {
         setAlto(Math.max(600, Math.min(4000, d.height + 24)));
+      } else if (d.type === 'viraal_fecha' && typeof d.fecha === 'string') {
+        // La cambiaron dentro del iframe: aquí es donde se recalcula.
+        setFechaTramite(d.fecha);
       } else if (d.type === 'viraal_autorizar' && d.payload) {
         void autorizar(d.payload);
       }
@@ -72,13 +130,41 @@ export function MesaViraal({ personaId, consultaAliadoId, prefill, historial, da
     setGuardando(true);
     setMsg(null);
     // El caso lleva los datos del cliente y la variante usada (para el PDF y auditoría).
-    const inputs = { ...((payload.inputs as Record<string, unknown> | undefined) ?? {}), cliente: datos?.cliente ?? null, recuperar_semanas: recuperar, semanas_retiro: variante?.semanas_retiro ?? null };
+    // La fecha de trámite queda CONGELADA aquí: el PDF y la auditoría tienen
+    // que poder decir a qué fecha se autorizaron estos números. Se lee del ref
+    // porque esta función la invoca un listener registrado en el primer render.
+    const v = vivo.current;
+    // El snapshot de la variante activa: la MISMA corrida del motor que produjo
+    // los números que el asesor está viendo. Va tal cual a trol3.escenarios y de
+    // ahí salen los campos que se imprimen. Sin él no se autoriza: la fila
+    // inmutable es el punto de todo esto.
+    const snapshot = v.variante?.snapshot ?? null;
+    const ventana = snapshot?.ventana ?? null;
+    const inputs = {
+      ...((payload.inputs as Record<string, unknown> | undefined) ?? {}),
+      cliente: v.datos?.cliente ?? null,
+      recuperar_semanas: v.recuperar,
+      semanas_retiro: v.variante?.semanas_retiro ?? null,
+      fecha_tramite: v.fechaTramite,
+      motor_version: snapshot?.inputs.motor_version ?? null,
+      ventana_mod40: ventana
+        ? {
+            estado: ventana.estado,
+            plazo: ventana.plazo,
+            ultima_modalidad: ventana.ultimaModalidad,
+            ultima_baja: ventana.ultimaBaja,
+            fecha_limite: ventana.fechaLimite,
+          }
+        : null,
+      avisos: snapshot?.avisos ?? v.datos?.avisos ?? [],
+    };
     const r = consultaAliadoId
-      ? await autorizarViraalAliado(consultaAliadoId, { ...payload, inputs, nota })
-      : await autorizarViraal(personaId as string, { ...payload, inputs, nota });
+      ? await autorizarViraalAliado(consultaAliadoId, { ...payload, inputs, nota }, snapshot)
+      : await autorizarViraal(personaId as string, { ...payload, inputs, nota }, snapshot);
     setGuardando(false);
     if (r.ok) {
-      setMsg('✓ Autorización registrada · generando PDF…');
+      const escenarioId = (r as { escenarioId?: string | null }).escenarioId ?? null;
+      setMsg(escenarioId ? '✓ Escenario autorizado y guardado · generando PDF…' : '✓ Autorización registrada · generando PDF…');
       const id = (r as { id?: number }).id;
       if (id) window.open(`/trabajo/viraal/pdf/${id}`, '_blank');
       setTimeout(() => window.location.reload(), 1300);
@@ -100,7 +186,24 @@ export function MesaViraal({ personaId, consultaAliadoId, prefill, historial, da
                 <span>{c.ley}{c.aplica_mod40 ? ' · aplica Mod40' : ' · no aplica Mod40'}</span>
                 <span>Semanas: <b className="text-ink">{c.semanas_cotizadas}</b> cotizadas · {c.semanas_descontadas} descontadas · {c.semanas_recuperadas} recuperadas</span>
                 <span>Salario diario: <b className="text-ink">{mx(c.salario_diario)}</b></span>
-                {c.meses_retro != null && <span>Retroactivo: <b className="text-ink">{c.meses_retro} meses</b> (a hoy)</span>}
+                {c.meses_retro != null && (
+                  <span>
+                    Retroactivo: <b className="text-ink">{c.meses_retro} meses</b>
+                    {fechaTramite === hoyIso ? ' (a hoy)' : ` (al ${fechaTramite})`}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 max-w-xs">
+                <FechaTramiteInput value={fechaTramite} onChange={setFechaTramite} id="viraal-fecha-tramite" />
+                {fechaTramite !== hoyIso && (
+                  <button
+                    type="button"
+                    onClick={() => setFechaTramite(hoyIso)}
+                    className="mt-1 text-xs font-semibold text-ink underline"
+                  >
+                    Volver a hoy
+                  </button>
+                )}
               </div>
             </div>
             <div className="text-right text-xs">
@@ -115,9 +218,10 @@ export function MesaViraal({ personaId, consultaAliadoId, prefill, historial, da
               {variante && (
                 <div className="mt-1 text-muted">Pensión con proyecto: <b className="text-ink">{mx(variante.pension)}</b>{variante.semanas_retiro != null ? ` · ${variante.semanas_retiro} semanas al retiro` : ''}</div>
               )}
-              {!datos?.sin && <div className="mt-1 text-red-600">No pude calcular el proyecto Mod40 hoy con la semilla; la mesa muestra los valores del expediente.</div>}
+              {!datos?.sin && <div className="mt-1 text-red-600">No pude calcular el proyecto Mod40 a esa fecha con la semilla; la mesa muestra los valores del expediente.</div>}
             </div>
           </div>
+          <AvisosMod40 ventana={datos?.ventana ?? null} avisos={datos?.avisos ?? []} className="mt-3" />
         </section>
       )}
       <div className="rounded-2xl border border-line bg-white p-3">

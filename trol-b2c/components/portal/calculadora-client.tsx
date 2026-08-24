@@ -15,6 +15,9 @@ import { createClient } from "@/lib/supabase/client"
 import { computeLey73 } from "@/lib/imss/ley73"
 import { computeLey97 } from "@/lib/imss/ley97"
 import { computeProyectoMod40 } from "@/lib/imss/mod40-proyecto"
+import type { RegistroHistorialMod40 } from "@/lib/imss/mod40-ventana"
+import { AvisosMod40, FechaTramiteInput } from "@/components/trol3/FechaTramite"
+import { isoFecha, parseFechaTramite } from "@/lib/viraal/prefill"
 import type { SemillaV2 } from "@/lib/imss/semilla"
 import { SALARIO_MINIMO, UMA } from "@/lib/imss/tablas"
 import type { Palancas } from "@/lib/imss/types"
@@ -47,8 +50,9 @@ const SAL_MIN = SALARIO_MINIMO[ANIO] ?? 315.04
 const SAL_TOPE = (UMA[ANIO] ?? 117.35) * 25
 const PCTS = [0, 0.25, 0.5, 0.75, 1] as const
 
-function edadActualDe(fechaNacimiento: string): number {
-  return (Date.now() - new Date(fechaNacimiento).getTime()) / 86_400_000 / 365.25
+function edadActualDe(fechaNacimiento: string, en?: Date): number {
+  const ref = en?.getTime() ?? Date.now()
+  return (ref - new Date(fechaNacimiento).getTime()) / 86_400_000 / 365.25
 }
 
 /** Semanas que realmente se pueden recuperar: descontadas − ya recuperadas. */
@@ -141,6 +145,8 @@ export function CalculadoraClient({
   fechaSisec = null,
   calculoGeneradoAt = null,
   mod40Aplica = true,
+  historialLaboral = null,
+  limiteInscripcionMod40 = null,
   resumen = null,
   calculoPensional = null,
   saldosCorregidos = null,
@@ -155,6 +161,10 @@ export function CalculadoraClient({
   fechaSisec?: string | null
   calculoGeneradoAt?: string | null
   mod40Aplica?: boolean
+  /** Historia laboral: clasifica la última baja y su ventana (art. 219 / 220 LSS). */
+  historialLaboral?: RegistroHistorialMod40[] | null
+  /** `limite_inscripcion_mod40` del expediente: manda sobre el cálculo local. */
+  limiteInscripcionMod40?: string | null
   /** Resumen del cliente para el tab "Resumen" (consultas). */
   resumen?: ResumenClienteData | null
   /** Semilla cruda; respalda los campos que falten en el resumen. */
@@ -262,6 +272,8 @@ export function CalculadoraClient({
               consultaId={consultaId}
               saldosCorregidos={saldosCorregidos}
               guardarScope={guardarScope}
+              historialLaboral={historialLaboral}
+              limiteInscripcionMod40={limiteInscripcionMod40}
               pdfCtx={pdfCtx}
             />
           </TabsContent>
@@ -988,19 +1000,34 @@ function Mod40Panel({
   consultaId,
   saldosCorregidos = null,
   guardarScope = null,
+  historialLaboral = null,
+  limiteInscripcionMod40 = null,
   pdfCtx,
 }: {
   semilla: SemillaV2
   consultaId: string
   saldosCorregidos?: SaldosCorregidos | null
   guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
+  historialLaboral?: RegistroHistorialMod40[] | null
+  limiteInscripcionMod40?: string | null
   pdfCtx: PdfCtx
 }) {
   const { perfil, saldos, salario_60m } = semilla
-  const edadActual = edadActualDe(perfil.fecha_nacimiento)
+  // Fecha de inicio de trámite: default hoy (UTC, como todo el motor). Mueve la
+  // ventana, los meses de retroactivo, la UMA del año y la edad.
+  const hoyIso = useMemo(() => isoFecha(new Date()), [])
+  const [fechaTramiteIso, setFechaTramiteIso] = useState(hoyIso)
+  const fechaTramite = useMemo(
+    () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(hoyIso) ?? new Date(),
+    [fechaTramiteIso, hoyIso],
+  )
+  const edadActual = edadActualDe(perfil.fecha_nacimiento, fechaTramite)
   const edades = useMemo(() => opcionesEdad(edadActual), [edadActual])
 
   const [edadRetiro, setEdadRetiro] = useState(edades[0])
+  // Mover la fecha corre el piso de edades: si la elegida se salió de la lista,
+  // se cae a la mínima en vez de mandar al motor una edad que ya no existe.
+  const edadRetiroEfectiva = edades.includes(edadRetiro) ? edadRetiro : edades[0]
   const [umas, setUmas] = useState(25)
   const [recuperarDesc, setRecuperarDesc] = useState(semanasRecuperables(perfil) > 0)
   const [semanasExtra, setSemanasExtra] = useState(0)
@@ -1053,14 +1080,29 @@ function Mod40Panel({
         salario_60m,
         umasProyecto: umas,
         semanasExtra,
+        fechaTramite,
+        historial: historialLaboral,
+        limiteInscripcionMod40,
         palancas: {
           ...PALANCAS_DEFAULT,
-          edadRetiro,
+          edadRetiro: edadRetiroEfectiva,
           recuperarSemanasDescontadas: recuperarDesc,
           overrides,
         },
       }),
-    [perfil, saldos, salario_60m, edadRetiro, umas, recuperarDesc, semanasExtra, overrides],
+    [
+      perfil,
+      saldos,
+      salario_60m,
+      edadRetiroEfectiva,
+      umas,
+      recuperarDesc,
+      semanasExtra,
+      overrides,
+      fechaTramite,
+      historialLaboral,
+      limiteInscripcionMod40,
+    ],
   )
 
   if (!r) {
@@ -1084,10 +1126,13 @@ function Mod40Panel({
     hero: {
       etiqueta: `Pensión con proyecto (×${r.multiplicadorPension.toFixed(1)} vs sin proyecto)`,
       valor: `${fmt(r.conProyecto.pensionMensual)} /mes`,
-      sub: `Sin proyecto: ${fmt(r.sinProyecto.pensionMensual)} /mes · Edad de pensión: ${edadRetiro} años`,
+      sub: `Sin proyecto: ${fmt(r.sinProyecto.pensionMensual)} /mes · Edad de pensión: ${edadRetiroEfectiva} años · Trámite: ${fechaTramiteIso}`,
     },
     palancas: [
-      { label: "Edad de pensión del proyecto", value: `${edadRetiro} años` },
+      // La fecha va primero: es la que da contexto a todo lo de abajo y la que
+      // queda congelada en el escenario.
+      { label: "Fecha de inicio de trámite", value: fechaTramiteIso },
+      { label: "Edad de pensión del proyecto", value: `${edadRetiroEfectiva} años` },
       {
         label: "UMAs del proyecto",
         value: `${umas} UMA (${fmt((UMA[ANIO] ?? 117.35) * umas)}/día)`,
@@ -1245,12 +1290,16 @@ function Mod40Panel({
       },
     ],
     datosCliente: filasDatosCliente(semilla),
-    advertencias:
-      perfil.ley === "Ley97"
+    advertencias: [
+      ...(perfil.ley === "Ley97"
         ? [
             "El proyecto Mod40 retroactivo usa la fórmula de pensión Ley 73. El perfil de este cliente es Ley 97: usar solo como referencia.",
           ]
-        : [],
+        : []),
+      // Los avisos de la ventana viajan al escenario: quien lea el PDF tiene
+      // que ver a qué fecha se calculó y si esa fecha todavía procede.
+      ...r.avisos,
+    ],
   })
 
   return (
@@ -1264,9 +1313,23 @@ function Mod40Panel({
               perfil de este cliente es Ley 97: usar solo como referencia.
             </p>
           )}
+          <FechaTramiteInput
+            id="m40-fecha-tramite"
+            value={fechaTramiteIso}
+            onChange={setFechaTramiteIso}
+          />
+          {fechaTramiteIso !== hoyIso && (
+            <button
+              type="button"
+              onClick={() => setFechaTramiteIso(hoyIso)}
+              className="-mt-1 w-fit text-xs font-semibold underline"
+            >
+              Volver a hoy
+            </button>
+          )}
           <SelectorEdad
             edades={edades}
-            value={edadRetiro}
+            value={edadRetiroEfectiva}
             onChange={setEdadRetiro}
             label="Edad de pensión del proyecto"
           />
@@ -1360,6 +1423,8 @@ function Mod40Panel({
         </>
       }
     >
+      <AvisosMod40 ventana={r.ventana} avisos={r.avisos} />
+
       {/* Comparativo principal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Card>
