@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
 import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
@@ -180,6 +181,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // fecha de trámite que elija el asesor. `hoyIso` fija el default en el
   // servidor para que no dependa del reloj del navegador.
   const hoyIso = new Date().toISOString().slice(0, 10);
+  // La serie INPC viaja al navegador: la mesa recalcula la línea de captura en
+  // vivo cada vez que el asesor mueve la fecha de trámite.
+  const serieINPC = await leerSerieINPC(db);
   const viraalPrefill: Record<string, number | null> = {
     imss: e.costo_retro ?? null,
     pension: (e.pension_mod40_retro ?? e.pension_maxima) ?? null,
@@ -314,6 +318,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 calculoPensional={datosMap.get('semilla')?.valor}
                 historialLaboral={historialLaboral}
                 limiteInscripcionMod40={limiteMod40}
+                serieINPC={serieINPC}
                 saldosCorregidos={saldosCorregidos}
                 guardarScope={e.legacy_cliente_id ? 'cliente' : null}
               />
@@ -403,6 +408,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             saldosLiquidos={saldosLiq}
             historialLaboral={historialLaboral}
             limiteInscripcionMod40={limiteMod40}
+            serieINPC={serieINPC}
             hoyIso={hoyIso}
           />
         </div>

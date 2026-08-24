@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { INPC_MENSUAL, type SerieINPC } from '@/lib/imss/inpc';
 import { MOTOR_ID, MOTOR_VERSION } from '@/lib/imss/version';
 import type { Palancas } from '@/lib/imss/types';
 import {
@@ -126,6 +127,89 @@ describe('construirSnapshot — auto-contenido', () => {
   it('el límite del expediente le gana al de 5 años de la semilla', () => {
     expect(semillaMod40.perfil.fechas.limite_inscripcion_mod40).toBe('2029-09-29');
     expect(s.ventana.fechaLimite).toBe('2025-09-30');
+  });
+
+  it('congela la serie INPC del tramo, no la serie entera', () => {
+    const meses = Object.keys(s.inputs.inpc_tramo);
+    expect(meses).toHaveLength(s.resultado.pagoImss.meses);
+    // Del mes de la baja al mes del trámite, ambos inclusive.
+    expect(meses).toContain('2026-08');
+    expect(meses).toContain('2024-09');
+    // No arrastra los ~250 meses de la tabla.
+    expect(meses.length).toBeLessThan(Object.keys(INPC_MENSUAL).length);
+    for (const m of meses) {
+      expect(s.inputs.inpc_tramo[m].indice).toBe(INPC_MENSUAL[m].indice);
+      expect(typeof s.inputs.inpc_tramo[m].proyectado).toBe('boolean');
+    }
+  });
+
+  it('el detalle mes a mes NO viaja al resultado (60+ filas por variante)', () => {
+    expect(s.resultado).not.toHaveProperty('lineas');
+    expect(s.resultado.pagoImss).not.toHaveProperty('detalle');
+  });
+
+  it('avisa cuando la línea depende de INPC proyectado', () => {
+    expect(s.avisos.some((a) => a.includes('INPC proyectado'))).toBe(true);
+  });
+});
+
+// ============================================================================
+// 1b. La línea de captura se mueve por DÍA
+// ============================================================================
+
+describe('líneas de captura día a día en el snapshot', () => {
+  it('mover la fecha una semana mueve el pago al IMSS', () => {
+    const a = construirSnapshot(entrada('2026-08-03'))!;
+    const b = construirSnapshot(entrada('2026-08-10'))!;
+    expect(a.resultado.pagoImss.meses).toBe(b.resultado.pagoImss.meses);
+    expect(b.resultado.pagoImss.total).toBeGreaterThan(a.resultado.pagoImss.total);
+  });
+
+  it('la serie INPC que entra es la que se usa y la que se congela', () => {
+    // Una serie inventada, 10 % arriba: si el motor la ignorara, el total no
+    // se movería y este test no se enteraría.
+    const inflada: SerieINPC = Object.fromEntries(
+      Object.entries(INPC_MENSUAL).map(([m, p]) => [m, { indice: p.indice * 1.1, proyectado: true }]),
+    );
+    const normal = construirSnapshot(entrada('2026-08-24'))!;
+    const conSerie = construirSnapshot(entrada('2026-08-24', { serieINPC: inflada }))!;
+    // Escalar TODO el INPC no cambia los cocientes: las actualizaciones quedan
+    // igual. Lo que sí cambia es qué índice quedó guardado.
+    const mes = Object.keys(conSerie.inputs.inpc_tramo)[0];
+    expect(conSerie.inputs.inpc_tramo[mes].indice).toBeCloseTo(
+      normal.inputs.inpc_tramo[mes].indice * 1.1,
+      6,
+    );
+  });
+
+  it('un INPC final más alto sube las actualizaciones', () => {
+    const soloFinal: SerieINPC = Object.fromEntries(
+      Object.entries(INPC_MENSUAL).map(([m, p]) => [
+        m,
+        { indice: m === '2026-08' ? p.indice * 1.2 : p.indice, proyectado: p.proyectado },
+      ]),
+    );
+    const normal = construirSnapshot(entrada('2026-08-24'))!;
+    const alto = construirSnapshot(entrada('2026-08-24', { serieINPC: soloFinal }))!;
+    expect(alto.resultado.pagoImss.actualizaciones).toBeGreaterThan(
+      normal.resultado.pagoImss.actualizaciones,
+    );
+    expect(alto.resultado.pagoImss.cuotaBase).toBeCloseTo(normal.resultado.pagoImss.cuotaBase, 6);
+  });
+
+  it('recalcular usa el INPC CONGELADO, no el de hoy', () => {
+    const soloFinal: SerieINPC = Object.fromEntries(
+      Object.entries(INPC_MENSUAL).map(([m, p]) => [
+        m,
+        { indice: m === '2026-08' ? p.indice * 1.2 : p.indice, proyectado: p.proyectado },
+      ]),
+    );
+    // Se autorizó con una serie distinta de la embebida. Al recalcular sin
+    // pasarle nada, el motor tiene que leerla del propio snapshot.
+    const s = porJsonb(construirSnapshot(entrada('2026-08-24', { serieINPC: soloFinal }))!);
+    const re = recomputarDesdeInputs(s.inputs as InputsSnapshot)!;
+    expect(re.pagoImss.actualizaciones).toBeCloseTo(s.resultado.pagoImss.actualizaciones, 6);
+    expect(re.pagoImss.total).toBeCloseTo(s.resultado.pagoImss.total, 6);
   });
 });
 

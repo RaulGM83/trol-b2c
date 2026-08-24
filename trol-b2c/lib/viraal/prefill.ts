@@ -6,6 +6,7 @@
 // 24-ago-2026: la fecha de trámite dejó de ser "hoy" a fuerza. El asesor la
 // elige y todo se recalcula a esa fecha; la fecha elegida se congela en los
 // `inputs` de la autorización.
+import type { SerieINPC } from '@/lib/imss/inpc';
 import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
 import type { Palancas } from '@/lib/imss/types';
 import type { SemillaV2 } from '@/lib/imss/semilla';
@@ -59,6 +60,12 @@ export interface OpcionesMesaViraal {
   historial?: RegistroHistorialMod40[] | null;
   /** `limite_inscripcion_mod40` del expediente: mejor dato que el cálculo local. */
   limiteInscripcionMod40?: string | null;
+  /**
+   * Serie INPC viva (`trol3.inpc_mensual`), que el servidor baja y pasa hasta
+   * aquí. Sin ella el motor usa el fallback embebido, que puede ir un mes atrás
+   * del INEGI: la línea saldría parecida, pero no sería la del día.
+   */
+  serieINPC?: SerieINPC;
 }
 
 const SALARIO_25_UMA = 2933.75; // tope Mod40
@@ -142,6 +149,7 @@ export function mesaViraalDesdeSemilla(
         historial: opts.historial ?? null,
         fechaTramite,
         limiteInscripcionMod40: opts.limiteInscripcionMod40 ?? null,
+        serieINPC: opts.serieINPC,
         palancas: palancas({ recuperarSemanasDescontadas: recuperar }),
       });
       if (!snapshot) return null;

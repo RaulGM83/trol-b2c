@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { GestionAliado } from '@/components/trol3/GestionAliado';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
@@ -44,6 +45,9 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
   // (línea IMSS = pago al IMSS, no el costo total) a la fecha de trámite que elija el
   // asesor. Fallback: escenario mod40_retro_hoy del pipeline.
   const hoyIso = new Date().toISOString().slice(0, 10);
+  // La serie INPC viaja al navegador: la mesa recalcula la línea de captura en
+  // vivo cada vez que el asesor mueve la fecha de trámite.
+  const serieINPC = await leerSerieINPC(db);
   const historialAliado = (calc?.historial ?? null) as Any[] | null;
   // Aquí NO se pasa `limite_inscripcion_mod40`: la consulta del aliado trae el
   // límite de 5 años de la semilla, y para una baja de Mod 40 el bueno es el de
@@ -155,6 +159,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
                 mod40Aplica={diag.mod40 === 'Sí' || !!semilla.perfil.aplica_mod40}
                 calculoPensional={calc}
                 historialLaboral={historialAliado}
+                serieINPC={serieINPC}
                 saldosCorregidos={corr}
                 guardarScope="consulta_aliado"
               />
@@ -175,6 +180,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
           saldosLiquidos={saldosLiq}
           historialLaboral={historialAliado}
           limiteInscripcionMod40={null}
+          serieINPC={serieINPC}
           hoyIso={hoyIso}
         />
       )}

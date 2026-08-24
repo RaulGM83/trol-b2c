@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
 import { computeLey73 } from "@/lib/imss/ley73"
 import { computeLey97 } from "@/lib/imss/ley97"
+import type { SerieINPC } from "@/lib/imss/inpc"
 import { computeProyectoMod40 } from "@/lib/imss/mod40-proyecto"
 import type { RegistroHistorialMod40 } from "@/lib/imss/mod40-ventana"
 import { AvisosMod40, FechaTramiteInput } from "@/components/trol3/FechaTramite"
@@ -151,6 +152,7 @@ export function CalculadoraClient({
   calculoPensional = null,
   saldosCorregidos = null,
   guardarScope = null,
+  serieINPC,
 }: {
   consultaId: string
   clienteNombre: string
@@ -165,6 +167,11 @@ export function CalculadoraClient({
   historialLaboral?: RegistroHistorialMod40[] | null
   /** `limite_inscripcion_mod40` del expediente: manda sobre el cálculo local. */
   limiteInscripcionMod40?: string | null
+  /**
+   * Serie INPC de `trol3.inpc_mensual`, bajada en el servidor. Este panel
+   * recalcula en el navegador; sin la prop cae al fallback embebido.
+   */
+  serieINPC?: SerieINPC
   /** Resumen del cliente para el tab "Resumen" (consultas). */
   resumen?: ResumenClienteData | null
   /** Semilla cruda; respalda los campos que falten en el resumen. */
@@ -274,6 +281,7 @@ export function CalculadoraClient({
               guardarScope={guardarScope}
               historialLaboral={historialLaboral}
               limiteInscripcionMod40={limiteInscripcionMod40}
+              serieINPC={serieINPC}
               pdfCtx={pdfCtx}
             />
           </TabsContent>
@@ -1002,6 +1010,7 @@ function Mod40Panel({
   guardarScope = null,
   historialLaboral = null,
   limiteInscripcionMod40 = null,
+  serieINPC,
   pdfCtx,
 }: {
   semilla: SemillaV2
@@ -1010,6 +1019,7 @@ function Mod40Panel({
   guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
   historialLaboral?: RegistroHistorialMod40[] | null
   limiteInscripcionMod40?: string | null
+  serieINPC?: SerieINPC
   pdfCtx: PdfCtx
 }) {
   const { perfil, saldos, salario_60m } = semilla
@@ -1083,6 +1093,7 @@ function Mod40Panel({
         fechaTramite,
         historial: historialLaboral,
         limiteInscripcionMod40,
+        serieINPC,
         palancas: {
           ...PALANCAS_DEFAULT,
           edadRetiro: edadRetiroEfectiva,
@@ -1102,6 +1113,7 @@ function Mod40Panel({
       fechaTramite,
       historialLaboral,
       limiteInscripcionMod40,
+      serieINPC,
     ],
   )
 

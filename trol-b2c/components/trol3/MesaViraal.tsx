@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
 import { AvisosMod40, FechaTramiteInput } from '@/components/trol3/FechaTramite';
+import type { SerieINPC } from '@/lib/imss/inpc';
 import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
 import type { SemillaV2 } from '@/lib/imss/semilla';
 import { mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
@@ -40,6 +41,7 @@ export function MesaViraal({
   saldosLiquidos = null,
   historialLaboral = null,
   limiteInscripcionMod40 = null,
+  serieINPC,
   hoyIso,
 }: {
   personaId?: string;
@@ -54,6 +56,12 @@ export function MesaViraal({
   historialLaboral?: RegistroHistorialMod40[] | null;
   /** `limite_inscripcion_mod40` del expediente: manda sobre el cálculo local. */
   limiteInscripcionMod40?: string | null;
+  /**
+   * Serie INPC de `trol3.inpc_mensual`, bajada en el servidor. La mesa recalcula
+   * en el navegador, así que la serie tiene que viajar con ella; sin la prop, el
+   * motor cae al fallback embebido de pension-core.
+   */
+  serieINPC?: SerieINPC;
   /** Hoy según el servidor, para que el default no dependa del reloj del navegador. */
   hoyIso: string;
 }) {
@@ -74,8 +82,9 @@ export function MesaViraal({
     return mesaViraalDesdeSemilla(semilla, saldosLiquidos, f, {
       historial: historialLaboral,
       limiteInscripcionMod40,
+      serieINPC,
     });
-  }, [semilla, saldosLiquidos, fechaTramite, hoyIso, historialLaboral, limiteInscripcionMod40]);
+  }, [semilla, saldosLiquidos, fechaTramite, hoyIso, historialLaboral, limiteInscripcionMod40, serieINPC]);
 
   const variante = datos ? (recuperar && datos.con ? datos.con : datos.sin) : null;
   const prefillActivo: Prefill = variante ? { ...prefill, ...variante.prefill } : prefill;

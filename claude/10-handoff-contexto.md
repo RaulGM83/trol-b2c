@@ -1,6 +1,6 @@
 # Trol 3.0 — Contexto para continuar en un chat nuevo
 
-Punto de entrada único. Actualizado **24-ago-2026**. Los detalles de cada tema viven en los docs `claude/11` … `claude/20`; aquí está el mapa.
+Punto de entrada único. Actualizado **24-ago-2026** (noche). Los detalles de cada tema viven en los docs `claude/11` … `claude/20`; aquí está el mapa.
 
 ---
 
@@ -109,6 +109,39 @@ Cierra el pendiente que dejó la mañana. La fecha de trámite libre creó un pr
 - **trol-b2c estrena runner de pruebas** (vitest + `vitest.config.ts` con el alias `@`): antes solo `pension-core` tenía tests. 17 nuevos, incluido el round-trip.
 - El PDF de Viraal imprime el id del escenario y la versión del motor.
 
+### Sesión 24-ago (noche) — Líneas de captura Mod 40 con precisión diaria
+
+Spec en `claude/21-lineas-captura-dia-a-dia-spec.md`. El motor cobraba **meses completos**: mover la fecha de trámite una semana no cambiaba un peso de la línea de captura. El IMSS cuenta días. La referencia es el Excel `Calculadora_lineas_IMSS.xlsx`, validado contra líneas reales del IMSS.
+
+- **`pension-core/src/mod40-lineas.ts`** (nuevo): `lineasCapturaMod40({ultimaCotizacion, fechaTramite, umas, sdi?, sdiPorMes?, serieINPC?, mesesMax?})`. Va del mes de la baja al mes del trámite, **ambos inclusive**, prorrateando los dos extremos por días. Devuelve `{meses, sdi, retro, actualizaciones, recargos, total, detalle[], avisos, usaInpcProyectado}`. Reproduce **los 6 goldens del Excel al centavo**.
+- **`pension-core/src/inpc.ts`** (nuevo): fallback embebido de `trol3.inpc_mensual` (252 meses, 2015-01 → 2035-12, INEGI observado hasta 2026-03) \+ `serieINPCDesdeFilas` / `inpcDe` / `SerieINPC`. **No sustituye a `tablas.INPC`**, que es la serie vieja del Excel de junio y sigue alimentando el resto de la Ley 73; la nueva es la única que cuadra con las líneas reales.
+- **Una sola implementación para las dos pestañas.** `computeProyectoMod40` **y** el bloque retro de `computeLey73` llaman a la misma función. Antes cada uno calculaba lo suyo y coincidían por construcción; con el prorrateo habrían divergido ~7 % en pantallas contiguas. Hay un test que lo ancla (`la Ley 73 y el proyecto Mod 40 cobran EXACTAMENTE la misma línea`).
+- **`lib/imss` NO forkeó esta pieza**: `lib/imss/mod40-lineas.ts` y `lib/imss/inpc.ts` son `export * from '@trol/pension-core/…'`. El fork conserva sus divergencias de negocio (ajuste de semanas, disponible AFORE, redondeos), pero la aritmética del IMSS vive en un solo lugar.
+- **La serie INPC baja del servidor**: `lib/trol3/inpc.ts` → `leerSerieINPC(db)` en `/trabajo/p/[id]` y `/trabajo/aliados/[id]`, y viaja como prop a `MesaViraal` y `CalculadoraClient` (las dos recalculan en el navegador). Si falla, `undefined` y el motor usa el fallback embebido.
+- **Snapshot auto-contenido**: `inputs.inpc_tramo` congela el INPC **de los meses del tramo** (no la serie entera), y `recomputarDesdeInputs` lo usa en vez de la tabla de hoy. `resultado` **no** lleva `lineas` (60+ filas por variante).
+- **`ENGINE_VERSION` → `2026.08.24.2`**. Los snapshots ya autorizados quedan como están.
+- **Pendiente del spec anterior cerrado**: "UMA por año del tramo" **no se toca** — el Excel validado ancla la UMA al año de la última cotización, igual que el motor. Confirmado por Raúl.
+
+**Cuánto se movió** (delta del motor viejo contra el golden, caso base del Excel):
+
+| caso | motor viejo | golden/nuevo | Δ |
+|---|---|---|---|
+| base (3-jul) | 762,866.04 (60 m) | 779,027.15 (62 m) | −2.1 % |
+| +1 semana (10-jul) | 762,866.04 | 781,291.84 | −2.4 % |
+| fin de mes (31-jul) | 762,866.04 | 788,085.94 | −3.2 % |
+| cruza mes (1-ago) | 766,711.20 | 799,269.11 | −4.1 % |
+| baja fin de mes | 635,521.87 | 615,096.53 | **+3.3 %** (cobraba de más) |
+
+Las tres primeras filas son el bug entero: **el mismo número toda la quincena**. Del delta del caso base, ~$7,592 vienen de la serie INPC nueva y el resto del tope de 60 meses y el prorrateo.
+
+**Goldens v2** (versionados en el sitio, con el valor viejo escrito en el comentario): Mod40 MOJA (544,420.72 → 436,033.05), Mod40 CAFE (349,795.10 → 327,044.31), Ley 73 MOJA retro (450,844.34 → 436,033.05) y Ley 73 CAFE retro (349,795.10 → 327,044.31). **Ninguna pensión se movió.** 188 tests en pension-core (147 antes), 24 en trol-b2c (17 antes). Probado contra dos expedientes reales de producción: la línea se mueve por día y salta al cruzar de mes.
+
+**Tres cosas que hay que decidir** (ver "Pendientes" 4):
+
+1. **El tope de 5 años del art. 219 dejó de aplicarse al costo.** El Excel validado cobra 62 y 63 meses; el motor viejo cortaba en 60. Se siguió al Excel y el corte quedó como **aviso**, no como tope. Si las líneas reales sí se topan, hay que devolver `mesesMax: 60`.
+2. **El hueco entre trámite y retiro ya no se cobra.** Antes la serie llegaba al mes de RETIRO, así que a un cliente de 55 se le cobraban también los meses hasta los 60. Ahora la línea llega al mes del TRÁMITE, pero las semanas de ese hueco **siguen contando para la pensión**. El motor lo avisa explícitamente; modelarlo como cotización prospectiva es el pendiente que ya estaba abierto.
+3. **`tablas.INPC` está desactualizada**: difiere de `trol3.inpc_mensual` desde 2024-05 (2025-01: 138.343 vs 139.679). Sigue alimentando las actualizaciones de `computeLey73` fuera del retro. Cambiarla movería goldens de pensión y se dejó fuera de esta sesión.
+
 ### Migraciones aplicadas (vivas)
 
 > **Ojo con la numeración:** los números **056–061 están duplicados**. Se aplicaron dos juegos en paralelo desde chats distintos: el de Infonavit (19-ago) y el de ISSSTE (20-ago). Además la 065 se aplicó *antes* que las 056/057 de ISSSTE. Guiarse por `supabase_migrations.schema_migrations`, no por el número.
@@ -158,12 +191,19 @@ UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espe
    - Barrido automático de fechas óptimas (v2).
    - **Aplicar la migración de escenarios**: `20260824180000_escenarios_snapshot_autorizacion.sql` está escrita y verificada contra la base real dentro de una transacción con `rollback` (19 asserts), pero **no aplicada**. Hasta que se aplique, autorizar desde la mesa devuelve el error de la RPC inexistente.
    - **Nadie lee todavía `trol3.escenarios`**: se escribe y el PDF imprime el id, pero no hay pantalla que liste los escenarios de un expediente ni que compare un snapshot contra el motor de hoy (`recomputarDesdeInputs` ya existe para eso).
-4. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
-5. **Agenda propia sobre Google Calendar** (opción 2).  
-6. **Estado de cuenta AFORE parseable**.  
-7. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
-8. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
-9. Decomisión final de HubSpot y apagar el dual-write a `public`. Son **cuatro** los workflows que cierran contra trol3 y hay que migrar juntos: `Datosbelvo`, `HistoriaBelvo`, `jordan_webhook` y `cliente-refrescar-sisec`.
+4. **Líneas de captura día a día — lo que quedó abierto** (`claude/21`):
+   - **Confirmar el tope del art. 219**: hoy la línea cobra el excedente de los 5 años (como el Excel) y sólo avisa. Si el IMSS lo topa, es `mesesMax: 60` en `computeProyectoMod40`.
+   - **El hueco trámite → retiro**: las semanas cuentan para la pensión pero no están cobradas. Es el mismo pendiente de "Mod 40 vigente / prospectiva pura".
+   - **`tablas.INPC` vs `trol3.inpc_mensual`**: dos series distintas en el mismo repo. Migrar `computeLey73` a la nueva movería goldens de pensión.
+   - **`trol3.inpc_mensual` hay que actualizarla cada mes** con lo que publique INEGI (upsert). Sin eso, todo el tramo reciente sale `proyectado: true` y el motor avisa. El fallback embebido de `pension-core/src/inpc.ts` es del corte 2026-08-24 y se regenera aparte.
+   - **`authenticated` tiene grants de INSERT/UPDATE/DELETE sobre `trol3.inpc_mensual`** (sin políticas, así que RLS los bloquea). Vale la pena revocarlos y dejar sólo SELECT.
+   - **El desglose mes a mes no se enseña en ninguna pantalla**: `resultado.lineas.detalle` ya lo trae (día, prorrateo, cuota, INPC, las tres piezas), sólo falta la tabla.
+5. **Ciclo unificado de oportunidades / embudos** (`claude/12`).  
+6. **Agenda propia sobre Google Calendar** (opción 2).  
+7. **Estado de cuenta AFORE parseable**.  
+8. **Trámites** — fuera de alcance; tarea de Raúl definir el modelo.  
+9. `/trabajo/sin-acceso`: mejorar el mensaje cuando entra alguien con sesión de cliente.  
+10. Decomisión final de HubSpot y apagar el dual-write a `public`. Son **cuatro** los workflows que cierran contra trol3 y hay que migrar juntos: `Datosbelvo`, `HistoriaBelvo`, `jordan_webhook` y `cliente-refrescar-sisec`.
 
 ---
 
@@ -197,6 +237,8 @@ UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espe
 - **`digest()` de pgcrypto vive en el esquema `extensions`.** Una función con `search_path = trol3, public` truena al usarlo con `42883: function digest(...) does not exist`. Y truena **aunque la rama del `CASE` no se tome**: Postgres resuelve la referencia al *planear*, no al ejecutar, así que `case when p_ip is null then null else encode(digest(...)) end` falla incluso con `p_ip` nulo. Fue exactamente lo que dejó a `registrar_clic` sin insertar nada (arreglado en la **078**: `search_path` con `extensions` y `extensions.digest(...)` calificado).  
 - **`exception when others then return` convierte el fallo en silencio absoluto.** Es lo que hizo que el bug anterior tardara en verse: la ruta redirigía bien, la RPC devolvía sin error y la tabla se quedaba vacía. Si una función es best-effort, que al menos deje `raise warning` antes de tragarse la excepción. Con este patrón viven hoy `registrar_clic`, `tg_puntos_referidor` y `tg_public_procesos`.  
 - **`pedir_consulta` dispara de verdad.** `tg_consulta_despachar` hace el POST al proveedor en el mismo INSERT: llamarla "para probar" cuesta dinero y manda una consulta real.  
+- **Hay DOS series INPC en el repo y no son la misma.** `tablas.INPC` (Excel de junio, arranca en 2021-12) alimenta las actualizaciones de `computeLey73`; `inpc.ts` (espejo de `trol3.inpc_mensual`, arranca en 2015-01) alimenta la línea de captura. Difieren desde 2024-05. Antes de "arreglar" una comprobar cuál usa el número que estás mirando.
+- **`lineasCapturaMod40` es la ÚNICA aritmética del IMSS que no está forkeada.** `trol-b2c/lib/imss/mod40-lineas.ts` es un `export *` de pension-core a propósito. Si alguien la copia para "ajustar un detalle", las dos pestañas de la calculadora vuelven a cobrar distinto.
 - Los datos de catálogo **no los atrapa ningún test**: un flag mal sembrado solo se ve simulando.
 - **`historial[].salario_base` llega como STRING en unas semillas y como NUMBER en otras** (`"2828.5"` vs `1500`). Una comparación `typeof x === 'number'` deja el campo en null sin fallar: fue exactamente lo que mató el aviso del art. 65 hasta que se corrió contra un expediente real. Todo lo que lea el historial crudo tiene que coercionar.
 - **El `limite_inscripcion_mod40` de la SEMILLA son 5 años; el del EXPEDIENTE son 12 meses.** trol3 lo corrige en `trol3.datos`, así que quien tenga expediente debe leerlo de `v_mejor_dato` — pasar el de la semilla como "mejor dato" pisa la regla correcta con la vieja. En las consultas de aliados no hay expediente: ahí manda el cálculo local sobre el historial y **no** se pasa límite.

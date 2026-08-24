@@ -13,14 +13,24 @@
 // camino, que es donde se colarían las diferencias.
 // ============================================================================
 
+import type { SerieINPC } from '@/lib/imss/inpc';
 import { computeProyectoMod40 } from '@/lib/imss/mod40-proyecto';
 import type { RegistroHistorialMod40, VentanaMod40 } from '@/lib/imss/mod40-ventana';
 import { MOTOR_ID, MOTOR_VERSION } from '@/lib/imss/version';
 import type { SemillaV2 } from '@/lib/imss/semilla';
 import type { Palancas, ProyectoMod40 } from '@/lib/imss/types';
 
-/** Los diez bloques numéricos de `computeProyectoMod40`, sin fecha ni ventana. */
-export type ResultadoSnapshot = Omit<ProyectoMod40, 'fechaTramite' | 'ventana' | 'avisos'>;
+/**
+ * Los diez bloques numéricos de `computeProyectoMod40`, sin fecha ni ventana.
+ *
+ * `lineas` también se queda fuera: son 60+ filas por variante y lo único que de
+ * verdad hace falta para reconstruir el cálculo —la serie INPC del tramo— se
+ * congela aparte, en `inputs.inpc_tramo`.
+ */
+export type ResultadoSnapshot = Omit<
+  ProyectoMod40,
+  'fechaTramite' | 'ventana' | 'avisos' | 'lineas'
+>;
 
 /**
  * Ventana con las fechas ya en ISO, que es como sobreviven a `jsonb`.
@@ -55,6 +65,15 @@ export interface InputsSnapshot {
   palancas: Palancas;
   umas_proyecto: number | null;
   semanas_extra: number | null;
+  /**
+   * La serie INPC de los meses del tramo, tal como se usó.
+   *
+   * Sin esto el snapshot no sería auto-contenido: el INPC cambia cada mes
+   * (INEGI publica y los proyectados se vuelven observados), así que recalcular
+   * mañana con la tabla de mañana daría otro número aunque el motor no se haya
+   * movido. Se guarda sólo el tramo, no la serie entera.
+   */
+  inpc_tramo: Record<string, { indice: number; proyectado: boolean }>;
 }
 
 export interface SnapshotEscenario {
@@ -67,6 +86,8 @@ export interface SnapshotEscenario {
 
 export interface EntradaSnapshot {
   semilla: SemillaV2;
+  /** Serie INPC viva (de `trol3.inpc_mensual`). Sin ella, el fallback embebido. */
+  serieINPC?: SerieINPC;
   historial?: RegistroHistorialMod40[] | null;
   fechaTramite: Date;
   limiteInscripcionMod40?: string | null;
@@ -116,10 +137,16 @@ export function construirSnapshot(e: EntradaSnapshot): SnapshotEscenario | null 
     historial,
     limiteInscripcionMod40: e.limiteInscripcionMod40 ?? null,
     palancas: e.palancas,
+    serieINPC: e.serieINPC,
     ...(e.umasProyecto !== undefined ? { umasProyecto: e.umasProyecto } : {}),
     ...(e.semanasExtra !== undefined ? { semanasExtra: e.semanasExtra } : {}),
   });
   if (!proy) return null;
+
+  // Del tramo que de verdad se cobró, no de la serie completa.
+  const inpcTramo = Object.fromEntries(
+    proy.lineas.detalle.map((d) => [d.mes, { indice: d.inpc, proyectado: d.inpcProyectado }]),
+  );
 
   return {
     inputs: {
@@ -132,6 +159,7 @@ export function construirSnapshot(e: EntradaSnapshot): SnapshotEscenario | null 
       palancas: e.palancas,
       umas_proyecto: e.umasProyecto ?? null,
       semanas_extra: e.semanasExtra ?? null,
+      inpc_tramo: inpcTramo,
     },
     resultado: bloquesNumericos(proy),
     ventana: serializarVentana(proy.ventana, proy.avisos),
@@ -155,6 +183,11 @@ export function recomputarDesdeInputs(inputs: InputsSnapshot): ResultadoSnapshot
     historial: inputs.historial,
     limiteInscripcionMod40: inputs.limite_inscripcion_mod40,
     palancas: inputs.palancas,
+    // El INPC congelado manda: recalcular con la tabla de hoy compararía dos
+    // cosas distintas y todo snapshot viejo saldría "movido" sin serlo.
+    // Los snapshots anteriores a la 2026.08.24.2 no lo traen: ahí sí se cae al
+    // fallback embebido, y de eso avisa `snapshotEsDelMotorActual`.
+    serieINPC: inputs.inpc_tramo ?? undefined,
     ...(inputs.umas_proyecto !== null ? { umasProyecto: inputs.umas_proyecto } : {}),
     ...(inputs.semanas_extra !== null ? { semanasExtra: inputs.semanas_extra } : {}),
   });
