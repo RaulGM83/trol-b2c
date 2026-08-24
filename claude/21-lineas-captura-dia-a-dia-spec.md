@@ -121,3 +121,43 @@ impresas) merece re-verificación.
 - No commitear ni pushear; dejar el commit armado (motor+tests separado de UI si el diff lo
   permite). Push lo hace Raúl.
 - Al terminar, reportar discrepancias entre este spec y el repo sin resolverlas en silencio.
+
+---
+
+## Adenda — 24-ago-2026 (noche): el tope de 60 meses SÍ aplica
+
+Decisión de Raúl sobre la discrepancia #1 que dejó abierta la implementación: se
+restaura el comportamiento del repo. El art. 219 topa el costo a 5 años.
+
+- `lineasCapturaMod40` gana `mesesMax` con **default `MESES_MAX_ART219` = 60**.
+  `null` desactiva el tope y es lo único que usan los goldens de arriba, que
+  reproducen el Excel (62 y 63 meses) para anclar la mecánica diaria.
+- Al truncar se conservan los meses **más recientes**; los viejos caen. El
+  prorrateo del mes de la baja sólo aplica **si ese mes sobrevive al corte**: si
+  el tope cortó antes, el último mes cobrado va completo.
+- Aviso: *"Solo se cubren los últimos 60 meses; N meses anteriores quedan fuera."*
+  Lo emite `lineasCapturaMod40` y sube por `lineas.avisos`; `computeProyectoMod40`
+  ya no lo duplica.
+- El resultado gana `mesesDelPeriodo`, `mesesFueraDelTope` y `topado`.
+- Mismo tope en el retro de `computeLey73` (por el default, sin pasar nada). El
+  test que ancla que las dos pestañas cobren lo mismo sigue vivo y se extendió
+  a un caso donde el tope muerde.
+- `ENGINE_VERSION` → **2026.08.24.3**.
+
+### Goldens con tope (nuevos)
+
+| caso | periodo | cobra | retro | actualiz. | recargos | TOTAL |
+|---|---|---|---|---|---|---|
+| base_excel topado | 62 | 60 | 477,570.64 | 53,462.60 | 226,978.10 | 758,011.34 |
+| cruza_mes topado | 63 | 60 | 479,951.84 | 53,131.70 | 227,808.61 | 760,892.16 |
+
+`baja_fin_de_mes` (45 meses) y cualquier tramo ≤ 60 dan **el mismo número con y
+sin tope**, con test que lo comprueba. También hay casos de 60 justos (no topa,
+el mes de la baja sí se prorratea) y de 61 (cae uno, aviso en singular).
+
+### Los 4 goldens de proyección que se movieron
+
+**No regresan a un valor intermedio: no cambian.** Los cuatro tienen periodos de
+34 y 26 meses, así que el tope no muerde ni antes ni ahora — lo que los movió fue
+el cambio de ancla (mes de retiro → mes de trámite) y el prorrateo diario, no el
+tope. Queda anotado en el comentario de cada uno.

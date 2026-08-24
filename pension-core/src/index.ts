@@ -6,7 +6,13 @@ export { computeLey97, conservaValorSSV } from './ley97';
 export { computeTransicion } from './transicion';
 export type { ResultadoTransicion } from './transicion';
 export { computeProyectoMod40 } from './mod40-proyecto';
-export { lineasCapturaMod40, mesesDelTramo, CUOTA_MOD40_POR_ANIO, TASA_RECARGOS_MENSUAL } from './mod40-lineas';
+export {
+  lineasCapturaMod40,
+  mesesDelTramo,
+  CUOTA_MOD40_POR_ANIO,
+  TASA_RECARGOS_MENSUAL,
+  MESES_MAX_ART219,
+} from './mod40-lineas';
 export type { EntradaLineasCaptura, LineasCapturaMod40, MesLineaCaptura } from './mod40-lineas';
 export {
   INPC_MENSUAL,

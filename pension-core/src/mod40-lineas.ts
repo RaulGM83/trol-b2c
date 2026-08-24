@@ -10,6 +10,10 @@
 // contra líneas de captura REALES del IMSS. Esta función la reproduce al
 // centavo — ver los seis goldens de `__tests__/mod40-lineas.test.ts`.
 //
+// El tramo se topa a 5 años (art. 219 LSS) conservando los meses más recientes.
+// El Excel de referencia no topa: los goldens que lo reproducen corren con
+// `mesesMax: null`, y el default del motor es 60 (decisión de Raúl, 24-ago).
+//
 // Las tres piezas del cobro:
 //   · retro          — la cuota Mod 40 del periodo, prorrateada por días.
 //   · actualizaciones — art. 17-A CFF: INPC del mes de trámite / INPC del mes.
@@ -41,6 +45,16 @@ export const CUOTA_MOD40_POR_ANIO: Array<[anio: number, cuota: number]> = [
 /** Recargos por mora: 1.47 % mensual (CFF), constante en el motor. */
 export const TASA_RECARGOS_MENSUAL = 0.0147;
 
+/**
+ * Tope del retroactivo: 5 años (art. 219 LSS). Es el DEFAULT de `mesesMax`.
+ *
+ * El Excel de referencia no topa —sus casos cobran 62 y 63 meses— y por eso los
+ * goldens que validan la mecánica diaria corren con `mesesMax: null`. Pero lo
+ * que el IMSS deja cubrir son 5 años (decisión de Raúl, 24-ago-2026), así que
+ * el motor topa por defecto y avisa de lo que se quedó fuera.
+ */
+export const MESES_MAX_ART219 = 60;
+
 export interface EntradaLineasCaptura {
   /** Última cotización, con DÍA exacto: de aquí arranca el periodo a cubrir. */
   ultimaCotizacion: Date;
@@ -63,10 +77,14 @@ export interface EntradaLineasCaptura {
   /** Serie INPC. Default: el fallback embebido de `inpc.ts`. */
   serieINPC?: SerieINPC;
   /**
-   * Tope de meses a cobrar (art. 219 LSS: 5 años). Sin valor NO se topa, que es
-   * lo que hace el Excel validado: sus goldens traen 62 y 63 meses.
+   * Tope de meses a cobrar. Default `MESES_MAX_ART219` (60 = 5 años).
+   * `null` desactiva el tope: sólo lo usan los goldens que reproducen el Excel
+   * de referencia, que cobra 62 y 63 meses.
+   *
+   * Al truncar se conservan los meses MÁS RECIENTES: el retro se paga hacia
+   * atrás desde el trámite, así que lo que se cae es la cola vieja.
    */
-  mesesMax?: number;
+  mesesMax?: number | null;
 }
 
 export interface MesLineaCaptura {
@@ -90,8 +108,14 @@ export interface MesLineaCaptura {
 }
 
 export interface LineasCapturaMod40 {
-  /** Meses del tramo (inclusivo en los dos extremos). */
+  /** Meses que se están cobrando (ya topados). */
   meses: number;
+  /** Meses que van del mes de la baja al del trámite, antes del tope. */
+  mesesDelPeriodo: number;
+  /** Meses viejos que el tope dejó fuera (`mesesDelPeriodo − meses`). */
+  mesesFueraDelTope: number;
+  /** El tope recortó el tramo. */
+  topado: boolean;
   /** SDI base del tramo. Con `sdiPorMes` cada mes trae el suyo en `detalle`. */
   sdi: number;
   /** Primer día del mes de la última cotización (c10 del Excel). */
@@ -132,6 +156,11 @@ function mesesInclusive(desde: Date, hasta: Date): number {
  *
  * Una baja el último día del mes deja prorrateo 0 en ese mes: no queda ningún
  * día por cubrir y no se cobra. Es un caso real, no un borde a evitar.
+ *
+ * El tramo se topa a `mesesMax` (60 por defecto, art. 219) conservando los
+ * meses MÁS RECIENTES. Cuando el tope muerde, el último mes cobrado ya no es el
+ * de la baja, así que no se prorratea, y sale un aviso con cuántos meses
+ * quedaron fuera.
  */
 export function lineasCapturaMod40(e: EntradaLineasCaptura): LineasCapturaMod40 {
   const serie = e.serieINPC ?? INPC_MENSUAL;
@@ -142,7 +171,11 @@ export function lineasCapturaMod40(e: EntradaLineasCaptura): LineasCapturaMod40 
   const sdi = e.sdi ?? porAnio(UMA, ultimaCot.getUTCFullYear()) * e.umas;
 
   const nTotal = mesesInclusive(desde, hasta);
-  const n = e.mesesMax != null ? Math.min(nTotal, Math.max(0, e.mesesMax)) : nTotal;
+  // `undefined` → tope del art. 219; `null` → sin tope (sólo los goldens del
+  // Excel). Ojo con el `??`: un `mesesMax: 0` explícito tiene que respetarse.
+  const tope = e.mesesMax === undefined ? MESES_MAX_ART219 : e.mesesMax;
+  const n = tope === null ? nTotal : Math.min(nTotal, Math.max(0, tope));
+  const fueraDelTope = nTotal - n;
 
   const avisos: string[] = [];
   const lecturaFin = inpcDe(serie, hasta);
@@ -159,9 +192,9 @@ export function lineasCapturaMod40(e: EntradaLineasCaptura): LineasCapturaMod40 
 
   for (let i = 1; i <= n; i++) {
     const dias = diasDelMes(g);
-    // Prorrateo de los extremos. `i === n` sólo prorratea si de verdad llegamos
-    // al mes de la baja: con `mesesMax` la serie se corta antes y ese mes va
-    // completo.
+    // Prorrateo de los extremos. El del mes de la baja se compara contra
+    // `nTotal`, no contra `n`: si el tope cortó antes, el último mes que se
+    // cobra NO es el de la baja y va completo.
     const esMesDeLaBaja = i === nTotal;
     const prorrateo =
       i === 1
@@ -210,14 +243,17 @@ export function lineasCapturaMod40(e: EntradaLineasCaptura): LineasCapturaMod40 
       'Faltan meses de INPC en la serie y se extendió la proyección: revisa que la tabla esté al día.',
     );
   }
-  if (e.mesesMax != null && nTotal > n) {
+  if (fueraDelTope > 0) {
     avisos.push(
-      `El periodo desde tu baja son ${nTotal} meses y sólo se están cobrando ${n}.`,
+      `Solo se cubren los últimos ${n} meses; ${fueraDelTope} ${fueraDelTope === 1 ? 'mes anterior queda' : 'meses anteriores quedan'} fuera.`,
     );
   }
 
   return {
     meses: n,
+    mesesDelPeriodo: nTotal,
+    mesesFueraDelTope: fueraDelTope,
+    topado: fueraDelTope > 0,
     sdi,
     desde,
     hasta,

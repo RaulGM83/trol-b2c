@@ -1,6 +1,6 @@
 # Trol 3.0 — Contexto para continuar en un chat nuevo
 
-Punto de entrada único. Actualizado **24-ago-2026** (noche). Los detalles de cada tema viven en los docs `claude/11` … `claude/20`; aquí está el mapa.
+Punto de entrada único. Actualizado **24-ago-2026** (noche, 2ª pasada). Los detalles de cada tema viven en los docs `claude/11` … `claude/20`; aquí está el mapa.
 
 ---
 
@@ -119,7 +119,7 @@ Spec en `claude/21-lineas-captura-dia-a-dia-spec.md`. El motor cobraba **meses c
 - **`lib/imss` NO forkeó esta pieza**: `lib/imss/mod40-lineas.ts` y `lib/imss/inpc.ts` son `export * from '@trol/pension-core/…'`. El fork conserva sus divergencias de negocio (ajuste de semanas, disponible AFORE, redondeos), pero la aritmética del IMSS vive en un solo lugar.
 - **La serie INPC baja del servidor**: `lib/trol3/inpc.ts` → `leerSerieINPC(db)` en `/trabajo/p/[id]` y `/trabajo/aliados/[id]`, y viaja como prop a `MesaViraal` y `CalculadoraClient` (las dos recalculan en el navegador). Si falla, `undefined` y el motor usa el fallback embebido.
 - **Snapshot auto-contenido**: `inputs.inpc_tramo` congela el INPC **de los meses del tramo** (no la serie entera), y `recomputarDesdeInputs` lo usa en vez de la tabla de hoy. `resultado` **no** lleva `lineas` (60+ filas por variante).
-- **`ENGINE_VERSION` → `2026.08.24.2`**. Los snapshots ya autorizados quedan como están.
+- **`ENGINE_VERSION` → `2026.08.24.3`**. Los snapshots ya autorizados quedan como están.
 - **Pendiente del spec anterior cerrado**: "UMA por año del tramo" **no se toca** — el Excel validado ancla la UMA al año de la última cotización, igual que el motor. Confirmado por Raúl.
 
 **Cuánto se movió** (delta del motor viejo contra el golden, caso base del Excel):
@@ -134,13 +134,33 @@ Spec en `claude/21-lineas-captura-dia-a-dia-spec.md`. El motor cobraba **meses c
 
 Las tres primeras filas son el bug entero: **el mismo número toda la quincena**. Del delta del caso base, ~$7,592 vienen de la serie INPC nueva y el resto del tope de 60 meses y el prorrateo.
 
+> **La columna "golden/nuevo" es SIN tope** (es lo que hace el Excel de referencia). Con el tope restaurado —ver el cierre de la discrepancia #1, más abajo— el caso base cobra 60 meses y da **758,011.34**, no 779,027.15. Los goldens del Excel se quedan sin tope a propósito: validan la mecánica diaria, no la regla de negocio.
+
 **Goldens v2** (versionados en el sitio, con el valor viejo escrito en el comentario): Mod40 MOJA (544,420.72 → 436,033.05), Mod40 CAFE (349,795.10 → 327,044.31), Ley 73 MOJA retro (450,844.34 → 436,033.05) y Ley 73 CAFE retro (349,795.10 → 327,044.31). **Ninguna pensión se movió.** 188 tests en pension-core (147 antes), 24 en trol-b2c (17 antes). Probado contra dos expedientes reales de producción: la línea se mueve por día y salta al cruzar de mes.
 
-**Tres cosas que hay que decidir** (ver "Pendientes" 4):
+**Tres cosas que había que decidir** (la #1 se resolvió la misma noche; ver "Pendientes" 4):
 
-1. **El tope de 5 años del art. 219 dejó de aplicarse al costo.** El Excel validado cobra 62 y 63 meses; el motor viejo cortaba en 60. Se siguió al Excel y el corte quedó como **aviso**, no como tope. Si las líneas reales sí se topan, hay que devolver `mesesMax: 60`.
+1. ~~El tope de 5 años del art. 219 dejó de aplicarse al costo.~~ **RESUELTO la misma noche: Raúl decidió que el tope SÍ aplica.** Ver el bloque de abajo.
 2. **El hueco entre trámite y retiro ya no se cobra.** Antes la serie llegaba al mes de RETIRO, así que a un cliente de 55 se le cobraban también los meses hasta los 60. Ahora la línea llega al mes del TRÁMITE, pero las semanas de ese hueco **siguen contando para la pensión**. El motor lo avisa explícitamente; modelarlo como cotización prospectiva es el pendiente que ya estaba abierto.
 3. **`tablas.INPC` está desactualizada**: difiere de `trol3.inpc_mensual` desde 2024-05 (2025-01: 138.343 vs 139.679). Sigue alimentando las actualizaciones de `computeLey73` fuera del retro. Cambiarla movería goldens de pensión y se dejó fuera de esta sesión.
+
+#### Cierre de la discrepancia #1 — el tope de 60 meses SÍ aplica
+
+Decisión de Raúl la misma noche. Se restaura el comportamiento del repo y se
+deja explícito en vez de implícito.
+
+- `lineasCapturaMod40` gana `mesesMax`, **default `MESES_MAX_ART219` = 60**. `null` lo desactiva y sólo lo usan los goldens que reproducen el Excel (62 y 63 meses): la mecánica diaria se valida aparte de la regla de negocio.
+- **Se conservan los meses más recientes**; cae la cola vieja. El prorrateo del mes de la baja sólo aplica **si ese mes sobrevive al corte** — si el tope cortó antes, el último mes cobrado va completo (se compara contra `mesesDelPeriodo`, no contra los meses cobrados).
+- Aviso: *"Solo se cubren los últimos 60 meses; N meses anteriores quedan fuera."* Lo emite `lineasCapturaMod40`; `computeProyectoMod40` ya no lo duplica.
+- El resultado gana `mesesDelPeriodo`, `mesesFueraDelTope` y `topado`.
+- Mismo tope en el retro de `computeLey73` (por el default). El test que ancla que las dos pestañas cobren lo mismo se extendió a un caso donde el tope muerde.
+- `ENGINE_VERSION` → **2026.08.24.3**.
+
+**Goldens con tope** (nuevos): `base_excel` 62→60 meses = 758,011.34 · `cruza_mes` 63→60 = 760,892.16. `baja_fin_de_mes` (45 meses) y cualquier tramo ≤60 dan el mismo número con y sin tope, con test. Hay casos de 60 justos (no topa; el mes de la baja sí se prorratea) y de 61 (cae uno, aviso en singular).
+
+**Los 4 goldens de proyección que se movieron NO regresan a un valor intermedio: no cambian.** Sus periodos son de 34 y 26 meses, así que el tope no muerde ni antes ni ahora — lo que los movió fue el cambio de ancla y el prorrateo, no el tope. Anotado en el comentario de cada golden. 205 tests en pension-core, 26 en trol-b2c.
+
+**Ojo con los expedientes reales**: de los dos que se probaron, uno va en **57 meses** de periodo (baja 20-dic-2021). Cruza los 60 en ~3 meses y ahí empezará a salir el aviso y a recortarse la línea. No es hipotético.
 
 ### Migraciones aplicadas (vivas)
 
@@ -192,7 +212,7 @@ UI en los commits `ed4d55d`: `/i/[codigo]` registra antes de redirigir (con espe
    - **Aplicar la migración de escenarios**: `20260824180000_escenarios_snapshot_autorizacion.sql` está escrita y verificada contra la base real dentro de una transacción con `rollback` (19 asserts), pero **no aplicada**. Hasta que se aplique, autorizar desde la mesa devuelve el error de la RPC inexistente.
    - **Nadie lee todavía `trol3.escenarios`**: se escribe y el PDF imprime el id, pero no hay pantalla que liste los escenarios de un expediente ni que compare un snapshot contra el motor de hoy (`recomputarDesdeInputs` ya existe para eso).
 4. **Líneas de captura día a día — lo que quedó abierto** (`claude/21`):
-   - **Confirmar el tope del art. 219**: hoy la línea cobra el excedente de los 5 años (como el Excel) y sólo avisa. Si el IMSS lo topa, es `mesesMax: 60` en `computeProyectoMod40`.
+   - ~~Confirmar el tope del art. 219~~ — **cerrado**: aplica, `mesesMax` default 60.
    - **El hueco trámite → retiro**: las semanas cuentan para la pensión pero no están cobradas. Es el mismo pendiente de "Mod 40 vigente / prospectiva pura".
    - **`tablas.INPC` vs `trol3.inpc_mensual`**: dos series distintas en el mismo repo. Migrar `computeLey73` a la nueva movería goldens de pensión.
    - **`trol3.inpc_mensual` hay que actualizarla cada mes** con lo que publique INEGI (upsert). Sin eso, todo el tramo reciente sale `proyectado: true` y el motor avisa. El fallback embebido de `pension-core/src/inpc.ts` es del corte 2026-08-24 y se regenera aparte.

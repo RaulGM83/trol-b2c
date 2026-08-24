@@ -14,7 +14,11 @@ import {
   URV,
 } from './tablas';
 import { computeLey73 } from './ley73';
-import { lineasCapturaMod40, type LineasCapturaMod40 } from './mod40-lineas';
+import {
+  lineasCapturaMod40,
+  MESES_MAX_ART219,
+  type LineasCapturaMod40,
+} from './mod40-lineas';
 import { ventanaMod40, type RegistroHistorialMod40, type VentanaMod40 } from './mod40-ventana';
 import type { EntradaCalculo, ProyectoMod40 } from './types';
 import {
@@ -34,10 +38,10 @@ import {
 } from './util';
 
 const MESES_BASE_250 = 57;
-// Art. 219 LSS: el retro "de libro" son 5 años. El Excel validado contra
-// líneas reales del IMSS NO topa ahí (sus casos cobran 62 y 63 meses), así
-// que este número dejó de ser un corte y quedó como umbral de AVISO.
-const MESES_RETRO_ART219 = 60;
+// Art. 219 LSS: el retro son 5 años. El tope vive en `mod40-lineas.ts` y se
+// importa de ahí para que el costo y la serie salarial de abajo no se
+// desincronicen nunca.
+const MESES_RETRO_ART219 = MESES_MAX_ART219;
 const GESTORIAS = 80_000; // I13
 const FINANCIAMIENTO_MESES = 6; // I19
 const FINANCIAMIENTO_TASA = 0.047; // I20
@@ -80,9 +84,6 @@ export interface EntradaProyecto extends EntradaCalculo {
    */
   limiteInscripcionMod40?: string | Date | null;
 }
-
-/** Días entre dos fechas en meses "de calendario" aproximados, para copy. */
-const enMeses = (dias: number) => Math.round(dias / DIAS_MES);
 
 export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | null {
   const { perfil, saldos, salario_60m, palancas } = entrada;
@@ -173,14 +174,8 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     );
   }
 
-  // El tramo pasa de los 5 años del art. 219. La línea se cobra completa
-  // (así viene en las líneas reales que sirvieron de referencia), pero el
-  // asesor tiene que saber que ese excedente es terreno discutible.
-  if (lineas.meses > MESES_RETRO_ART219) {
-    avisos.push(
-      `El periodo a cubrir son ${lineas.meses} meses, más de los 5 años del art. 219. La línea incluye el excedente; confírmalo con la subdelegación antes de comprometerlo.`,
-    );
-  }
+  // El aviso de "solo se cubren los últimos 60 meses" lo emite
+  // `lineasCapturaMod40` y entra por `lineas.avisos`, arriba. No se duplica.
 
   // Conservación de derechos (art. 150) medida a la fecha de trámite, no a hoy.
   const finConservacion = perfil.fechas.fin_conservacion_derechos

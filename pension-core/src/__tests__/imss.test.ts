@@ -60,7 +60,8 @@ describe('Ley 73 (hoja Calculadora 73)', () => {
     expect(r.pensionMensual).toBe(41300);
   });
 
-  // GOLDEN v2 (24-ago-2026): el retro de la Ley 73 salió de su propia serie de
+  // GOLDEN v2 (24-ago-2026), revisado con el tope de 60 meses: sin cambio (34
+  // meses de periodo). El retro de la Ley 73 salió de su propia serie de
   // meses completos y pasó a `lineasCapturaMod40` — la MISMA función que usa el
   // proyecto Mod 40. Antes cada pestaña calculaba lo suyo y coincidían por
   // construcción; con el prorrateo diario habrían dejado de coincidir, así que
@@ -338,6 +339,10 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
   });
 
   // ---- GOLDENS v2 (24-ago-2026, líneas de captura día a día) --------------
+  // REVISADO tras restaurar el tope de 60 meses (Raúl, 24-ago noche): NO
+  // vuelven a un valor intermedio. El periodo de MOJA son 34 meses, así que el
+  // tope no muerde ni antes ni ahora — el tope nunca fue lo que los movió.
+  //
   // El pago al IMSS y todo lo que cuelga de él (gastos admin, comisión,
   // financiamiento, total, efectivo neto) se movieron con `lineasCapturaMod40`.
   // Dos causas, las dos deliberadas:
@@ -422,6 +427,50 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     cerca(l73.retro!.total, r.pagoImss.total, 0);
   });
 
+  it('la paridad aguanta también con el tope mordiendo', () => {
+    const perfilViejo = {
+      ...perfilMoja,
+      fechas: { ...perfilMoja.fechas, ultima_cotizacion_valida: '2018-03-14' },
+    };
+    const palancas = { ...palancasExcel73, recuperarSemanasDescontadas: true };
+    const proy = computeProyectoMod40({ ...base, perfil: perfilViejo, palancas })!;
+    const l73 = computeLey73({ ...base, perfil: perfilViejo, palancas });
+    expect(proy.pagoImss.meses).toBe(60);
+    expect(l73.retro!.meses).toBe(60);
+    cerca(l73.retro!.total, proy.pagoImss.total, 0);
+  });
+
+  it('el tope de 60 meses muerde cuando la baja es vieja, y avisa', () => {
+    // MOJA se dio de baja hace 34 meses: el tope no lo toca. Con una baja de
+    // 2018 el periodo pasa de 8 años y el art. 219 corta.
+    const viejo = computeProyectoMod40({
+      ...base,
+      perfil: {
+        ...perfilMoja,
+        fechas: { ...perfilMoja.fechas, ultima_cotizacion_valida: '2018-03-14' },
+      },
+      palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
+      pensionEscenarioBase: 7639,
+      edadEscenarioBase: 60,
+    })!;
+    expect(viejo.lineas.mesesDelPeriodo).toBe(100);
+    expect(viejo.pagoImss.meses).toBe(60);
+    expect(viejo.lineas.topado).toBe(true);
+    expect(viejo.lineas.mesesFueraDelTope).toBe(40);
+    expect(
+      viejo.avisos.some((a) => a.includes('Solo se cubren los últimos 60 meses; 40 meses anteriores quedan fuera.')),
+    ).toBe(true);
+    // Se conservan los MÁS RECIENTES: el último cobrado no es el de la baja.
+    expect(viejo.lineas.detalle[viejo.lineas.detalle.length - 1].mes).toBe('2021-07');
+    expect(viejo.lineas.detalle[viejo.lineas.detalle.length - 1].prorrateo).toBe(1);
+  });
+
+  it('el tope NO toca a MOJA: 34 meses de periodo', () => {
+    expect(r.lineas.mesesDelPeriodo).toBe(34);
+    expect(r.lineas.topado).toBe(false);
+    expect(r.lineas.mesesFueraDelTope).toBe(0);
+  });
+
   it('la serie INPC entra por parámetro y mueve las actualizaciones', () => {
     const conSerie = computeProyectoMod40({
       ...base,
@@ -490,7 +539,8 @@ describe('Ley 73 — cliente CAFE (Excel corregido)', () => {
     cerca(r.detalle.factorSalarial, 6.037884385, 0.01);
   });
 
-  // GOLDEN v2: mismo cambio que arriba. Valores viejos 284,727.27 / 11,109.05 /
+  // GOLDEN v2, revisado con el tope de 60 meses: sin cambio (26 meses de
+  // periodo). Mismo cambio que arriba. Valores viejos 284,727.27 / 11,109.05 /
   // 53,958.78 (total 349,795.10 → 327,044.31, −6.5 %). La pensión no se mueve.
   it('pensión (D43) y costos retro (D47..D51) — v2 día a día', () => {
     cerca(r.pensionMensual!, 21600, 0.01);
@@ -518,6 +568,9 @@ describe('Proyecto Mod40 — cliente CAFE (Excel corregido)', () => {
   });
 
   // ---- GOLDENS v2 (24-ago-2026) ------------------------------------------
+  // REVISADO con el tope de 60 meses restaurado: sin cambio. El periodo son 26
+  // meses; el tope no lo toca.
+  //
   // CAFE tiene 60.0 años exactos, así que el retiro cae en el mismo mes del
   // trámite: aquí NO se pierden meses (27 → 26, sólo por el corte del mes) y
   // la baja del 31-may-2024 deja prorrateo 0 en su mes. Lo que mueve el número

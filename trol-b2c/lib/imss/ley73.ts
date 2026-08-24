@@ -187,6 +187,10 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       sdiPorMes:
         palancas.salarioCotizacionRetro === 'MINIMO' ? salarioRetroMes : undefined,
       serieINPC: entrada.serieINPC,
+      // Sin `mesesMax`: se toma el default del art. 219 (60 meses), el mismo
+      // que usa el proyecto Mod 40 y el mismo con el que `serieRetro` de arriba
+      // promedia los salarios. Si aquí se topara distinto, las dos pestañas de
+      // la calculadora volverían a cobrar cosas distintas.
     });
     retro = {
       meses: lineas.meses,

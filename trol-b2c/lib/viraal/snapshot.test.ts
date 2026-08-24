@@ -197,6 +197,25 @@ describe('líneas de captura día a día en el snapshot', () => {
     expect(alto.resultado.pagoImss.cuotaBase).toBeCloseTo(normal.resultado.pagoImss.cuotaBase, 6);
   });
 
+  it('el tope de 60 meses recorta el tramo y el snapshot congela sólo eso', () => {
+    // La baja del expediente es 2024-09-30. Con trámite en 2030 el periodo pasa
+    // de 5 años y el art. 219 corta (Raúl, 24-ago-2026).
+    const s = construirSnapshot(entrada('2030-02-15'))!;
+    expect(s.resultado.pagoImss.meses).toBe(60);
+    // El INPC congelado trae exactamente los meses cobrados, no los del periodo.
+    expect(Object.keys(s.inputs.inpc_tramo)).toHaveLength(60);
+    expect(s.avisos.some((a) => a.includes('Solo se cubren los últimos 60 meses'))).toBe(true);
+    // Y el round-trip sigue cerrando con el tramo recortado.
+    const guardado = porJsonb(s);
+    expect(recomputarDesdeInputs(guardado.inputs as InputsSnapshot)).toEqual(guardado.resultado);
+  });
+
+  it('sin tope que muerda, el snapshot no inventa el aviso', () => {
+    const s = construirSnapshot(entrada('2026-08-24'))!;
+    expect(s.resultado.pagoImss.meses).toBeLessThan(60);
+    expect(s.avisos.some((a) => a.includes('Solo se cubren los últimos'))).toBe(false);
+  });
+
   it('recalcular usa el INPC CONGELADO, no el de hoy', () => {
     const soloFinal: SerieINPC = Object.fromEntries(
       Object.entries(INPC_MENSUAL).map(([m, p]) => [
