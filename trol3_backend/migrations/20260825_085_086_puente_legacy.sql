@@ -1,0 +1,6 @@
+-- 085 · enlazar_legacy: etapa_actual es smallint (insertaba 'Nuevo' y fallaba para toda persona nueva sin cliente legacy).
+--       Cambio: values (gen_random_uuid(), 0, tel, ...) en el insert a public.clientes. Resto igual.
+-- 086 · tg_public_procesos: cast (case ... end)::trol3.actor_tipo en solicitante_tipo. Sin el cast el puente
+--       public.procesos → trol3.consultas fallaba SIEMPRE (56 fallos / 18 clientes del 21 al 25-ago); se re-disparó
+--       el trigger para esos procesos (update procesos set estado = estado).
+-- Definiciones vivas en Supabase (supabase_migrations 085_enlazar_legacy_etapa_smallint, 086_puente_procesos_cast_actor).

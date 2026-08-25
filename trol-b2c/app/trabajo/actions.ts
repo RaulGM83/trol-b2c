@@ -345,6 +345,8 @@ export async function subirDocumento(formData: FormData) {
       const c = await asegurarCurp(personaId, String(formData.get('curp') ?? ''), r.buffer, 'asesor', m.id);
       if (c.error) { revalidatePath(`/trabajo/p/${personaId}`); return ok({ documento_id: r.documentoId, aviso: `Guardado, pero ${c.error}` }); }
       if (!c.curp) { revalidatePath(`/trabajo/p/${personaId}`); return { ok: true, documento_id: r.documentoId, falta_curp: true, aviso: 'Guardado. No pude leer la CURP del PDF: escríbela y vuelve a subir para iniciar el cálculo.' }; }
+      // El waterfall de n8n busca al cliente en public.clientes por CURP: sin registro legacy el cálculo se pierde (caso Sergio, 25-ago).
+      await t3().rpc('enlazar_legacy', { p_persona: personaId });
       const n = await notificarSisecPdf(personaId, r.documentoId, r.path);
       procesando = n.enviado;
       if (!n.enviado) { revalidatePath(`/trabajo/p/${personaId}`); return ok({ documento_id: r.documentoId, aviso: `Guardado, pero no se pudo iniciar el cálculo (${n.motivo}).` }); }
