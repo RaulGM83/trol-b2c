@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 import { parseSemillaV2 } from '@/lib/imss/semilla';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { leerSerieINPC } from '@/lib/trol3/inpc';
-import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
-import { ExpedienteAcciones, OportunidadAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
+import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, fmtHora, fmtFechaHora, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
+import { OportunidadEtapa, EtapaChip, type Motivo, type ProveedorOp } from '@/components/trol3/OportunidadEtapa';
+import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
@@ -50,6 +51,16 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
   ]);
   const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
+  const [{ data: motivosPerdida }, { data: provsOp }, { data: opHist }] = await Promise.all([
+    db.from('catalogo_motivos_perdida').select('codigo,nombre').eq('activo', true).order('orden'),
+    db.from('catalogo_proveedores').select('codigo,nombre,lineas').eq('activo', true).order('orden'),
+    db.from('oportunidad_historial').select('oportunidad_id,estado_anterior,estado_nuevo,motivo_perdida,proveedor,nota,origen,created_at,actor_id').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(60),
+  ]);
+  const motivoNombre = new Map(((motivosPerdida ?? []) as Motivo[]).map((x) => [x.codigo, x.nombre]));
+  const provOpNombre = new Map(((provsOp ?? []) as ProveedorOp[]).map((x) => [x.codigo, x.nombre]));
+  const histPorOp = new Map<string, Any[]>();
+  for (const h of (opHist ?? []) as Any[]) { const a = histPorOp.get(h.oportunidad_id) ?? []; a.push(h); histPorOp.set(h.oportunidad_id, a); }
+  const miembroNombre = (id: string | null) => (miembros ?? []).find((x: Any) => x.id === id)?.nombre ?? null;
   const [{ data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
@@ -384,16 +395,18 @@ export default async function Expediente({ params, searchParams }: { params: { i
             {opsAbiertas.map((o: Any) => (
               <li key={o.id} className="rounded-xl border border-line p-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div><span className="rounded-full bg-cream px-2 py-0.5 text-[11px]">N{catMap.get(o.codigo)?.nivel}</span> <b>{catMap.get(o.codigo)?.nombre ?? o.codigo}</b> <span className="text-xs text-muted">· {ESTADO_OP_LABEL[o.estado]}</span></div>
+                  <div><span className="rounded-full bg-cream px-2 py-0.5 text-[11px]">N{catMap.get(o.codigo)?.nivel}</span> <b>{catMap.get(o.codigo)?.nombre ?? o.codigo}</b> <EtapaChip estado={o.estado} label={ESTADO_OP_LABEL[o.estado]} />{o.proveedor ? <span className="ml-1 text-xs text-muted">vía {provOpNombre.get(o.proveedor) ?? o.proveedor}</span> : null}{o.contactar_despues ? <span className="ml-1 text-xs text-muted">· contactar {fmtFecha(o.contactar_despues)}</span> : null}{o.estado_desde ? <span className="ml-1 text-[11px] text-muted">· desde {fmtFecha(o.estado_desde)}</span> : null}</div>
                   <div className="text-sm font-bold">{o.valor_estimado ? fmtMXN(o.valor_estimado) : ''}{o.urgencia_fecha ? <span className="ml-2 text-xs font-normal text-amber-700">límite {fmtFecha(o.urgencia_fecha)}</span> : null}</div>
                 </div>
                 <p className="mt-1 text-xs text-muted">{o.motivo}{o.datos_faltantes?.length ? ` · falta: ${o.datos_faltantes.join(', ')}` : ''}{catMap.get(o.codigo)?.proveedor_externo ? ` · vía ${catMap.get(o.codigo)?.proveedor_externo}` : ''}</p>
                 {o.valor_detalle && Object.keys(o.valor_detalle).length ? <p className="mt-1 text-[11px] text-muted">{Object.entries(o.valor_detalle).map(([k, v]) => `${k}: ${typeof v === 'number' ? fmtNum(v) : String(v)}`).join(' · ')}</p> : null}
-                <OportunidadAcciones op={{ id: o.id, estado: o.estado, especialista_id: o.especialista_id }} personaId={e.persona_id} miembros={(miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }))} />
+                {o.nota_estado ? <p className="mt-1 text-xs italic text-muted">{o.nota_estado}</p> : null}
+                <OportunidadEtapa op={{ id: o.id, codigo: o.codigo, estado: o.estado, especialista_id: o.especialista_id, motivo_perdida: o.motivo_perdida, proveedor: o.proveedor, contactar_despues: o.contactar_despues }} personaId={e.persona_id} motivos={(motivosPerdida ?? []) as Motivo[]} proveedores={(provsOp ?? []) as ProveedorOp[]} miembros={(miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }))} />
+                {histPorOp.get(o.id)?.length ? <details className="mt-1 text-[11px] text-muted"><summary>Historial ({histPorOp.get(o.id)!.length})</summary><ul className="mt-1 space-y-0.5">{histPorOp.get(o.id)!.map((h: Any, i: number) => <li key={i}>{fmtFechaHora(h.created_at)} · {h.estado_anterior ? `${ESTADO_OP_LABEL[h.estado_anterior]} → ` : ''}{ESTADO_OP_LABEL[h.estado_nuevo]}{h.motivo_perdida ? ` · ${motivoNombre.get(h.motivo_perdida) ?? h.motivo_perdida}` : ''}{h.proveedor ? ` · ${provOpNombre.get(h.proveedor) ?? h.proveedor}` : ''}{h.origen === 'hubspot' ? ' · HubSpot' : miembroNombre(h.actor_id) ? ` · ${miembroNombre(h.actor_id)}` : ''}{h.nota ? ` · ${h.nota}` : ''}</li>)}</ul></details> : null}
               </li>
             ))}
           </ul>
-          {opsCerradas.length ? <details className="mt-3 text-xs text-muted"><summary>Cerradas / no aplican ({opsCerradas.length})</summary><ul className="mt-1 list-disc pl-4">{opsCerradas.map((o: Any) => <li key={o.id}>{catMap.get(o.codigo)?.nombre ?? o.codigo} · {ESTADO_OP_LABEL[o.estado]}{o.resultado ? ` · ${o.resultado}` : ''}</li>)}</ul></details> : null}
+          {opsCerradas.length ? <details className="mt-3 text-xs text-muted"><summary>Cerradas / no aplican ({opsCerradas.length})</summary><ul className="mt-1 list-disc pl-4">{opsCerradas.map((o: Any) => <li key={o.id} className="mb-2">{catMap.get(o.codigo)?.nombre ?? o.codigo} · <EtapaChip estado={o.estado} label={ESTADO_OP_LABEL[o.estado]} />{o.motivo_perdida ? ` · ${motivoNombre.get(o.motivo_perdida) ?? o.motivo_perdida}` : ''}{o.proveedor ? ` · vía ${provOpNombre.get(o.proveedor) ?? o.proveedor}` : ''}{o.cerrada_en ? ` · ${fmtFecha(o.cerrada_en)}` : ''}{o.nota_estado ? ` · ${o.nota_estado}` : ''}{o.estado !== 'no_aplica' || o.origen !== 'motor' ? <OportunidadEtapa compacto op={{ id: o.id, codigo: o.codigo, estado: o.estado, motivo_perdida: o.motivo_perdida, proveedor: o.proveedor, contactar_despues: o.contactar_despues }} personaId={e.persona_id} motivos={(motivosPerdida ?? []) as Motivo[]} proveedores={(provsOp ?? []) as ProveedorOp[]} /> : null}</li>)}</ul></details> : null}
         </section>
       )}
 
@@ -422,7 +435,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <ul className="mt-3 space-y-2 text-sm">
               {(inter ?? []).map((i: Any) => (
                 <li key={i.id} className="rounded-lg bg-cream/70 p-2">
-                  <div className="text-[11px] text-muted">{fmtFecha(i.created_at)} {new Date(i.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · {i.canal} · {i.actor_tipo}{i.visible_cliente ? ' · visible al cliente' : ''}</div>
+                  <div className="text-[11px] text-muted">{fmtFecha(i.created_at)} {fmtHora(i.created_at)} · {i.canal} · {i.actor_tipo}{i.visible_cliente ? ' · visible al cliente' : ''}</div>
                   <div className="whitespace-pre-wrap">{i.contenido}</div>
                 </li>
               ))}
@@ -433,7 +446,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Citas</h2>
               <CitaForm personaId={e.persona_id} />
-              <ul className="mt-2 space-y-1 text-xs">{(citas ?? []).map((c: Any) => <li key={c.id}>{new Date(c.inicio).toLocaleString('es-MX')} · {c.estado} · {c.origen}{c.notas ? ` · ${c.notas}` : ''}</li>)}</ul>
+              <ul className="mt-2 space-y-1 text-xs">{(citas ?? []).map((c: Any) => <li key={c.id}>{fmtFechaHora(c.inicio)} · {c.estado} · {c.origen}{c.notas ? ` · ${c.notas}` : ''}</li>)}</ul>
             </section>
           </aside>
         </div>

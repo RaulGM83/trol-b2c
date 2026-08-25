@@ -19,22 +19,20 @@ export async function tomarCabecera(personaId: string) {
   return ok({ cabecera: data });
 }
 
-export async function cambiarEstadoOportunidad(opId: string, personaId: string, estado: string, nota?: string) {
-  const m = await requireMiembro();
-  const db = t3();
-  if (estado === 'presentada') {
-    const { error } = await db.rpc('presentar_oportunidad', { p_op: opId, p_nota: nota ?? null });
-    if (error) return fail(error);
-  } else {
-    const patch: Record<string, unknown> = { estado };
-    if (['ganada', 'perdida', 'no_aplica'].includes(estado)) patch.cerrada_en = new Date().toISOString();
-    if (nota) patch.resultado = nota;
-    const { error } = await db.from('oportunidades').update(patch).eq('id', opId);
-    if (error) return fail(error);
-    if (nota) await db.rpc('registrar_interaccion', { p_persona: personaId, p_canal: 'nota', p_actor: 'asesor', p_actor_id: m.id, p_direccion: 'interna', p_contenido: `[${estado}] ${nota}`, p_visible_cliente: false, p_meta: { oportunidad_id: opId } });
-  }
+export type CambioOportunidad = { motivo?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota?: string | null };
+/** Cambia la etapa de una oportunidad (ciclo unificado, migración 084): historial, timestamps y nota en bitácora los pone la función SQL. */
+export async function cambiarEstadoOportunidad(opId: string, personaId: string, estado: string, extra?: string | CambioOportunidad) {
+  await requireMiembro();
+  const x: CambioOportunidad = typeof extra === 'string' ? { nota: extra } : extra ?? {};
+  if (estado === 'perdida' && !x.motivo) return fail('Indica el motivo de pérdida');
+  const { error } = await t3().rpc('cambiar_estado_oportunidad', {
+    p_op: opId, p_estado: estado, p_motivo: x.motivo ?? null, p_proveedor: x.proveedor ?? null, p_contactar_despues: x.contactar_despues || null, p_nota: x.nota?.trim() || null,
+  });
+  if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
   revalidatePath('/trabajo');
+  revalidatePath('/trabajo/lista');
+  revalidatePath('/trabajo/embudo');
   return ok();
 }
 

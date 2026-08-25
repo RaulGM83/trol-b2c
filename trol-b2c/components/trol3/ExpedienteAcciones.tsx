@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { tomarCabecera, cambiarEstadoOportunidad, asignarEspecialista, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar, reprocesarConsulta } from '@/app/trabajo/actions';
+import { tomarCabecera, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar, reprocesarConsulta } from '@/app/trabajo/actions';
 import { mensajeError, desenrollarError } from '@/lib/trol3/errores';
 
 type R = { ok: boolean; error?: string; resultado?: unknown };
@@ -23,27 +23,7 @@ export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa }: { p
   );
 }
 
-export function OportunidadAcciones({ op, personaId, miembros }: { op: { id: string; estado: string; especialista_id: string | null }; personaId: string; miembros: { id: string; nombre: string }[] }) {
-  const [pending, start] = useTransition();
-  const [nota, setNota] = useState('');
-  const [msg, setMsg] = useState<string | null>(null);
-  const go = (estado: string) => start(async () => { const r = (await cambiarEstadoOportunidad(op.id, personaId, estado, nota || undefined)) as R; setMsg(r.ok ? null : r.error ?? 'error'); if (r.ok) setNota(''); });
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {['posible', 'detectada'].includes(op.estado) && <button disabled={pending} className={btnDark} onClick={() => go('presentada')}>Presentar al cliente</button>}
-      {['presentada'].includes(op.estado) && <button disabled={pending} className={btnDark} onClick={() => go('en_proceso')}>En proceso</button>}
-      {['presentada', 'en_proceso'].includes(op.estado) && <button disabled={pending} className={btn} onClick={() => go('ganada')}>Ganada</button>}
-      {['presentada', 'en_proceso'].includes(op.estado) && <button disabled={pending} className={btn} onClick={() => go('perdida')}>Perdida</button>}
-      {['posible', 'detectada'].includes(op.estado) && <button disabled={pending} className={btn} onClick={() => go('no_aplica')}>No aplica</button>}
-      <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional; si presentas, el cliente la ve)" className="min-w-[200px] flex-1 rounded-lg border border-line px-2 py-1 text-xs" />
-      <select value={op.especialista_id ?? ''} onChange={(e) => start(async () => { await asignarEspecialista(op.id, personaId, e.target.value || null); })} className="rounded-lg border border-line px-2 py-1 text-xs">
-        <option value="">Especialista: —</option>
-        {miembros.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-      </select>
-      {msg && <span className="text-xs text-red-600">{msg}</span>}
-    </div>
-  );
-}
+// OportunidadAcciones se reemplazó por components/trol3/OportunidadEtapa.tsx (ciclo unificado, 25-ago).
 
 const TIPOS = [
   ['imss_historial', 'Historial IMSS (Belvo → Jordan)'], ['cda', 'CDA / AFORE (gratis)'], ['calculo_base', 'Recalcular con SISEC'], ['issste', 'ISSSTE (Nubarium)'], ['infonavit', 'Saldo Infonavit (Jordan)'], ['pdf_semanas', 'Subir PDF de semanas'],
@@ -119,7 +99,7 @@ export function ReprocesarConsulta({ personaId, ultima, inconsistencia, proveedo
   const mxn = (n: number | null) => (n == null ? 'costo por confirmar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n));
   const elegido = prov || ultima?.proveedor || null;
   const crudo = desenrollarError(ultima?.error);
-  const fecha = (s: string | null | undefined) => (s ? new Date(s).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
+  const fecha = (s: string | null | undefined) => (s ? new Date(s).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) : '—');
 
   const lanzar = () => start(async () => {
     setMsg(null);

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireMiembro, t3, fmtFecha, type Any } from '@/lib/trol3/server';
+import { requireMiembro, t3, fmtFecha, fmtHora, type Any } from '@/lib/trol3/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ export default async function Actividad({ searchParams }: { searchParams: { tipo
       <ul className="divide-y divide-line rounded-2xl border border-line bg-white text-sm">
         {(data ?? []).map((e: Any) => (
           <li key={e.id} className="flex flex-wrap items-baseline gap-2 px-4 py-2">
-            <span className="w-28 shrink-0 text-xs text-muted">{fmtFecha(e.created_at)} {new Date(e.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="w-28 shrink-0 text-xs text-muted">{fmtFecha(e.created_at)} {fmtHora(e.created_at)}</span>
             <span className="rounded-full bg-cream px-2 py-0.5 text-xs">{LABEL[e.tipo] ?? e.tipo}</span>
             {e.persona_id && <Link href={`/trabajo/p/${e.persona_id}`} className="font-semibold hover:underline">{e.personas?.nombre ?? '(sin nombre)'} {e.personas?.apellidos ?? ''}</Link>}
             <span className="text-xs text-muted">{e.actor_tipo} · {Object.entries(e.payload ?? {}).filter(([k]) => !['consulta_id', 'oportunidad_id', 'orden_id'].includes(k)).map(([k, v]) => `${k}: ${v}`).join(' · ')}</span>

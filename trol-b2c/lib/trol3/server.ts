@@ -72,12 +72,17 @@ export async function getPersonaMia(): Promise<string | null> {
 export const fmtMXN = (n: number | null | undefined) =>
   n == null ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n));
 export const fmtNum = (n: number | null | undefined) => (n == null ? '—' : new Intl.NumberFormat('es-MX').format(Number(n)));
+export const TZ = 'America/Mexico_City';
 export const fmtFecha = (d: string | null | undefined) =>
-  d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TZ }) : '—';
+export const fmtHora = (d: string | null | undefined) =>
+  d ? new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: TZ }) : '';
+export const fmtFechaHora = (d: string | null | undefined) =>
+  d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TZ }) : '—';
 
 export const CAPA_LABEL: Record<string, string> = { declarado: 'Declarado', calculado: 'Calculado por Trol', validado: 'Validado' };
 export const ESTADO_OP_LABEL: Record<string, string> = {
-  posible: 'Posible', detectada: 'Detectada', presentada: 'Presentada', en_proceso: 'En proceso', ganada: 'Ganada', perdida: 'Perdida', no_aplica: 'No aplica',
+  posible: 'Posible', detectada: 'Detectada', presentada: 'Presentada', interesada: 'Interesada', en_proceso: 'En proceso', ganada: 'Ganada', perdida: 'Perdida', no_aplica: 'No aplica',
 };
 export const CHECK_LABEL: Record<string, string> = {
   cuenta_sin_inconsistencias: 'Cuenta IMSS sin inconsistencias',

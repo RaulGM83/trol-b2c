@@ -26,7 +26,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
   let q = db
     .from('oportunidades')
     .select('id,persona_id,codigo,estado,valor_estimado,urgencia_fecha,urgencia_score,motivo,datos_faltantes,dueno_id,detectada_en,presentada_en, personas!inner(nombre,apellidos,curp,etapa,cabecera_id,fecha_nacimiento)', { count: 'exact' });
-  if (estado === 'abiertas') q = q.in('estado', ['detectada', 'presentada', 'en_proceso']);
+  if (estado === 'abiertas') q = q.in('estado', ['detectada', 'presentada', 'interesada', 'en_proceso']);
   else if (estado !== 'todas') q = q.eq('estado', estado);
   if (codigo) q = q.eq('codigo', codigo);
   else q = q.in('codigo', codigosLista);
@@ -62,7 +62,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
           </div>
           <h2 className="mb-2 mt-4 text-sm font-bold">Estado</h2>
           <div className="flex flex-wrap gap-2 text-xs">
-            {['abiertas', 'detectada', 'presentada', 'en_proceso', 'ganada', 'perdida', 'todas'].map((e) => (
+            {['abiertas', 'detectada', 'presentada', 'interesada', 'en_proceso', 'ganada', 'perdida', 'todas'].map((e) => (
               <Link key={e} href={params({ estado: e, page: undefined })} className={`rounded-full border px-3 py-1 ${estado === e ? 'bg-ink text-white' : ''}`}>{ESTADO_OP_LABEL[e] ?? e}</Link>
             ))}
           </div>
