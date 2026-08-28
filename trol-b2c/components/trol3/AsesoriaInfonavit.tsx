@@ -828,7 +828,8 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 </span>
                 <span className="flex flex-wrap gap-1.5">
                   <Link href={`/trabajo/infonavit/resumen/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Resumen WhatsApp</Link>
-                  <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Propuesta PDF</Link>
+                  <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Resumen PDF</Link>
+                  <Link href={`/trabajo/infonavit/pdf/${a.id}?doc=extendido`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Extendido PDF</Link>
                   <button disabled={archivando} className="rounded-lg border border-line px-2 py-0.5 text-muted hover:bg-cream disabled:opacity-50"
                     onClick={() => archivar(async () => { await archivarAsesoria(a.id, personaId, true); })}>Archivar</button>
                 </span>

@@ -5,7 +5,8 @@ import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const modo = new URL(req.url).searchParams.get('doc') === 'extendido' ? 'extendido' as const : 'resumen' as const;
   await requireMiembro();
   const db = t3();
   const { data: a } = await db.from('infonavit_asesorias').select('*').eq('id', params.id).maybeSingle();
@@ -31,14 +32,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     cotitularNombre: nombre(a.cotitular_persona_id),
     miembro: (m as Any)?.firma ?? (m as Any)?.nombre ?? (m as Any)?.email ?? null,
     saldoSinConfirmar,
-  } as Any))) as AsyncIterable<Uint8Array>;
+  } as Any, modo))) as AsyncIterable<Uint8Array>;
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const buf = Buffer.concat(chunks);
   return new Response(buf as Any, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="propuesta-infonavit-${a.id}.pdf"`,
+      'Content-Disposition': `inline; filename="propuesta-infonavit${modo === 'extendido' ? '-extendida' : ''}-${a.id}.pdf"`,
     },
   });
 }
