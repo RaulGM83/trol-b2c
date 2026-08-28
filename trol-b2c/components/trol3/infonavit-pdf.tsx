@@ -75,6 +75,10 @@ const s = StyleSheet.create({
   ladoPunto: { width: 5, height: 5, backgroundColor: LIME, marginTop: 3, marginRight: 6 },
   ladoTxt: { fontSize: 8.6, lineHeight: 1.35, flex: 1 },
   tarTxt: { fontSize: 8.6, lineHeight: 1.35 },
+  suma: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.6 },
+  sumaLbl: { fontSize: 8.6, color: GRAY, flex: 1, paddingRight: 8 },
+  sumaVal: { fontSize: 8.6, fontWeight: 700 },
+  sumaTotal: { borderTopWidth: 0.7, borderTopColor: '#C9CCD0', marginTop: 2, paddingTop: 2.5 },
   cajaComparar: { backgroundColor: CREAM, padding: 12, marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 14 },
   pasos: { flexDirection: 'row', gap: 14, marginTop: 3, marginBottom: 6 },
   pasoNum: { fontSize: 13, fontWeight: 700, color: GRAY },
@@ -135,6 +139,9 @@ export function derivar(a: Any) {
     ventajaCorte: Number(fila?.ventaja_corte ?? 0),
     ventajaVenta: Number(fila?.ventaja_venta ?? 0),
     rentaNeta: Number(op.renta_neta ?? 0),
+    rentaBruta: Number(inm.renta ?? 0),
+    mantGestion: Math.max(Number(inm.renta ?? 0) - Number(op.renta_neta ?? 0), 0),
+    pmt: Number(op.pmt ?? 0),
     desarrollo: ent.proyecto?.desarrollo ?? '',
     zona: ent.proyecto?.zona ?? '',
     rentaEstimada: Boolean(ent.proyecto?.renta_estimada),
@@ -213,11 +220,15 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
           </View>
           <View style={[s.tarjeta, { flex: 1.55 }]}>
             <Text style={s.tarLbl}>MIENTRAS ES TUYO</Text>
-            <Text style={[s.tarTxt, { marginTop: 2 }]}>
-              {d.flujo >= 0
-                ? <>La renta cubre el crédito y deja <Text style={{ fontWeight: 700 }}>{mx(d.flujo)} al mes</Text> a tu favor.</>
-                : <>La renta cubre casi toda la retención; complementas <Text style={{ fontWeight: 700 }}>{mx(-d.flujo)} al mes</Text>.</>}
-            </Text>
+            {d.credito > 0 ? (
+              <View>
+                <View style={s.suma}><Text style={s.sumaLbl}>Renta{d.rentaEstimada ? ' estimada' : ''}, ya sin gastos</Text><Text style={s.sumaVal}>{mx(d.rentaNeta)}</Text></View>
+                <View style={s.suma}><Text style={s.sumaLbl}>Pago del crédito</Text><Text style={s.sumaVal}>- {mx(d.pmt)}</Text></View>
+                <View style={[s.suma, s.sumaTotal]}><Text style={[s.sumaLbl, { color: DARK, fontWeight: 700 }]}>{d.flujo >= 0 ? 'Te quedan, cada mes' : 'Completas, cada mes'}</Text><Text style={[s.sumaVal, d.flujo < 0 ? { color: RED } : {}]}>{mx(d.flujo, true)}</Text></View>
+              </View>
+            ) : (
+              <Text style={[s.tarTxt, { marginTop: 2 }]}>Renta{d.rentaEstimada ? ' estimada' : ''}, ya sin gastos: <Text style={{ fontWeight: 700 }}>{mx(d.rentaNeta)} al mes</Text> a tu favor.</Text>
+            )}
             <Text style={[s.tarLbl, { marginTop: 7, marginBottom: 0 }]}>Y POR DETRÁS, SIN QUE HAGAS NADA</Text>
             {d.aportaciones > 0 && d.credito > 0 ? (
               <View style={s.lado}>
@@ -291,26 +302,46 @@ function SecOperacion({ d }: { d: ReturnType<typeof derivar> }) {
   const hayCredito = d.credito > 0;
   return (
     <View>
-      <Sec t="La operación" />
+      <Sec t="Cómo se arma la compra" />
+      <Text style={{ fontSize: 8.8, marginBottom: 4, lineHeight: 1.4 }}>
+        El inmueble se escritura en {mx(op.esc)}. Nadie te pide dinero para comprarlo: se paga con tu ahorro
+        {hayCredito ? ' y un crédito Infonavit que la renta va pagando' : ''}.
+      </Text>
       <View style={s.two}>
         <View style={s.col}>
-          <Row l="Saldo de vivienda que entra como enganche" v={mx(op.saldo_apl)} />
-          <Row l="Valor de escrituración del inmueble" v={mx(op.esc)} />
-          {d.sobreprecio > 0 && <Row l="Efectivo que recibe el día de la firma" v={mx(op.sobreprecio)} />}
+          <View style={s.suma}><Text style={s.sumaLbl}>Tu Subcuenta de Vivienda, como enganche</Text><Text style={s.sumaVal}>{mx(op.saldo_apl)}</Text></View>
           {hayCredito
-            ? <Row l={`Crédito Infonavit (incluye ${mx(op.not_credito)} de gastos)`} v={mx(op.credito)} />
-            : <Row l="Crédito Infonavit requerido" v="Ninguno: su saldo alcanza" />}
-          <Row l="Notariales adicionales a su cargo, una sola vez"
-            v={d.notCliente > 0 ? mx(d.notCliente) : 'Los cubre Trol'} />
-          {Number(op.remanente ?? 0) > 0 && <Row l="Saldo que se queda en su subcuenta" v={mx(op.remanente)} />}
+            ? <View style={s.suma}><Text style={s.sumaLbl}>Crédito Infonavit (trae {mx(op.not_credito)} de gastos del crédito incluidos)</Text><Text style={s.sumaVal}>+ {mx(op.credito)}</Text></View>
+            : <View style={s.suma}><Text style={s.sumaLbl}>Crédito Infonavit</Text><Text style={s.sumaVal}>no hace falta</Text></View>}
+          <View style={[s.suma, s.sumaTotal]}><Text style={[s.sumaLbl, { color: DARK, fontWeight: 700 }]}>Valor de escrituración</Text><Text style={s.sumaVal}>{mx(op.esc)}</Text></View>
+          {d.sobreprecio > 0 ? (
+            <Text style={[s.sup, { marginTop: 4 }]}>
+              Se escritura por arriba del precio de venta y la diferencia — {mx(d.sobreprecio)} — se te entrega en
+              efectivo el día de la firma.
+            </Text>
+          ) : null}
+          {Number(op.remanente ?? 0) > 0 ? (
+            <Text style={[s.sup, { marginTop: 4 }]}>En tu subcuenta quedan {mx(op.remanente)}, que siguen siendo tuyos.</Text>
+          ) : null}
+          <Text style={[s.sup, { marginTop: 4 }]}>
+            Gastos de una sola vez: {hayCredito ? `los ${mx(op.not_credito)} del crédito van dentro del crédito, no salen de tu bolsa. ` : ''}
+            {d.notCliente > 0 ? `Los notariales adicionales — ${mx(d.notCliente)} — sí son a tu cargo, de contado al inicio.` : 'Los notariales adicionales los cubre Trol.'}
+          </Text>
         </View>
         <View style={s.col}>
-          {hayCredito && <Row l="Retención mensual del crédito" v={mx(op.pmt)} />}
-          <Row l={`Renta${d.rentaEstimada ? ' estimada' : ''}, neta de mantenimiento y gestión`} v={mx(d.rentaNeta)} />
-          <View style={{ borderTopWidth: 0.7, borderTopColor: '#C9CCD0', marginVertical: 3 }} />
-          {d.flujo < 0
-            ? <Row fuerte l="Aporta de su bolsillo cada mes, mientras se renta" v={mx(-d.flujo)} />
-            : <Row fuerte l="La renta cubre la retención y deja a su favor" v={`${mx(d.flujo)} /mes`} />}
+          <View style={s.suma}><Text style={s.sumaLbl}>Renta{d.rentaEstimada ? ' estimada' : ''} del inmueble</Text><Text style={s.sumaVal}>{mx(d.rentaBruta)}</Text></View>
+          {d.mantGestion > 0 ? <View style={s.suma}><Text style={s.sumaLbl}>Mantenimiento y gestión de la renta</Text><Text style={s.sumaVal}>- {mx(d.mantGestion)}</Text></View> : null}
+          {hayCredito ? <View style={s.suma}><Text style={s.sumaLbl}>Pago del crédito (la retención normal de Infonavit)</Text><Text style={s.sumaVal}>- {mx(d.pmt)}</Text></View> : null}
+          <View style={[s.suma, s.sumaTotal]}><Text style={[s.sumaLbl, { color: DARK, fontWeight: 700 }]}>{d.flujo >= 0 ? 'Te quedan, cada mes' : 'Completas de tu bolsa, cada mes'}</Text><Text style={[s.sumaVal, d.flujo < 0 ? { color: RED } : {}]}>{mx(d.flujo, true)}</Text></View>
+          {hayCredito && d.aportaciones > 0 ? (
+            <Text style={[s.sup, { marginTop: 4 }]}>
+              Además, mientras sigas cotizando, la aportación de vivienda de tu empleador (5% de tu salario) abona
+              directo a capital del crédito — por eso se liquida más rápido de lo que parece.
+            </Text>
+          ) : null}
+          <Text style={[s.sup, { marginTop: 4 }]}>
+            El inmueble es tuyo desde la firma: está escriturado a tu nombre y tú decides cuándo venderlo.
+          </Text>
         </View>
       </View>
     </View>
