@@ -18,7 +18,7 @@ import { ImageResponse } from 'next/og';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
 import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 import { fuentesResumen } from '@/lib/marca/fuente';
-import { derivar } from '@/components/trol3/infonavit-pdf';
+import { derivar } from '@/lib/infonavit/derivar';
 
 // Debajo de este umbral la comparación contra no hacer nada se omite del PNG (decisión 28-ago).
 const UMBRAL_VENTAJA = 70000;
