@@ -11,6 +11,7 @@
 //  · La plusvalía NUNCA lleva cifra en la narrativa: la tasa va como nota al pie y los montos
 //    solo en el detalle. No se promete renta inmediata: "se pone en renta".
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { calcularAsesoriaInfonavit } from '@trol/pension-core';
 import type { Any } from '@/lib/trol3/server';
 import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 
@@ -73,6 +74,7 @@ const s = StyleSheet.create({
   lado: { flexDirection: 'row', marginTop: 4, alignItems: 'flex-start' },
   ladoPunto: { width: 5, height: 5, backgroundColor: LIME, marginTop: 3, marginRight: 6 },
   ladoTxt: { fontSize: 8.6, lineHeight: 1.35, flex: 1 },
+  tarTxt: { fontSize: 8.6, lineHeight: 1.35 },
   cajaComparar: { backgroundColor: CREAM, padding: 12, marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 14 },
   pasos: { flexDirection: 'row', gap: 14, marginTop: 3, marginBottom: 6 },
   pasoNum: { fontSize: 13, fontWeight: 700, color: GRAY },
@@ -93,20 +95,30 @@ function Row({ l, v, fuerte }: { l: string; v: string; fuerte?: boolean }) {
 }
 
 /** Todo lo que la narrativa y el detalle necesitan, derivado una sola vez. */
-function derivar(a: Any) {
-  const r = (a.resultado ?? {}) as Any;
+export function derivar(a: Any) {
+  let r = (a.resultado ?? {}) as Any;
   const ent = (a.entrada ?? {}) as Any;
-  const op = r.operacion ?? {};
   const pal = ent.palancas ?? {};
   const sup = ent.supuestos ?? {};
   const inm = ent.inmueble ?? {};
-  const tabla: Any[] = r.tabla ?? [];
   const h = Number(a.horizonte ?? r.veredicto?.mejor_horizonte);
+  const aniosVenta = h / 12;
+  // El corte de medición default es min(5 años, venta + 3). Una asesoría guardada con otro
+  // corte (p. ej. las previas al 28-ago, con 10) se re-deriva con el motor sobre su entrada
+  // congelada, para que el documento mida "el después" en el plazo correcto.
+  const corteObjetivo = Math.min(5, aniosVenta + 3);
+  let corte = Number(pal.corte_anios ?? 10);
+  if (Math.abs(corte - corteObjetivo) > 1e-9 && (ent.titulares ?? []).length && ent.inmueble) {
+    try {
+      r = calcularAsesoriaInfonavit({ titulares: ent.titulares }, ent.inmueble, sup, { ...pal, corte_anios: corteObjetivo }) as Any;
+      corte = corteObjetivo;
+    } catch { /* si el motor no puede (datos viejos), se queda lo guardado */ }
+  }
+  const op = r.operacion ?? {};
+  const tabla: Any[] = r.tabla ?? [];
   const fila = tabla.find((f) => Number(f.horizonte) === h) ?? tabla[tabla.length - 1];
   const det = fila?.bloques?.detalle ?? {};
   const hoy = a.created_at ? new Date(a.created_at) : new Date();
-  const aniosVenta = h / 12;
-  const corte = Number(pal.corte_anios ?? 10);
   return {
     r, ent, op, pal, sup, inm, tabla, h, fila, det, hoy,
     ssvTotal: Number(op.saldo_apl ?? 0) + Number(op.remanente ?? 0),
@@ -114,6 +126,7 @@ function derivar(a: Any) {
     flujo: Number(op.flujo_mensual ?? 0),
     credito: Number(op.credito ?? 0),
     isrAnual: aniosVenta > 0 ? Number(det.isr_devuelto ?? 0) / aniosVenta : 0,
+    aportaciones: Number(fila?.aportaciones_aplicadas ?? 0),
     rescate: Number(fila?.bloques?.IV_rescate ?? 0) > 0,
     notCliente: Number(op.not_cliente ?? 0),
     sobreprecio: Number(op.sobreprecio ?? 0),
@@ -200,29 +213,33 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
           </View>
           <View style={[s.tarjeta, { flex: 1.55 }]}>
             <Text style={s.tarLbl}>MIENTRAS ES TUYO</Text>
-            <View style={s.lado}>
-              <View style={s.ladoPunto} />
-              <Text style={s.ladoTxt}>
-                {d.flujo >= 0
-                  ? <>Rentas: la renta cubre el crédito y deja <Text style={{ fontWeight: 700 }}>{mx(d.flujo)} al mes</Text> a tu favor</>
-                  : <>Rentas: la renta cubre casi toda la retención; complementas <Text style={{ fontWeight: 700 }}>{mx(-d.flujo)} al mes</Text></>}
-              </Text>
-            </View>
-            {d.isrAnual > 1 ? (
+            <Text style={[s.tarTxt, { marginTop: 2 }]}>
+              {d.flujo >= 0
+                ? <>La renta cubre el crédito y deja <Text style={{ fontWeight: 700 }}>{mx(d.flujo)} al mes</Text> a tu favor.</>
+                : <>La renta cubre casi toda la retención; complementas <Text style={{ fontWeight: 700 }}>{mx(-d.flujo)} al mes</Text>.</>}
+            </Text>
+            <Text style={[s.tarLbl, { marginTop: 7, marginBottom: 0 }]}>Y POR DETRÁS, SIN QUE HAGAS NADA</Text>
+            {d.aportaciones > 0 && d.credito > 0 ? (
               <View style={s.lado}>
                 <View style={s.ladoPunto} />
-                <Text style={s.ladoTxt}>Beneficio fiscal: los intereses del crédito son deducibles — <Text style={{ fontWeight: 700 }}>~{mxMiles(d.isrAnual)} al año</Text> de ISR a tu favor</Text>
+                <Text style={s.ladoTxt}>Tu empleador sigue aportando a capital del crédito</Text>
+              </View>
+            ) : null}
+            {d.credito > 0 ? (
+              <View style={s.lado}>
+                <View style={s.ladoPunto} />
+                <Text style={s.ladoTxt}>Tienes beneficios fiscales: los intereses son deducibles</Text>
               </View>
             ) : null}
             <View style={s.lado}>
               <View style={s.ladoPunto} />
-              <Text style={s.ladoTxt}>Plusvalía: el inmueble completo gana valor con el tiempo*</Text>
+              <Text style={s.ladoTxt}>El inmueble gana valor con el tiempo*</Text>
             </View>
           </View>
           <View style={s.tarjetaOscura}>
             <Text style={[s.tarLbl, { color: '#C9CCD0' }]}>AL VENDER A {d.h} MESES</Text>
             <Text style={[s.tarNum, { color: LIME }]}>{mxMiles(d.efectivo)}</Text>
-            <Text style={[s.tarSub, { color: '#C9CCD0' }]}>recibes, ya liquidado el crédito</Text>
+            <Text style={[s.tarSub, { color: '#C9CCD0' }]}>recibes, ya liquidado el crédito y pagados los costos de venta</Text>
           </View>
         </View>
         <Text style={[s.sup, { marginTop: 5 }]}>
@@ -238,7 +255,7 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
             los siguientes {anios(d.aniosDespues)} años, contra dejar tu saldo en Infonavit todo ese tiempo.
           </Text>
           <View>
-            <Text style={{ fontSize: 18, fontWeight: 700, color: d.ventajaCorte >= 0 ? DARK : RED, textAlign: 'right' }}>{(d.ventajaCorte >= 0 ? '+' : '−') + mxMiles(d.ventajaCorte)}</Text>
+            <Text style={{ fontSize: 18, fontWeight: 700, color: d.ventajaCorte >= 0 ? DARK : RED, textAlign: 'right' }}>{(d.ventajaCorte >= 0 ? '+' : '-') + mxMiles(d.ventajaCorte)}</Text>
             <Text style={{ fontSize: 7.8, color: GRAY, textAlign: 'right' }}>{d.ventajaCorte >= 0 ? 'a tu favor' : 'en tu contra'}, a {anios(d.corte)} años</Text>
           </View>
         </View>
