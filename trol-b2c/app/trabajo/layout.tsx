@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getMiembro } from '@/lib/trol3/server';
 import { createClient } from '@/lib/supabase/server';
 import { Toaster } from '@/components/ui/sonner';
+import { NavGestion } from '@/components/trol3/NavGestion';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: { default: 'Trol · equipo', template: '%s' } };
@@ -23,9 +24,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
             <Link href="/trabajo/embudo" className="rounded-lg px-2 py-1 hover:bg-cream">Embudo</Link>
             <Link href="/trabajo/eventos" className="rounded-lg px-2 py-1 hover:bg-cream">Actividad</Link>
             <Link href="/trabajo/aliados" className="rounded-lg px-2 py-1 hover:bg-cream">Aliados</Link>
-            <Link href="/trabajo/proyectos" className="rounded-lg px-2 py-1 hover:bg-cream">Inmuebles</Link>
-            <Link href="/trabajo/duplicados" className="rounded-lg px-2 py-1 hover:bg-cream">Duplicados</Link>
-            <Link href="/trabajo/atribucion" className="rounded-lg px-2 py-1 hover:bg-cream">Atribución</Link>
+            <NavGestion />
           </nav>
           <form action="/trabajo" className="ml-auto">
             <input name="q" placeholder="Buscar teléfono, CURP o nombre" className="w-64 rounded-lg border border-line px-3 py-1.5 text-sm" />

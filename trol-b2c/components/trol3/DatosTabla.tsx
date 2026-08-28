@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { declararAsesor, pedirConsulta } from '@/app/trabajo/actions';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export interface DatoRow { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null; valor: any; capa?: string; proveedor?: string | null; origen_tipo?: string; obtenido_en?: string | null; vigente?: boolean | null; }
+export interface DatoRow { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null; valor: any; capa?: string; proveedor?: string | null; origen_tipo?: string; obtenido_en?: string | null; vigente?: boolean | null; soloLectura?: boolean; }
 type R = { ok: boolean; error?: string; resultado?: unknown };
 
 const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
@@ -93,7 +93,7 @@ function Fila({ r, personaId }: { r: DatoRow; personaId: string }) {
       </td>
       <td className="whitespace-nowrap py-1 pl-2 text-right text-[10px] text-muted">
         {c ? <span title={`${c[0]} · ${r.proveedor ?? r.origen_tipo ?? ''} · ${fmtFecha(r.obtenido_en)}`} className={`rounded px-1 ${c[1]} ${r.vigente === false ? 'line-through' : ''}`}>{c[0]}</span> : null}
-        {r.grupo !== 'calculo' && !edit && <button className="ml-1 text-[10px] underline" onClick={() => setEdit(true)} title="Capturar / corregir">editar</button>}
+        {r.grupo !== 'calculo' && !r.soloLectura && !edit && <button className="ml-1 text-[10px] underline" onClick={() => setEdit(true)} title="Capturar / corregir">editar</button>}
       </td>
     </tr>
   );

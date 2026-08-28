@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "@trol/pension-core": ["../pension-core/src/index.ts"],
+      "@trol/pension-core/*": ["../pension-core/src/*"]
+    }
+  }
+}

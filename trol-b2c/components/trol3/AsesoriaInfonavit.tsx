@@ -123,7 +123,17 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
 }) {
   const creditoMin = Number(supuestos.credito_minimo ?? 50000);
   const enCatalogo = proyectos.filter((p) => p.disponible);
-  const [proyectoId, setProyectoId] = useState(enCatalogo[0]?.id ?? '');
+  // Default: el inmueble que le genera el crédito más chico por encima del mínimo.
+  // Crédito con sobreprecio 0 = escrituración + notariales del crédito − saldo; si no
+  // llega al mínimo, el sobreprecio requerido lo deja exactamente en el mínimo.
+  const [proyectoId, setProyectoId] = useState(() => {
+    const ssv0 = base.ssv || 0;
+    const porCredito = enCatalogo
+      .filter((p) => sobreprecioMinimo(p, ssv0, creditoMin).viable)
+      .map((p) => ({ id: p.id, credito: Math.max(p.escrituracion + p.notariales_credito - ssv0, creditoMin) }))
+      .sort((a, b) => a.credito - b.credito);
+    return porCredito[0]?.id ?? enCatalogo[0]?.id ?? '';
+  });
   const [t1, setT1] = useState<TitularInfonavit>(base);
   const [modoCotitular, setModoCotitular] = useState<ModoCotitular>('no');
   const [q, setQ] = useState('');
@@ -147,8 +157,10 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [pal, setPal] = useState<PalancasInfonavit>({
     plusvalia: (enCatalogo.find((p) => p.id === proyectoId) ?? enCatalogo[0])?.plusvalia ?? 0.06,
     alterno: supuestos.alterno,
-    pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 10,
+    pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 5,
   });
+  // false = el corte sigue el default min(5 años, venta + 3 años); el asesor puede fijarlo.
+  const [corteTocado, setCorteTocado] = useState(false);
   const [verInterno, setVerInterno] = useState(false);
   // Escriturar por arriba del precio de venta, topado al avalúo. El diferencial se
   // le entrega al cliente en efectivo a la firma.
@@ -195,12 +207,26 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     sobreprecio,
   };
 
+  // Horizonte de medición default: min(5 años, venta + 3 años). La venta de referencia
+  // sale de una corrida con corte fijo de 5 para que la recomendación no se retroalimente.
+  const corteEfectivo = useMemo(() => {
+    if (corteTocado) return pal.corte_anios;
+    let venta = horizonteElegido;
+    if (venta == null && inmueble) {
+      try { venta = calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, { ...pal, corte_anios: 5 }).veredicto.mejor_horizonte; }
+      catch { venta = null; }
+    }
+    return venta == null ? 5 : Math.min(5, venta / 12 + 3);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corteTocado, horizonteElegido, proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
+  const palEff: PalancasInfonavit = { ...pal, corte_anios: corteEfectivo };
+
   const { r, error } = useMemo(() => {
     if (!inmueble) return { r: null, error: null as string | null };
-    try { return { r: calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, pal), error: null }; }
+    try { return { r: calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, palEff), error: null }; }
     catch (e) { return { r: null as ResultadoInfonavit | null, error: e instanceof Error ? e.message : 'Error de cálculo' }; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
+  }, [proyectoId, t1, t2, conCotitular, pal, corteEfectivo, supMotor, sobreprecio]);
 
   // Sensibilidad: la plusvalía es el supuesto que más mueve la conclusión y casi nunca
   // tiene respaldo de mercado. Ver la ventaja a varias plusvalías evita venderla como certeza.
@@ -209,12 +235,12 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     const gs = [0, 0.02, 0.04, 0.06, 0.08, 0.10];
     return gs.map((g) => {
       try {
-        const rr = calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, { ...pal, plusvalia: g });
+        const rr = calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, { ...palEff, plusvalia: g });
         return { g, filas: rr.tabla.map((f) => ({ h: f.horizonte, ventaja: f.ventaja_corte, efectivo: f.efectivo })) };
       } catch { return { g, filas: [] }; }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
+  }, [proyectoId, t1, t2, conCotitular, pal, corteEfectivo, supMotor, sobreprecio]);
 
   if (!disponibles.length) {
     return (
@@ -372,7 +398,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             <Num value={pal.tasa_deuda} step={0.01} onChange={(v) => setP('tasa_deuda', v)} sufijo={pct(pal.tasa_deuda, 0)} />
           </Campo>
           <Campo label="Horizonte de medición (años)">
-            <Num value={pal.corte_anios} onChange={(v) => setP('corte_anios', v)} sufijo="años" />
+            <Num value={corteEfectivo} onChange={(v) => { setCorteTocado(true); setP('corte_anios', v); }} sufijo="años" />
           </Campo>
         </div>
         {r && (
@@ -637,7 +663,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <Fila indent label="al rendimiento alterno" vals={r.tabla.map((f) => Math.max(0, f.efectivo) * (1 - pal.pct_deuda))} />
                   <Fila label="Valor adicional de la liquidez" vals={r.tabla.map((f) => f.valor_liquidez)} />
                   <tr className="border-t border-line">
-                    <td className="py-2 pr-3 font-bold">Ventaja total al corte de {pal.corte_anios} años</td>
+                    <td className="py-2 pr-3 font-bold">Ventaja total al corte de {corteEfectivo} años</td>
                     {r.tabla.map((f) => <td key={f.horizonte} className={`py-2 text-right font-bold tabular-nums ${f.ventaja_corte < 0 ? 'text-red-700' : 'text-green-700'}`}>{money(f.ventaja_corte)}</td>)}
                   </tr>
                 </tbody>
@@ -645,7 +671,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             </div>
             <p className="mt-2 text-xs text-muted">
               Si nunca hace nada, su saldo y aportaciones en Infonavit valdrían <b>{money(r.contrafactual_corte)}</b> al
-              corte de {pal.corte_anios} años. Tasa de reinversión combinada: <b>{pct(r.tasa_combinada, 1)}</b>.
+              corte de {corteEfectivo} años. Tasa de reinversión combinada: <b>{pct(r.tasa_combinada, 1)}</b>.
             </p>
             <Nota>
               Bajar deuda es un rendimiento <b>garantizado</b> a la tasa de esa deuda: cuando esa tasa supera al alterno,
@@ -769,7 +795,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               if (!r || !proyecto || !inmueble || !horizonte) return;
               const res = (await guardarAsesoriaInfonavit({
                 personaId,
-                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: pal, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada } },
+                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada } },
                 resultado: r,
                 proyectoId: proyecto.id,
                 cotitularPersonaId: cotitular?.personaId ?? null,

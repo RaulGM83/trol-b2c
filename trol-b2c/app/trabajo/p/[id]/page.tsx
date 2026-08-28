@@ -7,6 +7,7 @@ import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, fmtHora, fmtFechaHora, CH
 import { OportunidadEtapa, EtapaChip, type Motivo, type ProveedorOp } from '@/components/trol3/OportunidadEtapa';
 import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
+import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
@@ -50,7 +51,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
   ]);
-  const { data: legacyDocs } = await db.rpc('estado_docs_legacy', { p_persona: params.id });
+  const [{ data: legacyDocs }, { data: credenciales }] = await Promise.all([
+    db.rpc('estado_docs_legacy', { p_persona: params.id }),
+    db.rpc('credencial_estado', { p_persona: params.id }),
+  ]);
   const [{ data: motivosPerdida }, { data: provsOp }, { data: opHist }] = await Promise.all([
     db.from('catalogo_motivos_perdida').select('codigo,nombre').eq('activo', true).order('orden'),
     db.from('catalogo_proveedores').select('codigo,nombre,lineas').eq('activo', true).order('orden'),
@@ -66,6 +70,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
   const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
+  // Edad actual: derivada de la fecha de nacimiento (v_expediente), solo lectura.
+  {
+    const i = rows.findIndex((r) => r.campo === 'fecha_nacimiento');
+    rows.splice(i < 0 ? rows.length : i + 1, 0, { campo: 'edad_actual', nombre: 'Edad actual', tipo: 'number', grupo: 'identidad', opciones: null, valor: e.edad ?? null, soloLectura: true } as DatoRow);
+  }
   const cabecera = (miembros ?? []).find((x: Any) => x.id === e.cabecera_id);
   const saldoPuntos = (puntos ?? []).reduce((s: number, p: Any) => s + (p.tipo === 'abono' ? p.puntos : -p.puntos), 0);
   const tel = (contactos ?? []).find((c: Any) => c.tipo === 'telefono' && c.principal) ?? (contactos ?? []).find((c: Any) => c.tipo === 'telefono');
@@ -221,12 +230,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <div className="mt-1 text-sm text-muted">
               {e.edad ? `${e.edad} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
-            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'}{e.hubspot_id ? ` · HubSpot ${e.hubspot_id}` : ''} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
+            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
           </div>
           <div className="text-right text-xs">
             <div className="flex flex-wrap justify-end gap-2">
               {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp (Tako)</a>}
-              {e.hubspot_id && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://app.hubspot.com/contacts/47582826/record/0-1/${e.hubspot_id}`} target="_blank" rel="noreferrer">HubSpot</a>}
             </div>
             <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
           </div>
@@ -278,7 +286,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
-              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} fechas={{ imss: e.ley_en }} />
+              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'edad_actual', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} fechas={{ imss: e.ley_en }} />
+              <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
             </section>
 
             <HistorialLaboral historial={historialLaboral} />

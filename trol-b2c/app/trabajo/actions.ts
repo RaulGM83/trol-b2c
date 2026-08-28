@@ -36,6 +36,23 @@ export async function cambiarEstadoOportunidad(opId: string, personaId: string, 
   return ok();
 }
 
+/** Credenciales del portal Infonavit (migración 089): cifradas; guardar y revelar dejan bitácora. */
+export async function guardarCredencial(personaId: string, secreto: string, usuario?: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('guardar_credencial', { p_persona: personaId, p_secreto: secreto, p_servicio: 'infonavit', p_usuario: usuario ?? null });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+export async function revelarCredencial(personaId: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('revelar_credencial', { p_persona: personaId, p_servicio: 'infonavit' });
+  if (error) return fail(error);
+  const row = (Array.isArray(data) ? data[0] : data) as { usuario: string | null; secreto: string } | undefined;
+  return ok({ credencial: row ?? null });
+}
+
 export async function asignarEspecialista(opId: string, personaId: string, miembroId: string | null) {
   await requireMiembro();
   const { error } = await t3().from('oportunidades').update({ especialista_id: miembroId }).eq('id', opId);
