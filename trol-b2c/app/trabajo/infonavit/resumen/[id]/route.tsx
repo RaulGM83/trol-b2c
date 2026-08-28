@@ -20,6 +20,9 @@ import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 import { fuentesResumen } from '@/lib/marca/fuente';
 import { derivar } from '@/components/trol3/infonavit-pdf';
 
+// Debajo de este umbral la comparación contra no hacer nada se omite del PNG (decisión 28-ago).
+const UMBRAL_VENTAJA = 70000;
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -142,12 +145,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           <div style={{ fontSize: 26, color: '#C9CCD0' }}>{`Al vender a ${d.h} meses recibes`}</div>
           <div style={{ fontSize: 92, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 2 }}>{mxMiles(d.efectivo)}</div>
           <div style={{ fontSize: 21, color: '#9DA1A6', marginTop: 6 }}>ya liquidado el crédito y pagados los costos de venta</div>
-          <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 22, marginBottom: 16 }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div style={{ fontSize: 24, color: '#C9CCD0' }}>vs. no hacer nada, contando lo que reinviertes después</div>
-            <div style={{ fontSize: 46, fontWeight: 700, color: d.ventajaCorte >= 0 ? '#fff' : RED }}>{(d.ventajaCorte >= 0 ? '+' : '−') + mxMiles(d.ventajaCorte)}</div>
-          </div>
-          <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 4 }}>{`medido a ${anios(d.corte)} años`}</div>
+          {d.ventajaCorte >= UMBRAL_VENTAJA ? (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 22, marginBottom: 16 }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 24, color: '#C9CCD0' }}>vs. no hacer nada, contando lo que reinviertes después</div>
+                <div style={{ fontSize: 46, fontWeight: 700, color: '#fff' }}>{'+' + mxMiles(d.ventajaCorte)}</div>
+              </div>
+              <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 4 }}>{`medido a ${anios(d.corte)} años`}</div>
+            </div>
+          ) : null}
         </div>
 
         {/* ---- pie ---- */}

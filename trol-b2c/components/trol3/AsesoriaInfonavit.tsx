@@ -159,7 +159,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     alterno: supuestos.alterno,
     pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 5,
   });
-  // false = el corte sigue el default min(5 años, venta + 3 años); el asesor puede fijarlo.
+  // false = el corte sigue el default venta + 3 años con piso de 5; el asesor puede fijarlo.
   const [corteTocado, setCorteTocado] = useState(false);
   const [verInterno, setVerInterno] = useState(false);
   // Escriturar por arriba del precio de venta, topado al avalúo. El diferencial se
@@ -207,7 +207,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     sobreprecio,
   };
 
-  // Horizonte de medición default: min(5 años, venta + 3 años). La venta de referencia
+  // Horizonte de medición default: venta + 3 años, con piso de 5. La venta de referencia
   // sale de una corrida con corte fijo de 5 para que la recomendación no se retroalimente.
   const corteEfectivo = useMemo(() => {
     if (corteTocado) return pal.corte_anios;
@@ -216,7 +216,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
       try { venta = calcularAsesoriaInfonavit(clienteMotor, inmueble, supMotor, { ...pal, corte_anios: 5 }).veredicto.mejor_horizonte; }
       catch { venta = null; }
     }
-    return venta == null ? 5 : Math.min(5, venta / 12 + 3);
+    return venta == null ? 5 : Math.max(5, venta / 12 + 3);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corteTocado, horizonteElegido, proyectoId, t1, t2, conCotitular, pal, supMotor, sobreprecio]);
   const palEff: PalancasInfonavit = { ...pal, corte_anios: corteEfectivo };

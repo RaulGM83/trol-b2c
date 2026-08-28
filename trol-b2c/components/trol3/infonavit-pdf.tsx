@@ -32,6 +32,9 @@ const mxMiles = (n: Any) => {
 };
 const pc = (n: Any, d = 1) => (n == null || Number.isNaN(Number(n)) ? '—' : (Number(n) * 100).toFixed(d) + '%');
 const anios = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', '.'));
+// Si el esquema genera menos que esto contra no hacer nada, la narrativa del resumen cambia a
+// liquidez (el detalle del extendido siempre trae la comparación completa). Decisión 28-ago.
+const UMBRAL_VENTAJA = 70000;
 
 const s = StyleSheet.create({
   page: { paddingTop: 0, paddingBottom: 46, paddingHorizontal: 0, fontSize: 9, color: DARK, fontFamily: 'Helvetica' },
@@ -107,10 +110,10 @@ export function derivar(a: Any) {
   const inm = ent.inmueble ?? {};
   const h = Number(a.horizonte ?? r.veredicto?.mejor_horizonte);
   const aniosVenta = h / 12;
-  // El corte de medición default es min(5 años, venta + 3). Una asesoría guardada con otro
-  // corte (p. ej. las previas al 28-ago, con 10) se re-deriva con el motor sobre su entrada
-  // congelada, para que el documento mida "el después" en el plazo correcto.
-  const corteObjetivo = Math.min(5, aniosVenta + 3);
+  // El corte de medición default es venta + 3 años, con piso de 5 años (max). Una asesoría
+  // guardada con otro corte (p. ej. las previas al 28-ago, con 10) se re-deriva con el motor
+  // sobre su entrada congelada, para que el documento mida "el después" en el plazo correcto.
+  const corteObjetivo = Math.max(5, aniosVenta + 3);
   let corte = Number(pal.corte_anios ?? 10);
   if (Math.abs(corte - corteObjetivo) > 1e-9 && (ent.titulares ?? []).length && ent.inmueble) {
     try {
@@ -259,17 +262,32 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         </Text>
 
         <View style={{ height: 11 }} />
-        <Sec t="¿Y si no haces nada?" />
-        <View style={s.cajaComparar}>
-          <Text style={[s.actoTxt, { flex: 1, fontSize: 9.2 }]}>
-            La comparación no termina el día que vendes: contamos también lo que ese dinero te genera reinvertido
-            los siguientes {anios(d.aniosDespues)} años, contra dejar tu saldo en Infonavit todo ese tiempo.
-          </Text>
+        {d.ventajaCorte >= UMBRAL_VENTAJA ? (
           <View>
-            <Text style={{ fontSize: 18, fontWeight: 700, color: d.ventajaCorte >= 0 ? DARK : RED, textAlign: 'right' }}>{(d.ventajaCorte >= 0 ? '+' : '-') + mxMiles(d.ventajaCorte)}</Text>
-            <Text style={{ fontSize: 7.8, color: GRAY, textAlign: 'right' }}>{d.ventajaCorte >= 0 ? 'a tu favor' : 'en tu contra'}, a {anios(d.corte)} años</Text>
+            <Sec t="¿Y si no haces nada?" />
+            <View style={s.cajaComparar}>
+              <Text style={[s.actoTxt, { flex: 1, fontSize: 9.2 }]}>
+                La comparación no termina el día que vendes: contamos también lo que ese dinero te genera reinvertido
+                los siguientes {anios(d.aniosDespues)} años, contra dejar tu saldo en Infonavit todo ese tiempo.
+              </Text>
+              <View>
+                <Text style={{ fontSize: 18, fontWeight: 700, color: DARK, textAlign: 'right' }}>{'+' + mxMiles(d.ventajaCorte)}</Text>
+                <Text style={{ fontSize: 7.8, color: GRAY, textAlign: 'right' }}>a tu favor, a {anios(d.corte)} años</Text>
+              </View>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View>
+            <Sec t="Liquidez para lo que tú decidas" />
+            <View style={s.cajaComparar}>
+              <Text style={[s.actoTxt, { flex: 1, fontSize: 9.2 }]}>
+                Al vender, <Text style={{ fontWeight: 700 }}>{mxMiles(d.efectivo)}</Text> quedan líquidos en tus manos:
+                puedes ocuparlos en lo que tú quieras, o mantenerlos invertidos generando más rendimiento que en el
+                Infonavit. Podemos revisar juntos la estrategia más adecuada según tus objetivos.
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View style={{ height: 11 }} />
         <Sec t="Qué sigue" />
