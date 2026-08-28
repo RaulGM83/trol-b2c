@@ -215,14 +215,18 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         <View style={{ height: 11 }} />
         <Sec t="Así se vería" />
         <View style={s.tarjetas}>
-          <View style={s.tarjeta}>
+          <View style={[s.tarjeta, { alignItems: 'center', justifyContent: 'center' }]}>
             <Text style={s.tarLbl}>PONES HOY</Text>
             <Text style={s.tarNum}>{d.notCliente > 0 ? mxMiles(d.notCliente) : '$0'}</Text>
-            <Text style={s.tarSub}>{d.notCliente > 0 ? 'gastos notariales, una sola vez' : 'de tu bolsillo'}</Text>
-            {d.sobreprecio > 0 ? <Text style={s.tarSub}>y recibes {mxMiles(d.sobreprecio)} en efectivo el día de la firma</Text> : null}
+            <Text style={[s.tarSub, { textAlign: 'center' }]}>{d.notCliente > 0 ? 'gastos notariales, una sola vez' : 'de tu bolsillo'}</Text>
+            {d.sobreprecio > 0 ? <Text style={[s.tarSub, { textAlign: 'center' }]}>y recibes {mxMiles(d.sobreprecio)} en efectivo el día de la firma</Text> : null}
+            <View style={{ width: 26, height: 0.8, backgroundColor: '#C9CCD0', marginTop: 6, marginBottom: 5 }} />
+            <Text style={[s.tarSub, { textAlign: 'center' }]}>La compra la pagan</Text>
+            <Text style={[s.tarSub, { textAlign: 'center', color: DARK, fontWeight: 700 }]}>tu subcuenta · {mxMiles(d.op.saldo_apl)}</Text>
+            {d.credito > 0 ? <Text style={[s.tarSub, { textAlign: 'center', color: DARK, fontWeight: 700 }]}>+ crédito Infonavit · {mxMiles(d.credito)}</Text> : null}
           </View>
-          <View style={[s.tarjeta, { flex: 1.55 }]}>
-            <Text style={s.tarLbl}>MIENTRAS ES TUYO</Text>
+          <View style={[s.tarjeta, { flex: 1.5, justifyContent: 'center' }]}>
+            <Text style={[s.tarLbl, { textAlign: 'center' }]}>MIENTRAS ES TUYO</Text>
             {d.credito > 0 ? (
               <View>
                 <View style={s.suma}><Text style={s.sumaLbl}>Renta{d.rentaEstimada ? ' estimada' : ''}, ya sin gastos</Text><Text style={s.sumaVal}>{mx(d.rentaNeta)}</Text></View>
@@ -232,7 +236,7 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
             ) : (
               <Text style={[s.tarTxt, { marginTop: 2 }]}>Renta{d.rentaEstimada ? ' estimada' : ''}, ya sin gastos: <Text style={{ fontWeight: 700 }}>{mx(d.rentaNeta)} al mes</Text> a tu favor.</Text>
             )}
-            <Text style={[s.tarLbl, { marginTop: 7, marginBottom: 0 }]}>Y POR DETRÁS, SIN QUE HAGAS NADA</Text>
+            <Text style={[s.tarLbl, { marginTop: 7, marginBottom: 0, textAlign: 'center' }]}>Y POR DETRÁS, SIN QUE HAGAS NADA</Text>
             {d.aportaciones > 0 && d.credito > 0 ? (
               <View style={s.lado}>
                 <View style={s.ladoPunto} />
@@ -250,10 +254,10 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
               <Text style={s.ladoTxt}>El inmueble gana valor con el tiempo*</Text>
             </View>
           </View>
-          <View style={s.tarjetaOscura}>
-            <Text style={[s.tarLbl, { color: '#C9CCD0' }]}>AL VENDER A {d.h} MESES</Text>
-            <Text style={[s.tarNum, { color: LIME }]}>{mxMiles(d.efectivo)}</Text>
-            <Text style={[s.tarSub, { color: '#C9CCD0' }]}>recibes, ya liquidado el crédito y pagados los costos de venta</Text>
+          <View style={[s.tarjetaOscura, { flex: 1.15, alignItems: 'center' }]}>
+            <Text style={[s.tarLbl, { color: '#C9CCD0', textAlign: 'center' }]}>AL VENDER A {d.h} MESES</Text>
+            <Text style={{ fontSize: 22, fontWeight: 700, color: LIME, textAlign: 'center', marginTop: 2 }}>{mxMiles(d.efectivo)}</Text>
+            <Text style={[s.tarSub, { color: '#C9CCD0', textAlign: 'center', marginTop: 4 }]}>recibes, ya liquidado el crédito y pagados los costos de venta</Text>
           </View>
         </View>
         <Text style={[s.sup, { marginTop: 5 }]}>
