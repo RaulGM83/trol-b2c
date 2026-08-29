@@ -204,8 +204,8 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
           </View>
           <View style={[s.tarjetaOscura, { flex: 1.15, alignItems: 'center' }]}>
             <Text style={[s.tarLbl, { color: '#C9CCD0', textAlign: 'center' }]}>AL VENDER A {d.h} MESES</Text>
-            <Text style={{ fontSize: 22, fontWeight: 700, color: LIME, textAlign: 'center', marginTop: 2 }}>{mxMiles(d.efectivo)}</Text>
-            <Text style={[s.tarSub, { color: '#C9CCD0', textAlign: 'center', marginTop: 4 }]}>recibes, ya liquidado el crédito y pagados los costos de venta</Text>
+            <Text style={{ fontSize: 22, fontWeight: 700, color: LIME, textAlign: 'center', marginTop: 2 }}>{mxMiles(d.recibeDia)}</Text>
+            <Text style={[s.tarSub, { color: '#C9CCD0', textAlign: 'center', marginTop: 4 }]}>recibes ese día: venta, menos crédito restante y comisión</Text>
           </View>
         </View>
         <Text style={[s.sup, { marginTop: 5 }]}>
@@ -233,7 +233,7 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
             <Sec t="Liquidez para lo que tú decidas" />
             <View style={s.cajaComparar}>
               <Text style={[s.actoTxt, { flex: 1, fontSize: 9.2 }]}>
-                Al vender, <Text style={{ fontWeight: 700 }}>{mxMiles(d.efectivo)}</Text> quedan líquidos en tus manos:
+                Al vender, <Text style={{ fontWeight: 700 }}>{mxMiles(d.recibeDia)}</Text> quedan líquidos en tus manos:
                 puedes ocuparlos en lo que tú quieras, o mantenerlos invertidos generando más rendimiento que en el
                 Infonavit. Podemos revisar juntos la estrategia más adecuada según tus objetivos.
               </Text>
@@ -324,14 +324,14 @@ function SecPlazos({ d }: { d: ReturnType<typeof derivar> }) {
       <Sec t="Qué recibiría al vender, según cuándo venda" />
       <View style={s.thead}>
         <Text style={[s.th, { width: 130 }]}> </Text>
-        <Text style={[s.th, { width: 115 }]}>Efectivo al vender</Text>
+        <Text style={[s.th, { width: 115 }]}>Recibes ese día</Text>
         <Text style={[s.th, { width: 130 }]}>vs. dejarlo donde está</Text>
         <Text style={s.th}>Plusvalía que lo empata</Text>
       </View>
       {d.tabla.map((f, i) => (
         <View key={f.horizonte} style={[s.tr, i % 2 === 0 ? { backgroundColor: CREAM } : {}]}>
           <Text style={[s.td, { width: 130, fontWeight: 700 }]}>A {f.horizonte} meses{Number(f.horizonte) === d.h ? '  — elegido' : ''}</Text>
-          <Text style={[s.td, { width: 115 }]}>{mx(f.efectivo)}</Text>
+          <Text style={[s.td, { width: 115 }]}>{mx(f.recibe_dia ?? f.efectivo)}</Text>
           <Text style={[s.td, { width: 130, color: Number(f.ventaja_venta) >= 0 ? DARK : RED }]}>{mx(f.ventaja_venta, true)}</Text>
           <Text style={[s.td, { color: GRAY }]}>{pc(f.plusvalia_equilibrio)} anual</Text>
         </View>
@@ -339,6 +339,27 @@ function SecPlazos({ d }: { d: ReturnType<typeof derivar> }) {
       <Text style={[s.sup, { marginTop: 5 }]}>
         Supuesto base: plusvalía de {pc(d.pal.plusvalia, 0)} anual. La última columna es la plusvalía mínima que
         necesitaría cada plazo para quedar a mano.
+      </Text>
+    </View>
+  );
+}
+
+function SecVentaDia({ d }: { d: ReturnType<typeof derivar> }) {
+  return (
+    <View>
+      <Sec t={`El día de la venta (${d.h} meses)`} />
+      <View style={{ width: 250 }}>
+        <View style={s.suma}><Text style={s.sumaLbl}>Venta estimada del inmueble</Text><Text style={s.sumaVal}>{mx(d.ventaEstimada)}</Text></View>
+        <View style={s.suma}><Text style={s.sumaLbl}>Comisión de venta</Text><Text style={s.sumaVal}>- {mx(d.comisionTotal)}</Text></View>
+        {d.saldoCredito > 0 ? <View style={s.suma}><Text style={s.sumaLbl}>Saldo del crédito ese día</Text><Text style={s.sumaVal}>- {mx(d.saldoCredito)}</Text></View> : null}
+      </View>
+      <View style={s.cajaOscura}>
+        <Text style={s.cajaLime}>RECIBES ESE DÍA:  {mx(d.recibeDia)}</Text>
+        <Text style={s.cajaNota}>en tu mano, ya liquidado el crédito y pagada la comisión</Text>
+      </View>
+      <Text style={[s.sup, { marginTop: 5 }]}>
+        Aparte, en el camino ya recibiste mes a mes: {d.rentaAcumFlujo >= 0 ? `~${mx(d.rentaAcumFlujo)} de rentas netas` : `(aportaste ~${mx(-d.rentaAcumFlujo)} a la retención)`}
+        {d.isrAcum > 1 ? ` y ~${mx(d.isrAcum)} de devolución de ISR` : ''}. Se mencionan aparte a propósito: no inflan el número del día de la venta.
       </Text>
     </View>
   );
@@ -360,7 +381,7 @@ function SecFuentes({ d }: { d: ReturnType<typeof derivar> }) {
   const maxAbs = Math.max(...fuentes.map(([, v]) => Math.abs(v)), 1);
   return (
     <View>
-      <Sec t={`De dónde sale el valor en el plazo elegido (${d.h} meses)`} />
+      <Sec t="De dónde sale la ventaja frente a dejar el saldo donde está" />
       {fuentes.map(([k, v]) => (
         <View key={k} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
           <Text style={{ fontSize: 8.6, flex: 1, paddingRight: 8 }}>{k}</Text>
@@ -375,10 +396,6 @@ function SecFuentes({ d }: { d: ReturnType<typeof derivar> }) {
           <Text style={{ fontSize: 8.6, fontWeight: 700, width: 78, textAlign: 'right' }}>{mx(v, true)}</Text>
         </View>
       ))}
-      <View style={s.cajaOscura}>
-        <Text style={s.cajaLime}>RECIBE AL VENDER A {d.h} MESES:  {mx(d.efectivo)}</Text>
-        <Text style={s.cajaNota}>ya liquidado el crédito, con rentas y devolución de ISR</Text>
-      </View>
       <View style={{ marginTop: 6, flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 9.5, fontWeight: 700 }}>VENTAJA AL VENDER, FRENTE A DEJAR EL SALDO DONDE ESTÁ</Text>
         <Text style={{ fontSize: 9.5, fontWeight: 700, color: d.ventajaVenta >= 0 ? DARK : RED }}>{mx(d.ventajaVenta, true)}</Text>
@@ -533,6 +550,8 @@ export function infonavitDoc(a: Any, modo: 'resumen' | 'extendido' = 'resumen') 
       <Page size="LETTER" style={s.page}>
         <BandaChica a={a} t="3 · De dónde sale cada peso, y los supuestos" />
         <View style={s.body}>
+          <SecVentaDia d={d} />
+          <View style={{ height: 12 }} />
           <SecFuentes d={d} />
           <View style={{ height: 12 }} />
           <SecDespues d={d} />

@@ -18,7 +18,10 @@ export function derivar(a: Any) {
   // sobre su entrada congelada, para que el documento mida "el después" en el plazo correcto.
   const corteObjetivo = Math.max(5, aniosVenta + 3);
   let corte = Number(pal.corte_anios ?? 10);
-  if (Math.abs(corte - corteObjetivo) > 1e-9 && (ent.titulares ?? []).length && ent.inmueble) {
+  // Siempre se re-deriva con el motor sobre la entrada congelada: así los documentos traen
+  // los campos nuevos (recibe_dia, saldo_credito…) aunque la asesoría se haya guardado con un
+  // motor anterior, y el corte queda en el default max(5, venta + 3).
+  if ((ent.titulares ?? []).length && ent.inmueble) {
     try {
       r = calcularAsesoriaInfonavit({ titulares: ent.titulares }, ent.inmueble, sup, { ...pal, corte_anios: corteObjetivo }) as Any;
       corte = corteObjetivo;
@@ -33,6 +36,13 @@ export function derivar(a: Any) {
     r, ent, op, pal, sup, inm, tabla, h, fila, det, hoy,
     ssvTotal: Number(op.saldo_apl ?? 0) + Number(op.remanente ?? 0),
     efectivo: Number(fila?.efectivo ?? 0),
+    // Fallback al efectivo viejo solo si el motor no pudo re-derivar (asesoría muy vieja).
+    recibeDia: Number(fila?.recibe_dia ?? fila?.efectivo ?? 0),
+    ventaEstimada: Number(fila?.venta_estimada ?? 0),
+    saldoCredito: Number(fila?.saldo_credito ?? 0),
+    comisionTotal: Number(fila?.comision_venta_total ?? 0),
+    rentaAcumFlujo: Number(fila?.flujo_neto_acum ?? 0),
+    isrAcum: Number(fila?.bloques?.detalle?.isr_devuelto ?? 0),
     flujo: Number(op.flujo_mensual ?? 0),
     credito: Number(op.credito ?? 0),
     isrAnual: aniosVenta > 0 ? Number(det.isr_devuelto ?? 0) / aniosVenta : 0,

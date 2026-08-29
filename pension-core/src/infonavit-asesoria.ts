@@ -317,6 +317,13 @@ export interface FilaHorizonte {
     };
   };
   ventaja_venta: number;
+  /** El día de la venta, en la mano: venta estimada − comisión − saldo del crédito.
+   *  SIN rentas, ISR, remanente ni sobreprecio: esos se reciben en el camino, no ese día
+   *  (viven en `efectivo`, que es el neto de todo el periodo). Decisión Raul 29-ago-2026. */
+  venta_estimada: number;
+  saldo_credito: number;
+  comision_venta_total: number;
+  recibe_dia: number;
   plusvalia_equilibrio: number;
   rendimiento_conservar_12m: number | null;
   efectivo: number;
@@ -370,6 +377,8 @@ export function calcular(
     const descuento = op.base - op.esc;
     const rentaAc = op.renta_neta * t;
     const comision = -op.base * x * sup.comision_venta;
+    const ventaEstim = op.base * x;
+    const saldoCred = motor.saldo[t];
     const b1 = plusv100 + descuento + rentaAc + comision - op.not_credito - op.not_cliente;
     const intereses = -motor.interes_acum[t];
     const isr = isrDevuelto(motor, dc, sup, t);
@@ -417,6 +426,9 @@ export function calcular(
         },
       },
       ventaja_venta: ventaja, plusvalia_equilibrio: equilibrio,
+      venta_estimada: ventaEstim, saldo_credito: saldoCred,
+      comision_venta_total: ventaEstim * sup.comision_venta,
+      recibe_dia: ventaEstim * (1 - sup.comision_venta) - saldoCred,
       rendimiento_conservar_12m: marginal12, efectivo: efv,
       flujo_neto_acum: motor.flujo_acum[t],
       aportaciones_aplicadas: aportAplicadas,

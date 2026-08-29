@@ -184,8 +184,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         {/* ---- AL VENDER: el héroe ---- */}
         <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '28px 56px 24px' }}>
           <div style={{ fontSize: 26, color: '#C9CCD0' }}>{`Al vender a ${d.h} meses recibes`}</div>
-          <div style={{ fontSize: 92, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 2 }}>{mxMiles(d.efectivo)}</div>
-          <div style={{ fontSize: 21, color: '#9DA1A6', marginTop: 6 }}>ya liquidado el crédito y pagados los costos de venta</div>
+          <div style={{ fontSize: 92, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 2 }}>{mxMiles(d.recibeDia)}</div>
+          <div style={{ fontSize: 21, color: '#9DA1A6', marginTop: 6 }}>
+            {`venta estimada (${mxMiles(d.ventaEstimada)}) menos crédito restante y comisión — en tu mano ese día`}
+          </div>
           {d.ventajaCorte >= UMBRAL_VENTAJA ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 20, marginBottom: 14 }} />
