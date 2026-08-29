@@ -1,18 +1,21 @@
 /**
  * La historia del ahorro en PNG vertical, para mandar por WhatsApp.
  *
- * Narrativa v2.1 (28-ago-2026): muy visual, poco texto, un número grande por bloque.
- * HOY (el ahorro detenido) → EL PLAN (enganche de un inmueble que se pone en renta) →
- * MIENTRAS ES TUYO (la renta con número; y por detrás, sin números: el empleador aporta a
- * capital, beneficios fiscales, el inmueble gana valor) → AL VENDER (lo que recibe ya
- * liquidado el crédito y pagados los costos de venta, y la ventaja contra no hacer nada).
+ * Narrativa v3 (29-ago-2026), espejo del resumen PDF: TU AHORRO ($ dormido) → LA PROPUESTA
+ * (comprar un inmueble y SU PRECIO — el edificio solo se menciona aquí) → ASÍ SE VERÍA
+ * (pones hoy / mientras es tuyo, con la renta como detalle, no como protagonista) →
+ * QUÉ SIGUE (3 pasos) → AL VENDER (el héroe: lo que recibe) + CTA.
  *
- * Los números salen de `derivar` (infonavit-pdf), que re-deriva el corte al default
- * min(5 años, venta + 3) aunque la asesoría guardada traiga otro.
+ * Jerarquía de números deliberada: $ ahorro (grande) → $ precio (medio, en la frase) →
+ * $ al vender (el más grande, en verde). Todo lo demás va chico.
  *
  * GUARDARRAILES (Producto_Infonavit_Contexto.md §7): nada de costo del aliado, comisión del
- * desarrollador ni PnL interno. La plusvalía va como supuesto, sin cifra de monto. No se
- * promete renta inmediata. Números de narrativa redondeados a miles.
+ * desarrollador ni PnL interno. Plusvalía como supuesto y sin monto. Sin promesa de renta
+ * inmediata. Números de narrativa redondeados a miles. Comparación contra no hacer nada solo
+ * si la ventaja supera el umbral.
+ *
+ * OJO satori: divs con más de un hijo llevan display flex; sin 'space-evenly'; guion ASCII
+ * (el subset de Inter no trae U+2212). Validar cambios con el arnés test-png antes de pushear.
  */
 import { ImageResponse } from 'next/og';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
@@ -20,11 +23,11 @@ import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 import { fuentesResumen } from '@/lib/marca/fuente';
 import { derivar } from '@/lib/infonavit/derivar';
 
-// Debajo de este umbral la comparación contra no hacer nada se omite del PNG (decisión 28-ago).
-const UMBRAL_VENTAJA = 70000;
-
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Debajo de este umbral la comparación contra no hacer nada se omite del PNG (decisión 28-ago).
+const UMBRAL_VENTAJA = 70000;
 
 const DARK = '#26282B', LIME = '#D1F069', GRAY = '#8A8D91', CREAM = '#F4F4F2', LINEA = '#E4E4E1', RED = '#B0532F';
 const W = 1080, H = 1350;
@@ -43,9 +46,18 @@ const anios = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 function Etiqueta({ t }: { t: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', marginTop: 26 }}>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
       <div style={{ display: 'flex', width: 12, height: 12, backgroundColor: LIME }} />
       <div style={{ fontSize: 22, fontWeight: 700, color: GRAY, letterSpacing: 2.5, marginLeft: 12 }}>{t.toUpperCase()}</div>
+    </div>
+  );
+}
+
+function Punto({ texto, color, negrita }: { texto: string; color?: string; negrita?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', marginTop: 9 }}>
+      <div style={{ display: 'flex', width: 9, height: 9, backgroundColor: LIME, marginTop: 8, marginRight: 12, flexShrink: 0 }} />
+      <div style={{ fontSize: 20, color: color ?? DARK, lineHeight: 1.3, fontWeight: negrita ? 700 : 400 }}>{texto}</div>
     </div>
   );
 }
@@ -69,72 +81,66 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const conCredito = d.credito > 0;
   const logoW = Math.round(60 * LOGO_TROL_RATIO);
 
-  const mini = { display: 'flex', flexDirection: 'column' as const, backgroundColor: CREAM, padding: '20px 22px', flexGrow: 1, flexBasis: 0 };
-  const miniLbl = { fontSize: 19, fontWeight: 700, color: GRAY, letterSpacing: 1.5 };
-  const miniTxt = { fontSize: 20, color: DARK, marginTop: 8, lineHeight: 1.25 };
+  const rentaTxt = d.flujo >= 0
+    ? `La renta te deja +${mx(d.flujo)} al mes, ya pagado el crédito`
+    : `Completas ${mx(-d.flujo)} al mes de la retención del crédito`;
 
   return new ImageResponse(
     (
       <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', fontFamily: 'Inter' }}>
-        {/* ---- banda ---- */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: DARK, padding: '26px 56px' }}>
+        {/* ---- banda: solo quién (el inmueble vive en La Propuesta) ---- */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: DARK, padding: '24px 56px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={LOGO_TROL_BLANCO} width={logoW} height={60} alt="" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <div style={{ fontSize: 26, fontWeight: 700, color: LIME }}>{clientes}</div>
-            <div style={{ fontSize: 20, color: '#C9CCD0', marginTop: 4 }}>{`${d.desarrollo}${d.zona ? ` · ${d.zona}` : ''}`}</div>
-          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: LIME }}>{clientes}</div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', padding: '0 56px 10px', flexGrow: 1 }}>
-          {/* ---- HOY ---- */}
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', padding: '0 56px 8px', flexGrow: 1 }}>
+          {/* ---- TU AHORRO, HOY ---- */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <Etiqueta t="Hoy" />
+            <Etiqueta t="Tu ahorro, hoy" />
             <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 10 }}>
-              <div style={{ fontSize: 64, fontWeight: 700, color: DARK }}>{mxMiles(d.ssvTotal)}</div>
-              <div style={{ fontSize: 24, color: GRAY, marginLeft: 18 }}>tu ahorro Infonavit, detenido</div>
+              <div style={{ fontSize: 58, fontWeight: 700, color: DARK }}>{mxMiles(d.ssvTotal)}</div>
+              <div style={{ fontSize: 23, color: GRAY, marginLeft: 16 }}>detenidos en tu subcuenta del Infonavit</div>
             </div>
           </div>
 
-          {/* ---- EL PLAN ---- */}
+          {/* ---- LA PROPUESTA ---- */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <Etiqueta t="El plan" />
-            <div style={{ fontSize: 30, fontWeight: 700, color: DARK, marginTop: 10, lineHeight: 1.2 }}>
-              {`Usarlo de enganche: ${d.desarrollo}`}
+            <Etiqueta t="La propuesta" />
+            <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 10 }}>
+              <div style={{ fontSize: 28, color: DARK }}>Comprar un inmueble de</div>
+              <div style={{ fontSize: 38, fontWeight: 700, color: DARK, marginLeft: 12 }}>{mxMiles(d.op.esc)}</div>
             </div>
-            <div style={{ fontSize: 22, color: GRAY, marginTop: 6 }}>
-              Se pone en renta · no lo habitas · tú decides cuándo vender
+            <div style={{ fontSize: 27, color: DARK, marginTop: 2 }}>usando tu ahorro como enganche.</div>
+            <div style={{ fontSize: 20, color: GRAY, marginTop: 8 }}>
+              {`${d.desarrollo}${d.zona ? ` · ${d.zona}` : ''} — se pone en renta, tú decides cuándo vender`}
             </div>
           </div>
 
-          {/* ---- MIENTRAS ES TUYO ---- */}
+          {/* ---- ASÍ SE VERÍA ---- */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <Etiqueta t="Mientras es tuyo" />
-            <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 12 }}>
-              <div style={{ fontSize: 40, fontWeight: 700, color: d.flujo >= 0 ? DARK : RED }}>{(d.flujo >= 0 ? '+' : '-') + mx(Math.abs(d.flujo))}</div>
-              <div style={{ fontSize: 22, color: GRAY, marginLeft: 12 }}>
-                {d.flujo >= 0 ? '/mes te quedan de la renta' : '/mes completas de tu bolsa'}
-              </div>
-            </div>
-            <div style={{ fontSize: 20, color: GRAY, marginTop: 4 }}>
-              {d.credito > 0 ? `renta ${mx(d.rentaNeta)} ya sin gastos  -  pago del crédito ${mx(d.pmt)}` : `renta ${mx(d.rentaNeta)}, ya sin gastos`}
-            </div>
+            <Etiqueta t="Así se vería" />
             <div style={{ display: 'flex', gap: 14, marginTop: 14 }}>
-              {conCredito && d.aportaciones > 0 ? (
-                <div style={mini}>
-                  <div style={miniLbl}>TU EMPLEADOR</div>
-                  <div style={miniTxt}>sigue aportando a capital del crédito</div>
+              <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, padding: '22px 26px', flexGrow: 1, flexBasis: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 700, color: GRAY, letterSpacing: 1.5 }}>PONES HOY</div>
+                <div style={{ fontSize: 40, fontWeight: 700, color: DARK, marginTop: 6 }}>{d.notCliente > 0 ? mxMiles(d.notCliente) : '$0'}</div>
+                <div style={{ fontSize: 19, color: GRAY, marginTop: 2 }}>{d.notCliente > 0 ? 'gastos notariales, una sola vez' : 'de tu bolsillo'}</div>
+                <div style={{ display: 'flex', width: 30, height: 2, backgroundColor: '#C9CCD0', marginTop: 14, marginBottom: 10 }} />
+                <div style={{ fontSize: 19, color: DARK, lineHeight: 1.35 }}>
+                  {conCredito
+                    ? `La compra la pagan tu subcuenta (${mxMiles(d.op.saldo_apl)}) y un crédito Infonavit (${mxMiles(d.credito)})`
+                    : `La compra la paga tu subcuenta (${mxMiles(d.op.saldo_apl)})`}
                 </div>
-              ) : null}
-              {conCredito ? (
-                <div style={mini}>
-                  <div style={miniLbl}>FISCAL</div>
-                  <div style={miniTxt}>los intereses del crédito son deducibles</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, padding: '22px 26px', flexGrow: 1.35, flexBasis: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 700, color: GRAY, letterSpacing: 1.5 }}>MIENTRAS ES TUYO</div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
+                  <Punto texto={rentaTxt} color={d.flujo >= 0 ? DARK : RED} negrita />
+                  {conCredito && d.aportaciones > 0 ? <Punto texto="Tu empleador sigue abonando a capital" /> : null}
+                  {conCredito ? <Punto texto="Los intereses son deducibles de ISR" /> : null}
+                  <Punto texto="El inmueble gana valor con el tiempo*" />
                 </div>
-              ) : null}
-              <div style={mini}>
-                <div style={miniLbl}>PLUSVALÍA</div>
-                <div style={miniTxt}>el inmueble completo gana valor*</div>
               </div>
             </div>
           </div>
@@ -148,23 +154,23 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
                 ['2', 'Reunir documentos'],
                 ['3', 'Firmar y poner en renta'],
               ].map(([n, t]) => (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', backgroundColor: CREAM, padding: '16px 20px', flexGrow: 1, flexBasis: 0 }}>
-                  <div style={{ fontSize: 30, fontWeight: 700, color: '#B5BB9B', marginRight: 14 }}>{n}</div>
-                  <div style={{ fontSize: 20, color: DARK, lineHeight: 1.25 }}>{t}</div>
+                <div key={n} style={{ display: 'flex', alignItems: 'center', backgroundColor: CREAM, padding: '14px 20px', flexGrow: 1, flexBasis: 0 }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#B5BB9B', marginRight: 14 }}>{n}</div>
+                  <div style={{ fontSize: 19, color: DARK, lineHeight: 1.25 }}>{t}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* ---- AL VENDER ---- */}
-        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '30px 56px 26px' }}>
+        {/* ---- AL VENDER: el héroe ---- */}
+        <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: DARK, padding: '28px 56px 24px' }}>
           <div style={{ fontSize: 26, color: '#C9CCD0' }}>{`Al vender a ${d.h} meses recibes`}</div>
           <div style={{ fontSize: 92, fontWeight: 700, color: LIME, lineHeight: 1.05, marginTop: 2 }}>{mxMiles(d.efectivo)}</div>
           <div style={{ fontSize: 21, color: '#9DA1A6', marginTop: 6 }}>ya liquidado el crédito y pagados los costos de venta</div>
           {d.ventajaCorte >= UMBRAL_VENTAJA ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 22, marginBottom: 16 }} />
+              <div style={{ display: 'flex', height: 1, backgroundColor: '#43464A', marginTop: 20, marginBottom: 14 }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{ fontSize: 24, color: '#C9CCD0' }}>vs. no hacer nada, contando lo que reinviertes después</div>
                 <div style={{ fontSize: 46, fontWeight: 700, color: '#fff' }}>{'+' + mxMiles(d.ventajaCorte)}</div>
@@ -172,14 +178,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 4 }}>{`medido a ${anios(d.corte)} años`}</div>
             </div>
           ) : null}
-          <div style={{ fontSize: 25, fontWeight: 700, color: LIME, marginTop: 20 }}>
+          <div style={{ fontSize: 25, fontWeight: 700, color: LIME, marginTop: 18 }}>
             ¿Lo revisamos con tus números? Responde este mensaje.
           </div>
         </div>
 
         {/* ---- pie ---- */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 56px', borderTop: `1px solid ${LINEA}` }}>
-          <div style={{ fontSize: 17, color: GRAY, maxWidth: 900 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 56px', borderTop: `1px solid ${LINEA}` }}>
+          <div style={{ fontSize: 17, color: GRAY, maxWidth: 860 }}>
             {`*Escenarios con renta y plusvalía estimadas (${Math.round(Number(d.pal.plusvalia ?? 0) * 100)}% anual): supuestos, no promesas. El detalle completo va en la propuesta.`}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: DARK }}>Vigencia 30 días</div>

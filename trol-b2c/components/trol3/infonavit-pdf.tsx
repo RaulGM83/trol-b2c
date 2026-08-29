@@ -156,8 +156,8 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         <View style={{ height: 11 }} />
         <Sec t="La propuesta" />
         <Text style={s.actoTxt}>
-          Usar ese ahorro como enganche de un inmueble en {d.desarrollo}{d.zona ? ` (${d.zona})` : ''} que se pone
-          en renta. Tú no lo habitas: es una inversión, y tú decides cuándo venderla y cobrar.
+          Comprar un inmueble de <Text style={{ fontWeight: 700 }}>{mxMiles(d.op.esc)}</Text> en {d.desarrollo}{d.zona ? ` (${d.zona})` : ''},
+          usando tu ahorro como enganche. Se pone en renta; tú no lo habitas: es una inversión, y tú decides cuándo venderla y cobrar.
         </Text>
 
         <View style={{ height: 11 }} />
