@@ -81,10 +81,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const conCredito = d.credito > 0;
   const logoW = Math.round(60 * LOGO_TROL_RATIO);
 
-  const rentaTxt = d.flujo >= 0
-    ? `La renta te deja +${mx(d.flujo)} al mes, ya pagado el crédito`
-    : `Completas ${mx(-d.flujo)} al mes de la retención del crédito`;
-
   return new ImageResponse(
     (
       <div style={{ width: W, height: H, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', fontFamily: 'Inter' }}>
@@ -108,13 +104,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           {/* ---- LA PROPUESTA ---- */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <Etiqueta t="La propuesta" />
-            <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 10 }}>
-              <div style={{ fontSize: 28, color: DARK }}>Comprar un inmueble de</div>
-              <div style={{ fontSize: 38, fontWeight: 700, color: DARK, marginLeft: 12 }}>{mxMiles(d.op.esc)}</div>
-            </div>
-            <div style={{ fontSize: 27, color: DARK, marginTop: 2 }}>usando tu ahorro como enganche.</div>
-            <div style={{ fontSize: 20, color: GRAY, marginTop: 8 }}>
-              {`${d.desarrollo}${d.zona ? ` · ${d.zona}` : ''} — se pone en renta, tú decides cuándo vender`}
+            <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, padding: '20px 26px', marginTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 28, color: DARK }}>Comprar un inmueble de</div>
+                <div style={{ fontSize: 38, fontWeight: 700, color: DARK, marginLeft: 12 }}>{mxMiles(d.op.esc)}</div>
+              </div>
+              <div style={{ fontSize: 27, color: DARK, marginTop: 2 }}>usando tu ahorro como enganche.</div>
+              <div style={{ fontSize: 20, color: GRAY, marginTop: 8 }}>
+                {`${d.desarrollo}${d.zona ? ` · ${d.zona}` : ''} — se pone en renta, tú decides cuándo vender`}
+              </div>
             </div>
           </div>
 
@@ -135,8 +133,28 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, padding: '22px 26px', flexGrow: 1.35, flexBasis: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 700, color: GRAY, letterSpacing: 1.5 }}>MIENTRAS ES TUYO</div>
+                {conCredito ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 19, color: GRAY }}>Renta, ya sin gastos</div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: DARK }}>{mx(d.rentaNeta)}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+                      <div style={{ fontSize: 19, color: GRAY }}>Pago del crédito</div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: DARK }}>{`- ${mx(d.pmt)}`}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTop: '1px solid #C9CCD0' }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: DARK }}>{d.flujo >= 0 ? 'Te quedan al mes' : 'Completas al mes'}</div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: d.flujo >= 0 ? DARK : RED }}>{`${d.flujo >= 0 ? '+' : '-'}${mx(Math.abs(d.flujo))}`}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <div style={{ fontSize: 19, color: GRAY }}>Renta a tu favor, ya sin gastos</div>
+                    <div style={{ fontSize: 19, fontWeight: 700, color: DARK }}>{`+${mx(d.rentaNeta)}`}</div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
-                  <Punto texto={rentaTxt} color={d.flujo >= 0 ? DARK : RED} negrita />
                   {conCredito && d.aportaciones > 0 ? <Punto texto="Tu empleador sigue abonando a capital" /> : null}
                   {conCredito ? <Punto texto="Los intereses son deducibles de ISR" /> : null}
                   <Punto texto="El inmueble gana valor con el tiempo*" />
@@ -178,8 +196,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 4 }}>{`medido a ${anios(d.corte)} años`}</div>
             </div>
           ) : null}
-          <div style={{ fontSize: 25, fontWeight: 700, color: LIME, marginTop: 18 }}>
-            ¿Lo revisamos con tus números? Responde este mensaje.
+          <div style={{ fontSize: 26, fontWeight: 700, color: LIME, marginTop: 18 }}>
+            ¿Listo para liberar tu saldo Infonavit atorado?
+          </div>
+          <div style={{ fontSize: 21, color: '#C9CCD0', marginTop: 5 }}>
+            Responde este mensaje: te ayudamos con tus dudas.
           </div>
         </div>
 
