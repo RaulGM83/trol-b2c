@@ -244,9 +244,9 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         <View style={{ height: 11 }} />
         <Sec t="Qué sigue" />
         <View style={s.pasos}>
-          <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>1</Text><Text style={s.pasoTxt}>Confirmamos tu saldo real y tu precalificación</Text></View>
-          <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>2</Text><Text style={s.pasoTxt}>Apartas el inmueble</Text></View>
-          <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>3</Text><Text style={s.pasoTxt}>Firmas y se pone en renta</Text></View>
+          <View style={{ flex: 1.2, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>1</Text><Text style={s.pasoTxt}>Confirmar tu saldo en la web de Infonavit y apartar el inmueble</Text></View>
+          <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>2</Text><Text style={s.pasoTxt}>Reunir los documentos</Text></View>
+          <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>3</Text><Text style={s.pasoTxt}>Firmar y poner en renta</Text></View>
         </View>
         <Text style={s.sup}>
           Los números de esta página están redondeados y usan renta{d.rentaEstimada ? ' estimada' : ''} y plusvalía
@@ -256,7 +256,7 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         {extendido ? (
           <View style={s.mapa}>
             <Text style={[s.sup, { color: DARK, fontWeight: 700 }]}>En las siguientes páginas</Text>
-            <Text style={s.sup}>2 · La operación al detalle y qué recibirías según cuándo vendas   ·   3 · De dónde sale cada peso, qué pasa después de vender, los supuestos y cómo cobramos</Text>
+            <Text style={s.sup}>2 · La operación al detalle y qué recibirías según cuándo vendas   ·   3 · De dónde sale cada peso, los supuestos y cómo cobramos   ·   4 · Los documentos, paso a paso</Text>
           </View>
         ) : null}
       </View>
@@ -449,6 +449,64 @@ function SecSupuestos({ a, d, comoCobramos }: { a: Any; d: ReturnType<typeof der
   );
 }
 
+// Requisitos del expediente Infonavit (lista de Raul, 29-ago-2026). "(internet)" = lo
+// validamos nosotros en línea. Cuando exista el catálogo de checklists, esta lista vive ahí.
+const DOCS_ARRANCAR: [string, string][] = [
+  ['Identificación oficial', 'INE o pasaporte, a color y al 200%'],
+  ['CURP', 'formato actual'],
+  ['Constancia de Situación Fiscal', 'actual, del SAT'],
+  ['Acta de nacimiento', 'copia actual'],
+  ['Acta de matrimonio', 'si estás casado/a'],
+  ['Comprobante de domicilio', 'no mayor a 3 meses'],
+  ['Tu acceso a Mi Cuenta Infonavit', 'para confirmar saldo y precalificación'],
+];
+const DOCS_JUNTOS: [string, string][] = [
+  ['Solicitud de crédito Infonavit (versión 25)', 'dirección, teléfono, correo y referencias idénticos a los validados'],
+  ['Anexo C y Datos generales', 'los llenamos contigo'],
+  ['Formato SIC y precalificación', 'desde Mi Cuenta Infonavit, con las capturas de inicio (CURP, RFC y NSS)'],
+  ['Taller de orientación Infonavit', 'curso en línea, te guiamos para tomarlo'],
+  ['Validaciones por internet', 'INE, CURP, constancia fiscal y actas: las hacemos nosotros'],
+];
+
+function SecDocumentos({ d }: { d: ReturnType<typeof derivar> }) {
+  return (
+    <View>
+      <Sec t="Qué sigue" />
+      <View style={s.pasos}>
+        <View style={{ flex: 1.2, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>1</Text><Text style={s.pasoTxt}>Confirmar tu saldo en la web de Infonavit y apartar el inmueble</Text></View>
+        <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>2</Text><Text style={s.pasoTxt}>Reunir los documentos</Text></View>
+        <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}><Text style={s.pasoNum}>3</Text><Text style={s.pasoTxt}>Firmar y poner en renta</Text></View>
+      </View>
+      <View style={{ height: 8 }} />
+      <View style={s.two}>
+        <View style={s.col}>
+          <Sec t="Para arrancar, nos compartes" />
+          {DOCS_ARRANCAR.map(([doc, nota]) => (
+            <View key={doc} style={s.lado}>
+              <View style={s.ladoPunto} />
+              <Text style={s.ladoTxt}><Text style={{ fontWeight: 700 }}>{doc}</Text>{nota ? ` — ${nota}` : ''}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={s.col}>
+          <Sec t="Después, los llenamos juntos" />
+          {DOCS_JUNTOS.map(([doc, nota]) => (
+            <View key={doc} style={s.lado}>
+              <View style={s.ladoPunto} />
+              <Text style={s.ladoTxt}><Text style={{ fontWeight: 700 }}>{doc}</Text>{nota ? ` — ${nota}` : ''}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <Text style={[s.sup, { marginTop: 8 }]}>
+        Si estás casado/a por sociedad conyugal, o el crédito lleva corresidente{d.conyugal ? ' (como en esta propuesta conyugal)' : ''},
+        aplica la misma lista para tu cónyuge o corresidente. Tú no tienes que pelearte con los trámites: los documentos
+        marcados como validaciones los trabajamos nosotros en línea.
+      </Text>
+    </View>
+  );
+}
+
 /* ----------------------------------- Documentos ----------------------------------- */
 
 export function infonavitDoc(a: Any, modo: 'resumen' | 'extendido' = 'resumen') {
@@ -480,6 +538,13 @@ export function infonavitDoc(a: Any, modo: 'resumen' | 'extendido' = 'resumen') 
           <SecDespues d={d} />
           <View style={{ height: 12 }} />
           <SecSupuestos a={a} d={d} comoCobramos />
+        </View>
+        <Pie a={a} />
+      </Page>
+      <Page size="LETTER" style={s.page}>
+        <BandaChica a={a} t="4 · Los documentos, paso a paso" />
+        <View style={s.body}>
+          <SecDocumentos d={d} />
         </View>
         <Pie a={a} />
       </Page>

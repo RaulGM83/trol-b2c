@@ -138,6 +138,23 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               </div>
             </div>
           </div>
+
+          {/* ---- QUÉ SIGUE ---- */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <Etiqueta t="Qué sigue" />
+            <div style={{ display: 'flex', gap: 14, marginTop: 14 }}>
+              {[
+                ['1', 'Confirmar tu saldo y apartar'],
+                ['2', 'Reunir documentos'],
+                ['3', 'Firmar y poner en renta'],
+              ].map(([n, t]) => (
+                <div key={n} style={{ display: 'flex', alignItems: 'center', backgroundColor: CREAM, padding: '16px 20px', flexGrow: 1, flexBasis: 0 }}>
+                  <div style={{ fontSize: 30, fontWeight: 700, color: '#B5BB9B', marginRight: 14 }}>{n}</div>
+                  <div style={{ fontSize: 20, color: DARK, lineHeight: 1.25 }}>{t}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* ---- AL VENDER ---- */}
@@ -155,6 +172,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               <div style={{ fontSize: 19, color: '#9DA1A6', marginTop: 4 }}>{`medido a ${anios(d.corte)} años`}</div>
             </div>
           ) : null}
+          <div style={{ fontSize: 25, fontWeight: 700, color: LIME, marginTop: 20 }}>
+            ¿Lo revisamos con tus números? Responde este mensaje.
+          </div>
         </div>
 
         {/* ---- pie ---- */}
@@ -162,6 +182,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           <div style={{ fontSize: 17, color: GRAY, maxWidth: 900 }}>
             {`*Escenarios con renta y plusvalía estimadas (${Math.round(Number(d.pal.plusvalia ?? 0) * 100)}% anual): supuestos, no promesas. El detalle completo va en la propuesta.`}
           </div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: DARK }}>Vigencia 30 días</div>
         </div>
       </div>
     ),
