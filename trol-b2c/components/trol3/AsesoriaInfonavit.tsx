@@ -658,7 +658,10 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   </tr>
                 </thead>
                 <tbody>
-                  <Fila label="Efectivo total al vender" vals={r.tabla.map((f) => f.efectivo)} fuerte />
+                  <Fila label="Recibe el día de la venta" vals={r.tabla.map((f) => f.recibe_dia)} fuerte />
+                  <Fila indent label="venta estimada, neta de comisión" vals={r.tabla.map((f) => f.venta_estimada - f.comision_venta_total)} />
+                  <Fila indent label="menos saldo del crédito ese día" vals={r.tabla.map((f) => -f.saldo_credito)} />
+                  <Fila label="Neto de todo el periodo (día + rentas + ISR)" vals={r.tabla.map((f) => f.efectivo)} />
                   <Fila indent label="a bajar deuda" vals={r.tabla.map((f) => Math.max(0, f.efectivo) * pal.pct_deuda)} />
                   <Fila indent label="al rendimiento alterno" vals={r.tabla.map((f) => Math.max(0, f.efectivo) * (1 - pal.pct_deuda))} />
                   <Fila label="Valor adicional de la liquidez" vals={r.tabla.map((f) => f.valor_liquidez)} />
@@ -674,6 +677,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               corte de {corteEfectivo} años. Tasa de reinversión combinada: <b>{pct(r.tasa_combinada, 1)}</b>.
             </p>
             <Nota>
+              <b>"Recibe el día de la venta"</b> es el número que ven los documentos del cliente: venta menos comisión y
+              saldo del crédito, sin rentas ni ISR (esos ya se recibieron en el camino y se mencionan aparte). El
+              <b> neto del periodo</b> los incluye y es la base de la reinversión y las comparaciones.
               Bajar deuda es un rendimiento <b>garantizado</b> a la tasa de esa deuda: cuando esa tasa supera al alterno,
               cada peso a deuda vale más que invertido. El supuesto es que la deuda seguiría viva todo el corte; si el
               cliente la pagaría pronto de todos modos, el beneficio real es menor. La venta se modela libre de ISR por
@@ -818,7 +824,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <span className="text-muted">
                     {' · '}{new Date(a.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
                     {a.horizonte ? ` · ${a.horizonte} meses` : ''}
-                    {a.efectivo != null ? ` · recibe ${money(Number(a.efectivo))}` : ''}
+                    {a.efectivo != null ? ` · neto ${money(Number(a.efectivo))}` : ''}
                     {a.ventaja_corte != null ? ` · ventaja ${money(Number(a.ventaja_corte))}` : ''}
                     {a.miembro ? ` · ${a.miembro}` : ''}
                     {a.nota ? ` · ${a.nota}` : ''}
