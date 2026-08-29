@@ -82,11 +82,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           <img src={LOGO_TROL_BLANCO} width={logoW} height={60} alt="" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
             <div style={{ fontSize: 26, fontWeight: 700, color: LIME }}>{clientes}</div>
-            <div style={{ fontSize: 20, color: '#C9CCD0', marginTop: 4 }}>{d.desarrollo}{d.zona ? ` · ${d.zona}` : ''}</div>
+            <div style={{ fontSize: 20, color: '#C9CCD0', marginTop: 4 }}>{`${d.desarrollo}${d.zona ? ` · ${d.zona}` : ''}`}</div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', padding: '0 56px 10px', flexGrow: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', padding: '0 56px 10px', flexGrow: 1 }}>
           {/* ---- HOY ---- */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <Etiqueta t="Hoy" />
@@ -111,13 +111,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <Etiqueta t="Mientras es tuyo" />
             <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 12 }}>
-              <div style={{ fontSize: 40, fontWeight: 700, color: d.flujo >= 0 ? DARK : RED }}>{(d.flujo >= 0 ? '+' : '−') + mx(Math.abs(d.flujo))}</div>
+              <div style={{ fontSize: 40, fontWeight: 700, color: d.flujo >= 0 ? DARK : RED }}>{(d.flujo >= 0 ? '+' : '-') + mx(Math.abs(d.flujo))}</div>
               <div style={{ fontSize: 22, color: GRAY, marginLeft: 12 }}>
                 {d.flujo >= 0 ? '/mes te quedan de la renta' : '/mes completas de tu bolsa'}
               </div>
             </div>
             <div style={{ fontSize: 20, color: GRAY, marginTop: 4 }}>
-              {d.credito > 0 ? `renta ${mx(d.rentaNeta)} ya sin gastos  −  pago del crédito ${mx(d.pmt)}` : `renta ${mx(d.rentaNeta)}, ya sin gastos`}
+              {d.credito > 0 ? `renta ${mx(d.rentaNeta)} ya sin gastos  -  pago del crédito ${mx(d.pmt)}` : `renta ${mx(d.rentaNeta)}, ya sin gastos`}
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 14 }}>
               {conCredito && d.aportaciones > 0 ? (
