@@ -7,3 +7,7 @@ alter table trol3.proyectos_inmobiliarios
   add column if not exists pct_excedente_constructora numeric not null default 0
   check (pct_excedente_constructora >= 0 and pct_excedente_constructora <= 1);
 update trol3.proyectos_inmobiliarios set pct_excedente_constructora = 0.25 where desarrollo ilike 'laureles%';
+
+-- Ajuste 30-ago-2026: el sobrante repartible se calcula DESPUÉS de restar los notariales
+-- adicionales que regala el aliado; sobre ese neto va el % de la constructora (app, mismo
+-- criterio reflejado en el comment de la columna).

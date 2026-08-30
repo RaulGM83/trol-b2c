@@ -269,21 +269,23 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const saldoSinConfirmar = saldo.capa === 'calculado' || saldo.vigente === false;
 
   // PnL interno del aliado (hoja `Interno`). Nunca se comparte con el cliente.
-  // Reglas 29-ago-2026: la comisión del desarrollador se paga sobre el COSTO ALIADO (no sobre
-  // la escrituración), y del excedente sobre el costo interno la constructora puede retener
-  // un porcentaje por inmueble (Laureles: 25%).
+  // Reglas 29/30-ago-2026: la comisión del desarrollador se paga sobre el COSTO ALIADO (no
+  // sobre la escrituración). El sobrante repartible = escrituración − costo aliado − los
+  // notariales adicionales que regalamos; sobre ESE neto la constructora retiene su % por
+  // inmueble (Laureles: 25%).
   const pnl = (() => {
     if (!r || !proyecto || !elegida) return null;
     const costoAliado = proyecto.costo_aliado ?? proyecto.escrituracion;
-    const excedente = proyecto.escrituracion - costoAliado;
+    const bruto = proyecto.escrituracion - costoAliado;
+    const notarialesRegalados = proyecto.aliado_cubre_notariales ? proyecto.notariales_adicionales : 0;
+    const excedente = bruto - notarialesRegalados;
     const aConstructora = excedente * (proyecto.pct_excedente_constructora ?? 0);
     const margen = excedente - aConstructora;
     const comisionDesarrollador = costoAliado * proyecto.comision_desarrollador;
-    const notarialesRegalados = proyecto.aliado_cubre_notariales ? proyecto.notariales_adicionales : 0;
-    const inicio = margen + comisionDesarrollador - notarialesRegalados;
+    const inicio = margen + comisionDesarrollador;
     const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * elegida.horizonte : 0;
     const reventa = aliadoVende ? -elegida.bloques.detalle.comision_venta : 0;
-    return { excedente, aConstructora, margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
+    return { bruto, excedente, aConstructora, margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
       total: inicio + gestion + reventa, sobreEscrituracion: (inicio + gestion + reventa) / proyecto.escrituracion };
   })();
 
@@ -762,11 +764,12 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <table className="w-full">
                     <tbody>
                       <tr className="border-b border-amber-200"><td colSpan={2} className="pt-2 text-[11px] font-bold uppercase text-amber-800">Al inicio · seguro, con liquidez al firmar</td></tr>
-                      <Fila indent label="Excedente sobre el costo interno" vals={[pnl.excedente]} />
-                      {pnl.aConstructora > 0 ? <Fila indent label={`Parte de la constructora (${pct(proyecto?.pct_excedente_constructora ?? 0, 0)} del excedente)`} vals={[-pnl.aConstructora]} negativo /> : null}
+                      <Fila indent label="Escrituración menos costo aliado" vals={[pnl.bruto]} />
+                      {pnl.notarialesRegalados > 0 ? <Fila indent label="Notariales que regalamos al cliente" vals={[-pnl.notarialesRegalados]} negativo /> : null}
+                      <Fila indent label="Sobrante repartible" vals={[pnl.excedente]} />
+                      {pnl.aConstructora > 0 ? <Fila indent label={`Parte de la constructora (${pct(proyecto?.pct_excedente_constructora ?? 0, 0)} del sobrante)`} vals={[-pnl.aConstructora]} negativo /> : null}
                       <Fila indent label="Margen para Trol" vals={[pnl.margen]} />
                       <Fila indent label="Comisión del desarrollador (sobre costo aliado)" vals={[pnl.comisionDesarrollador]} />
-                      <Fila indent label="Notariales que el aliado regala al cliente" vals={[-pnl.notarialesRegalados]} negativo />
                       <Fila fuerte label="Total al inicio" vals={[pnl.inicio]} />
                       <tr className="border-b border-amber-200"><td colSpan={2} className="pt-3 text-[11px] font-bold uppercase text-amber-800">Durante y al final · no garantizado</td></tr>
                       <Fila indent label="Gestión de rentas en el horizonte" vals={[pnl.gestion]} />
