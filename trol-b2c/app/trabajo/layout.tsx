@@ -16,7 +16,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
     <div className="min-h-screen bg-cream">
       <header className="sticky top-0 z-10 border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/trabajo" className="rounded-lg bg-ink px-2 py-0.5 text-lg font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</Link>
+          <Link href="/trabajo" className="rounded-lg bg-ink px-2 py-0.5 text-lg font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></Link>
           <nav className="flex items-center gap-3 text-sm">
             <Link href="/trabajo/hoy" className="rounded-lg px-2 py-1 font-semibold hover:bg-cream">Hoy</Link>
             <Link href="/trabajo" className="rounded-lg px-2 py-1 hover:bg-cream">Clientes</Link>

@@ -17,7 +17,7 @@ type Metodo = 'spei' | 'tarjeta';
 function CheckoutHeader() {
   return (
     <header className="mb-5 flex items-center justify-between">
-      <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span>
+      <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></span>
       <Link href="/mi" className="text-xs text-muted hover:underline">← Mi expediente</Link>
     </header>
   );

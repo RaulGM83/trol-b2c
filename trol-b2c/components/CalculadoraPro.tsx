@@ -98,7 +98,7 @@ export function CalculadoraPro({ semilla, embed = false }: { semilla: SemillaV2;
     <main className={embed ? '' : 'mx-auto max-w-xl px-5 py-6'}>
       {!embed && (<>
       <header className="mb-5 flex items-center gap-2">
-        <span className="text-xl font-extrabold tracking-tight">tr<span className="text-lime">o</span>l</span>
+        <span className="text-xl font-extrabold tracking-tight"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></span>
         <span className="text-xs text-muted">· calculadora pro</span>
         <Link href="/diagnostico" className="ml-auto text-xs font-semibold text-ink hover:underline">
           ← volver al diagnóstico

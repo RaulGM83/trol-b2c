@@ -78,7 +78,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-5">
       <header className="mb-4 flex items-center justify-between">
-        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white">tr<span className="text-lime">o</span>l</span>
+        <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></span>
         <Link href={href('puntos')} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{e.puntos} pts</Link>
       </header>
 

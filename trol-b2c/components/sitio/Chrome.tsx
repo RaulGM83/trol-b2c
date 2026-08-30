@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { LOGO_TROL_BLANCO } from '@/lib/marca/logo';
 
 // Header y footer del sitio público (trol.mx). Se comparten entre las páginas
 // de marketing (app/sitio) y la calculadora pública (/calcula) para que toda
@@ -10,7 +9,7 @@ export function SitioHeader() {
       <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
         <Link href="/" aria-label="El Trol Financiero — inicio">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={LOGO_TROL_BLANCO} alt="El Trol Financiero" className="h-9 w-auto" />
+          <img src="/marca/logo-trol-blanco.svg" alt="El Trol Financiero" className="h-9 w-auto" />
         </Link>
         <nav className="flex items-center gap-5 text-sm text-white/90">
           <Link href="/asesorias" className="hidden hover:text-lime sm:block">
@@ -49,7 +48,7 @@ export function SitioFooter() {
     <footer className="bg-ink text-white/80">
       <div className="mx-auto max-w-5xl px-5 py-10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={LOGO_TROL_BLANCO} alt="El Trol Financiero" className="h-8 w-auto" />
+        <img src="/marca/logo-trol-blanco.svg" alt="El Trol Financiero" className="h-8 w-auto" />
         <div className="mt-6 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             <Link href="/asesorias" className="hover:text-lime">

@@ -53,7 +53,7 @@ export function CalculadoraEspera({ publica = false, campania = 'tako' }: { publ
       {!publica && (
         <header className="mb-6 flex items-center gap-2">
           <span className="text-xl font-extrabold tracking-tight">
-            tr<span className="text-lime">o</span>l
+            <img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" />
           </span>
         </header>
       )}
