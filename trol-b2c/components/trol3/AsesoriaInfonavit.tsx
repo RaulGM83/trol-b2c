@@ -20,6 +20,7 @@ import type {
 export interface Proyecto {
   id: string; clave: number | null; desarrollo: string; zona: string | null; m2: number | null;
   avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number;
+  pct_excedente_constructora?: number | null;
   renta_estimada: boolean; plusvalia: number; plusvalia_validada: boolean;
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
@@ -268,15 +269,21 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const saldoSinConfirmar = saldo.capa === 'calculado' || saldo.vigente === false;
 
   // PnL interno del aliado (hoja `Interno`). Nunca se comparte con el cliente.
+  // Reglas 29-ago-2026: la comisión del desarrollador se paga sobre el COSTO ALIADO (no sobre
+  // la escrituración), y del excedente sobre el costo interno la constructora puede retener
+  // un porcentaje por inmueble (Laureles: 25%).
   const pnl = (() => {
     if (!r || !proyecto || !elegida) return null;
-    const margen = proyecto.escrituracion - (proyecto.costo_aliado ?? proyecto.escrituracion);
-    const comisionDesarrollador = proyecto.escrituracion * proyecto.comision_desarrollador;
+    const costoAliado = proyecto.costo_aliado ?? proyecto.escrituracion;
+    const excedente = proyecto.escrituracion - costoAliado;
+    const aConstructora = excedente * (proyecto.pct_excedente_constructora ?? 0);
+    const margen = excedente - aConstructora;
+    const comisionDesarrollador = costoAliado * proyecto.comision_desarrollador;
     const notarialesRegalados = proyecto.aliado_cubre_notariales ? proyecto.notariales_adicionales : 0;
     const inicio = margen + comisionDesarrollador - notarialesRegalados;
     const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * elegida.horizonte : 0;
     const reventa = aliadoVende ? -elegida.bloques.detalle.comision_venta : 0;
-    return { margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
+    return { excedente, aConstructora, margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
       total: inicio + gestion + reventa, sobreEscrituracion: (inicio + gestion + reventa) / proyecto.escrituracion };
   })();
 
@@ -755,8 +762,10 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <table className="w-full">
                     <tbody>
                       <tr className="border-b border-amber-200"><td colSpan={2} className="pt-2 text-[11px] font-bold uppercase text-amber-800">Al inicio · seguro, con liquidez al firmar</td></tr>
-                      <Fila indent label="Margen sobre el inmueble" vals={[pnl.margen]} />
-                      <Fila indent label="Comisión que paga el desarrollador" vals={[pnl.comisionDesarrollador]} />
+                      <Fila indent label="Excedente sobre el costo interno" vals={[pnl.excedente]} />
+                      {pnl.aConstructora > 0 ? <Fila indent label={`Parte de la constructora (${pct(proyecto?.pct_excedente_constructora ?? 0, 0)} del excedente)`} vals={[-pnl.aConstructora]} negativo /> : null}
+                      <Fila indent label="Margen para Trol" vals={[pnl.margen]} />
+                      <Fila indent label="Comisión del desarrollador (sobre costo aliado)" vals={[pnl.comisionDesarrollador]} />
                       <Fila indent label="Notariales que el aliado regala al cliente" vals={[-pnl.notarialesRegalados]} negativo />
                       <Fila fuerte label="Total al inicio" vals={[pnl.inicio]} />
                       <tr className="border-b border-amber-200"><td colSpan={2} className="pt-3 text-[11px] font-bold uppercase text-amber-800">Durante y al final · no garantizado</td></tr>

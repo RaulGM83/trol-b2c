@@ -391,6 +391,7 @@ export async function guardarProyecto(patch: {
   avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number; renta_estimada: boolean;
   plusvalia: number; plusvalia_validada: boolean; notariales_credito: number; notariales_adicionales: number;
   comision_desarrollador: number; aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
+  pct_excedente_constructora: number;
 }) {
   await requireMiembro();
   if (!patch.desarrollo?.trim()) return fail(new Error('Ponle nombre al desarrollo.'));

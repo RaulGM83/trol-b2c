@@ -8,6 +8,7 @@ type R = { ok: boolean; error?: string };
 export interface ProyectoRow {
   id: string; clave: number | null; desarrollo: string; zona: string | null; m2: number | null;
   avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number;
+  pct_excedente_constructora: number;
   renta_estimada: boolean; plusvalia: number; plusvalia_validada: boolean;
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
@@ -20,7 +21,7 @@ const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-sem
 const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 
 const VACIO: ProyectoRow = {
-  id: '', clave: null, desarrollo: '', zona: '', m2: null, avaluo: 0, escrituracion: 0, costo_aliado: null,
+  id: '', clave: null, desarrollo: '', zona: '', m2: null, avaluo: 0, escrituracion: 0, costo_aliado: null, pct_excedente_constructora: 0,
   renta: 0, renta_estimada: true, plusvalia: 0.06, plusvalia_validada: false, notariales_credito: 0,
   notariales_adicionales: 0, comision_desarrollador: 0, aliado_cubre_notariales: true, disponible: true, notas: '',
 };
@@ -52,7 +53,8 @@ function Editor({ inicial, onListo }: { inicial: ProyectoRow; onListo: () => voi
         <Campo label="Valor de avalúo"><input type="number" value={p.avaluo} onChange={(e) => set('avaluo', n(e.target.value))} className={inp} /></Campo>
         <Campo label="Valor de escrituración" sub="Es el precio que de verdad paga el cliente"><input type="number" value={p.escrituracion} onChange={(e) => set('escrituracion', n(e.target.value))} className={inp} /></Campo>
         <Campo label="Costo para el aliado" sub="INTERNO: no se muestra al cliente"><input type="number" value={p.costo_aliado ?? ''} onChange={(e) => set('costo_aliado', e.target.value === '' ? null : Number(e.target.value))} className={inp} /></Campo>
-        <Campo label="Comisión del desarrollador" sub="INTERNO: proporción, p. ej. 0.03"><input type="number" step="0.01" value={p.comision_desarrollador} onChange={(e) => set('comision_desarrollador', n(e.target.value))} className={inp} /></Campo>
+        <Campo label="Comisión del desarrollador" sub="INTERNO: proporción sobre el COSTO ALIADO, p. ej. 0.03"><input type="number" step="0.01" value={p.comision_desarrollador} onChange={(e) => set('comision_desarrollador', n(e.target.value))} className={inp} /></Campo>
+        <Campo label="Excedente para la constructora" sub="INTERNO: proporción del excedente sobre costo aliado que retiene, p. ej. 0.25"><input type="number" step="0.05" value={p.pct_excedente_constructora} onChange={(e) => set('pct_excedente_constructora', n(e.target.value))} className={inp} /></Campo>
         <Campo label="Renta mensual"><input type="number" value={p.renta} onChange={(e) => set('renta', n(e.target.value))} className={inp} /></Campo>
         <Campo label="Plusvalía anual" sub="Proporción, p. ej. 0.06"><input type="number" step="0.005" value={p.plusvalia} onChange={(e) => set('plusvalia', n(e.target.value))} className={inp} /></Campo>
         <Campo label="Notariales del crédito" sub="Siempre se financian dentro del crédito"><input type="number" value={p.notariales_credito} onChange={(e) => set('notariales_credito', n(e.target.value))} className={inp} /></Campo>
@@ -127,7 +129,8 @@ export function ProyectosInfonavit({ proyectos, supuestos }: { proyectos: Proyec
                 <Dato k="Notariales del crédito" v={money(p.notariales_credito)} />
                 <Dato k="Notariales adicionales" v={money(p.notariales_adicionales)} nota={p.aliado_cubre_notariales ? 'los cubre el aliado' : 'los paga el cliente'} alerta={!p.aliado_cubre_notariales} />
                 <Dato k="Costo aliado (interno)" v={money(p.costo_aliado)} />
-                <Dato k="Comisión desarrollador (interno)" v={`${(p.comision_desarrollador * 100).toFixed(1)}%`} />
+                <Dato k="Comisión desarrollador (interno, s/costo aliado)" v={`${(p.comision_desarrollador * 100).toFixed(1)}%`} />
+                {p.pct_excedente_constructora > 0 ? <Dato k="Excedente a constructora (interno)" v={`${(p.pct_excedente_constructora * 100).toFixed(0)}%`} /> : null}
               </div>
               {p.notas && <p className="mt-3 rounded-lg bg-cream p-2 text-xs text-muted">{p.notas}</p>}
             </>
