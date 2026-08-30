@@ -1,0 +1,16 @@
+-- 090: checklist por oportunidad. Aplicada en Supabase el 29-ago-2026 vía MCP
+-- (supabase_migrations: 090_checklist_oportunidades).
+--
+-- trol3.checklist_catalogo: requisitos por tipo de oportunidad (item, detalle,
+--   quien: 'cliente' = lo comparte el cliente para arrancar / 'equipo' = lo llenamos juntos,
+--   orden, activo). Editable en SQL; sembrado 29-ago con la lista Infonavit de Raul
+--   (compra_inmueble completa) y borradores para pension_hoy, mod40_prospectiva, mod40_retro,
+--   retiro_infonavit_pension y reactivar_derechos.
+-- trol3.oportunidad_checklist: avance por oportunidad (estado pendiente/entregado/validado/
+--   no_aplica, actor_id y updated_at guardan quién y cuándo).
+-- Trigger checklist_en_proceso en trol3.oportunidades: al entrar a en_proceso se generan los
+--   items del catálogo (idempotente, via generar_checklist_oportunidad). Backfill hecho:
+--   56 oportunidades en_proceso → 197 items.
+-- RPC trol3.marcar_checklist(p_item, p_estado, p_nota): palomeo desde la app (solo miembros).
+-- RLS: select para miembros; escritura solo por las funciones security definer.
+-- UI: components/trol3/ChecklistOportunidad.tsx en la pestaña Oportunidades del expediente.

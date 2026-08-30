@@ -8,6 +8,7 @@ import { OportunidadEtapa, EtapaChip, type Motivo, type ProveedorOp } from '@/co
 import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
+import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
@@ -51,10 +52,22 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
   ]);
-  const [{ data: legacyDocs }, { data: credenciales }] = await Promise.all([
+  const [{ data: legacyDocs }, { data: credenciales }, { data: ckOp }, { data: ckCat }] = await Promise.all([
     db.rpc('estado_docs_legacy', { p_persona: params.id }),
     db.rpc('credencial_estado', { p_persona: params.id }),
+    db.from('oportunidad_checklist').select('id,oportunidad_id,item_id,estado').eq('persona_id', params.id),
+    db.from('checklist_catalogo').select('id,item,detalle,quien,orden'),
   ]);
+  // Checklist por oportunidad (090): items del avance + su definición del catálogo, por oportunidad.
+  const ckCatMap = new Map(((ckCat ?? []) as Any[]).map((c) => [c.id, c]));
+  const ckPorOp = new Map<string, ItemChecklist[]>();
+  for (const row of (ckOp ?? []) as Any[]) {
+    const c = ckCatMap.get(row.item_id); if (!c) continue;
+    const arr = ckPorOp.get(row.oportunidad_id) ?? [];
+    arr.push({ id: row.id, item: c.item, detalle: c.detalle ?? null, quien: c.quien, estado: row.estado, orden: c.orden } as Any);
+    ckPorOp.set(row.oportunidad_id, arr);
+  }
+  for (const arr of ckPorOp.values()) arr.sort((a: Any, b: Any) => a.orden - b.orden);
   const [{ data: motivosPerdida }, { data: provsOp }, { data: opHist }] = await Promise.all([
     db.from('catalogo_motivos_perdida').select('codigo,nombre').eq('activo', true).order('orden'),
     db.from('catalogo_proveedores').select('codigo,nombre,lineas').eq('activo', true).order('orden'),
@@ -411,6 +424,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 {o.valor_detalle && Object.keys(o.valor_detalle).length ? <p className="mt-1 text-[11px] text-muted">{Object.entries(o.valor_detalle).map(([k, v]) => `${k}: ${typeof v === 'number' ? fmtNum(v) : String(v)}`).join(' · ')}</p> : null}
                 {o.nota_estado ? <p className="mt-1 text-xs italic text-muted">{o.nota_estado}</p> : null}
                 <OportunidadEtapa op={{ id: o.id, codigo: o.codigo, estado: o.estado, especialista_id: o.especialista_id, motivo_perdida: o.motivo_perdida, proveedor: o.proveedor, contactar_despues: o.contactar_despues }} personaId={e.persona_id} motivos={(motivosPerdida ?? []) as Motivo[]} proveedores={(provsOp ?? []) as ProveedorOp[]} miembros={(miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }))} />
+                {o.estado === 'en_proceso' && ckPorOp.get(o.id)?.length ? <ChecklistOportunidad personaId={e.persona_id} items={ckPorOp.get(o.id)!} /> : null}
                 {histPorOp.get(o.id)?.length ? <details className="mt-1 text-[11px] text-muted"><summary>Historial ({histPorOp.get(o.id)!.length})</summary><ul className="mt-1 space-y-0.5">{histPorOp.get(o.id)!.map((h: Any, i: number) => <li key={i}>{fmtFechaHora(h.created_at)} · {h.estado_anterior ? `${ESTADO_OP_LABEL[h.estado_anterior]} → ` : ''}{ESTADO_OP_LABEL[h.estado_nuevo]}{h.motivo_perdida ? ` · ${motivoNombre.get(h.motivo_perdida) ?? h.motivo_perdida}` : ''}{h.proveedor ? ` · ${provOpNombre.get(h.proveedor) ?? h.proveedor}` : ''}{h.origen === 'hubspot' ? ' · HubSpot' : miembroNombre(h.actor_id) ? ` · ${miembroNombre(h.actor_id)}` : ''}{h.nota ? ` · ${h.nota}` : ''}</li>)}</ul></details> : null}
               </li>
             ))}

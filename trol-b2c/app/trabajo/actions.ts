@@ -37,6 +37,15 @@ export async function cambiarEstadoOportunidad(opId: string, personaId: string, 
 }
 
 /** Credenciales del portal Infonavit (migración 089): cifradas; guardar y revelar dejan bitácora. */
+/** Palomear un item del checklist de una oportunidad (migración 090). */
+export async function marcarChecklist(personaId: string, itemId: string, estado: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('marcar_checklist', { p_item: itemId, p_estado: estado });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
 export async function guardarCredencial(personaId: string, secreto: string, usuario?: string) {
   await requireMiembro();
   const { error } = await t3().rpc('guardar_credencial', { p_persona: personaId, p_secreto: secreto, p_servicio: 'infonavit', p_usuario: usuario ?? null });
