@@ -396,6 +396,11 @@ export async function guardarProyecto(patch: {
   await requireMiembro();
   if (!patch.desarrollo?.trim()) return fail(new Error('Ponle nombre al desarrollo.'));
   if (!(patch.escrituracion > 0)) return fail(new Error('La escrituración tiene que ser mayor que cero.'));
+  // Tolerancia de captura: "25" quiere decir 25% en los campos de proporción.
+  const prop = (v: number) => (v > 1 && v <= 100 ? v / 100 : v);
+  patch.pct_excedente_constructora = prop(patch.pct_excedente_constructora ?? 0);
+  patch.comision_desarrollador = prop(patch.comision_desarrollador ?? 0);
+  if (patch.pct_excedente_constructora < 0 || patch.pct_excedente_constructora > 1) return fail(new Error('El excedente a constructora va de 0 a 1 (o captúralo como %, p. ej. 25).'));
   const { id, ...campos } = patch;
   const fila = { ...campos, updated_at: new Date().toISOString() };
   const db = t3();
