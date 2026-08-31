@@ -7,6 +7,8 @@
 //    solo si ya tuvo ≥1 alta o ≥1 clic. Los links recién creados del equipo
 //    (lore, vero, moni, andrea, raul, elasegurador) no salen. Se fusionan con
 //    `codigos_invitacion` para que se vean en ceros desde el primer día.
+//    Desde 092 el catálogo incluye también los códigos del sitio trol.mx
+//    (sitio, asesorias, blog, calcula), que son el grueso del tráfico medido.
 //
 // 2. Los códigos históricos de campaña (hs_lp_infonavit_v1, sinladalp02-…) son
 //    anteriores al tracking: tienen altas y CERO clics. Su conversión clic→alta
@@ -36,9 +38,9 @@ export type FilaVista = {
 };
 export type CodigoRegistrado = { codigo: string; tipo: string | null; etiqueta: string | null; miembro_id: string | null; activo: boolean | null };
 
-export const TIPOS = ['asesor', 'cliente', 'prensa', 'campania'] as const;
+export const TIPOS = ['asesor', 'cliente', 'sitio', 'prensa', 'campania'] as const;
 export const TIPO_LABEL: Record<string, string> = {
-  asesor: 'Asesor', cliente: 'Cliente', prensa: 'Prensa', campania: 'Campaña',
+  asesor: 'Asesor', cliente: 'Cliente', sitio: 'Sitio', prensa: 'Prensa', campania: 'Campaña',
 };
 
 /** `count(*)` de Postgres llega como bigint → string por PostgREST. */
