@@ -27,38 +27,53 @@ export function FechaTramiteInput({
   value,
   onChange,
   min,
+  max,
   id = 'fecha-tramite',
+  etiqueta = 'Fecha de inicio de trámite',
   hint = 'Todo el proyecto se calcula a esta fecha: ventana, meses de retroactivo, UMA y edad.',
 }: {
   /** ISO YYYY-MM-DD. */
   value: string;
   onChange: (iso: string) => void;
   /**
-   * Fecha más temprana admisible (ISO): el día que el cliente cumple 60, o hoy
-   * si ya los cumplió. El trámite ES el de la pensión y no puede ser antes. El
-   * motor aplica el mismo piso; esto solo evita que el picker deje pedirlo.
+   * Fecha más temprana admisible (ISO). En el proyecto Mod 40 es el día que
+   * cumple 60 (ahí el trámite ES el de la pensión); en la pestaña Ley 73 es
+   * hoy, porque ahí la fecha solo marca el arranque de la cotización. El motor
+   * aplica el mismo piso; esto solo evita que el picker deje pedirlo.
    */
   min?: string;
+  /**
+   * Fecha más tardía admisible (ISO). Solo la usa la pestaña Ley 73: el
+   * arranque no puede caer después del retiro. El motor no la recorta —
+   * `fechaRetiro` trae el "−1 día" del Excel y recortar ahí robaba un día de
+   * línea de captura—, así que el tope vive aquí.
+   */
+  max?: string;
   id?: string;
+  /** Encabezado del control. La pestaña Ley 73 lo llama "inicio del plan". */
+  etiqueta?: string;
   hint?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
-        Fecha de inicio de trámite
+        {etiqueta}
       </label>
       <input
         id={id}
         type="date"
         value={value}
         min={min}
+        max={max}
         // Una fecha vacía dejaría el proyecto sin ancla: se ignora el borrado.
         // Una anterior al piso tampoco entra: el picker la bloquea, pero un
         // teclado puede colarla.
         onChange={(e) => {
           const v = e.target.value;
           if (!v) return;
-          onChange(min && v < min ? min : v);
+          if (min && v < min) return onChange(min);
+          if (max && v > max) return onChange(max);
+          onChange(v);
         }}
         className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm tabular-nums"
       />

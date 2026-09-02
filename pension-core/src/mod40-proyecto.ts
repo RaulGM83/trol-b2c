@@ -294,8 +294,11 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     const base = computeLey73({
       ...entrada,
       // El escenario base se mide a la MISMA fecha de trámite: comparar "con
-      // proyecto" en 2027 contra "sin proyecto" hoy sería tramposo.
+      // proyecto" en 2027 contra "sin proyecto" hoy sería tramposo. Aquí las
+      // dos fechas de Ley 73 colapsan en una: en este producto se paga y se
+      // pensiona el mismo día.
       hoy: fechaTramite,
+      fechaTramite,
       palancas: {
         ...palancas,
         edadRetiro: edadProyecto,

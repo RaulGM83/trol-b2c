@@ -327,9 +327,21 @@ function Calc73Panel({
   const set = <K extends keyof Palancas>(k: K, v: Palancas[K]) =>
     setPalancas((p) => ({ ...p, [k]: v }))
 
+  // Fecha de arranque del plan: el día en que se inscribe a Mod 40/10. NO es la
+  // del retiro (esa la fija la edad) y aquí no hay piso de 60 como en la
+  // pestaña Mod 40: inscribirse a los 58 y seguir cotizando es justo lo que
+  // esta pestaña modela. Moverla pasa semanas del tramo futuro al retroactivo
+  // sin cambiar el total, y con eso las dos pestañas cobran la misma línea.
+  const hoyIso = useMemo(() => isoFecha(new Date()), [])
+  const [fechaTramiteIso, setFechaTramiteIso] = useState(hoyIso)
+  const fechaTramite = useMemo(
+    () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(hoyIso) ?? new Date(),
+    [fechaTramiteIso, hoyIso],
+  )
+
   const entrada = useMemo(
-    () => ({ perfil, saldos, salario_60m, palancas }),
-    [perfil, saldos, salario_60m, palancas],
+    () => ({ perfil, saldos, salario_60m, palancas, fechaTramite }),
+    [perfil, saldos, salario_60m, palancas, fechaTramite],
   )
   const r = useMemo(() => computeLey73(entrada), [entrada])
 
@@ -377,6 +389,7 @@ function Calc73Panel({
       negativa: r.negativa,
     },
     palancas: [
+      { label: "Fecha de inicio del plan", value: isoFecha(d.fechaTramite) },
       { label: "Edad de retiro", value: `${palancas.edadRetiro} años` },
       {
         label: "Cotización futura",
@@ -537,6 +550,28 @@ function Calc73Panel({
       referencia={<DatosCliente semilla={semilla} />}
       palancas={
         <>
+          <FechaTramiteInput
+            id="l73-fecha-tramite"
+            value={fechaTramiteIso}
+            min={hoyIso}
+            max={isoFecha(d.fechaRetiro)}
+            onChange={setFechaTramiteIso}
+            etiqueta="Fecha de inicio del plan"
+            hint={
+              r.aplicaRetroHoy
+                ? "El día que se inscribe a Modalidad 40/10. La línea de captura cubre de la baja hasta aquí; de ahí al retiro se cotiza mes a mes. Moverla no cambia las semanas al retiro, cambia de qué lado se pagan."
+                : "El día que arranca la cotización. De ahí al retiro se paga mes a mes."
+            }
+          />
+          {fechaTramiteIso !== hoyIso && (
+            <button
+              type="button"
+              onClick={() => setFechaTramiteIso(hoyIso)}
+              className="-mt-1 w-fit text-xs font-semibold underline"
+            >
+              Volver a hoy
+            </button>
+          )}
           <SelectorEdad
             edades={edades}
             value={palancas.edadRetiro}

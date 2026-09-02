@@ -67,30 +67,48 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const pct = palancas.pctTiempoCotizando; // C24
   const salarioMod40 = palancas.salarioMod40; // C26
 
-  // H6: última cotización (si está empleado, hoy)
+  // Arranque del plan: la inscripción a Mod 40/10. Default `hoy`, y con eso el
+  // cálculo es idéntico al de siempre. Lo único que se recorta aquí es el
+  // pasado —no se firma ayer—; `detalle.fechaTramite` dice con cuál corrió.
+  //
+  // El tope superior NO se recorta contra `fechaRetiro`: esa fecha trae el "−1
+  // día" del Excel (D22), así que cuando el cliente se pensiona a su edad de
+  // hoy queda un día ANTES que hoy y recortar ahí acortaba la línea de captura
+  // un día. El límite lo pone la UI con `max`, y el tramo futuro se protege
+  // abajo con `diasFuturos`.
+  const fechaPedida = entrada.fechaTramite ?? hoy;
+  const fechaTramite = diasEntre(hoy, fechaPedida) < 0 ? hoy : fechaPedida;
+  /** Días de cotización futura: del arranque al retiro, nunca negativos. */
+  const diasFuturos = Math.max(0, diasEntre(fechaTramite, fechaRetiro));
+
+  // H6: última cotización (si está empleado, la fecha de arranque)
   const ultimaCotValida = parseISO(perfil.fechas.ultima_cotizacion_valida);
   const ultimaCotMod40 = perfil.fechas.ultima_cotizacion_mod40
     ? parseISO(perfil.fechas.ultima_cotizacion_mod40)
     : null;
   const ultimaCot =
     perfil.status_empleo === 'empleado'
-      ? hoy
+      ? fechaTramite
       : ultimaCotMod40 && ultimaCotMod40 > ultimaCotValida
         ? ultimaCotMod40
         : ultimaCotValida;
 
-  // C30/D31: Mod40 retroactivo hoy
-  const aplicaRetroHoy = perfil.aplica_mod40 && diasEntre(hoy, ultimaCot) < 0;
-  const semanasRecuperablesRetro = aplicaRetroHoy ? diasEntre(ultimaCot, hoy) / 7 : 0; // D31
+  // C30/D31: Mod40 retroactivo a la fecha de arranque
+  const aplicaRetroHoy = perfil.aplica_mod40 && diasEntre(fechaTramite, ultimaCot) < 0;
+  const semanasRecuperablesRetro = aplicaRetroHoy
+    ? diasEntre(ultimaCot, fechaTramite) / 7
+    : 0; // D31
   const recuperaRetro = aplicaRetroHoy && palancas.recuperarSemanasMod40Retro; // C33
 
   // D16: semanas vigentes hoy
   const sem = perfil.semanas;
   const semanasVigentes = sem.cotizadas - sem.descontadas + sem.recuperadas;
 
-  // D36: semanas al retiro
+  // D36: semanas al retiro. El tramo futuro arranca en `fechaTramite`, no en
+  // `hoy`: si no, el hueco entre hoy y la inscripción contaría DOS veces —una
+  // como retroactivo pagado y otra como cotización futura.
   const semanasRetiro =
-    (diasEntre(hoy, fechaRetiro) * pct) / 7 +
+    (diasFuturos * pct) / 7 +
     semanasVigentes +
     (recuperaRetro ? semanasRecuperablesRetro : 0) +
     (palancas.recuperarSemanasDescontadas ? sem.descontadas - sem.recuperadas : 0) +
@@ -98,7 +116,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
 
   // ---- Promedios salariales ponderados (K3..K13) ----
   const mesesFuturos = Math.min(
-    Math.round((diasEntre(hoy, fechaRetiro) / DIAS_MES) * pct),
+    Math.round((diasFuturos / DIAS_MES) * pct),
     MESES_BASE_250,
   ); // K4
   const mesesRetroSal = Math.min(
@@ -115,7 +133,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const smPasado = prom(salario_60m.map((m) => m.salario_minimo), mesesPasados); // K9
 
   // Serie retro (N/S): salario y salario mínimo por mes retroactivo
-  const serieRetro = mesesRetro(hoy, ultimaCot);
+  const serieRetro = mesesRetro(fechaTramite, ultimaCot);
   const salarioRetroMes = (m: Date) =>
     palancas.salarioCotizacionRetro === 'MINIMO'
       ? Math.max(porAnio(SALARIO_MINIMO, m.getUTCFullYear()), perfil.salario_diario_registrado) // N: MÍNIMO
@@ -151,7 +169,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   // Reactivar exige REINGRESAR al régimen: incluso en la fracc. I (0 semanas
   // extra) el reconocimiento ocurre "al momento de la reinscripción". Con
   // pct=0 no vuelve a cotizar, así que no reactiva aunque el gap sea corto.
-  const semanasFuturas = (diasEntre(hoy, fechaRetiro) * pct) / 7;
+  const semanasFuturas = (diasFuturos * pct) / 7;
   const reactiva =
     perfil.conserva_derechos || (pct > 0 && semanasFuturas >= semanasParaReactivar);
   const pierdeConservacion = !reactiva;
@@ -218,7 +236,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   if (recuperaRetro) {
     const lineas = lineasCapturaMod40({
       ultimaCotizacion: ultimaCot,
-      fechaTramite: hoy,
+      fechaTramite,
       umas: 25,
       // 'MINIMO' hace que el salario del tramo no sea plano: va mes a mes.
       sdiPorMes:
@@ -241,7 +259,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   // ---- Costo estrategia futura (V..AB → D50, D53, D54) ----
   const mesesFuturosSerie: Date[] = [];
   for (let i = 1; i <= MAX_MESES_SERIE_FUTURA; i++) {
-    const v = addMeses(hoy, i); // V
+    const v = addMeses(fechaTramite, i); // V
     if (diasEntre(v, fechaRetiro) <= 0) break;
     mesesFuturosSerie.push(v);
   }
@@ -326,6 +344,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       pensionMinima,
       pensionMaxima,
       advertenciaConservacion,
+      fechaTramite,
     },
     retro,
     aplicaRetroHoy,

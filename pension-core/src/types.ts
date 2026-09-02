@@ -101,6 +101,20 @@ export interface EntradaCalculo {
   /** Fecha de cálculo (default: hoy). Fijarla permite tests reproducibles. */
   hoy?: Date;
   /**
+   * Fecha en que ARRANCA el plan: la inscripción a Modalidad 40/10. Default
+   * `hoy`. De ella cuelgan el tramo retroactivo (la línea cubre de la baja a
+   * esta fecha) y el arranque de la cotización futura, que corre de aquí al
+   * retiro. Separarla de `hoy` es lo que deja preguntar "¿y si me inscribo en
+   * marzo?" sin contar dos veces el hueco: lo que entra al retro sale del
+   * futuro. No la confundas con `fechaRetiro`, que la fija la edad.
+   *
+   * En el proyecto Mod 40 (`computeProyectoMod40`) esta fecha es ADEMÁS la del
+   * retiro —ahí se paga y se pensiona el mismo día— y por eso allá lleva piso
+   * en los 60 años. Aquí no: inscribirse a Mod 40 a los 58 y seguir cotizando
+   * es exactamente el caso que esta pestaña modela.
+   */
+  fechaTramite?: Date;
+  /**
    * Serie INPC para las actualizaciones de la línea de captura del Mod 40.
    * El servidor la lee de `trol3.inpc_mensual`; sin ella el motor usa el
    * fallback embebido de `inpc.ts`, que puede ir un mes atrás del INEGI.
@@ -173,6 +187,12 @@ export interface ResultadoLey73 {
     pensionMinima: number;
     pensionMaxima: number;
     advertenciaConservacion: boolean;
+    /**
+     * La fecha de arranque con la que DE VERDAD se calculó, ya recortada al
+     * rango válido (nunca antes de hoy ni después del retiro). La UI la compara
+     * con la que eligió el asesor para avisar si se movió.
+     */
+    fechaTramite: Date;
   };
   /** Mod40 retroactivo (si aplica y se activó la palanca). */
   retro: DesgloseRetro | null;

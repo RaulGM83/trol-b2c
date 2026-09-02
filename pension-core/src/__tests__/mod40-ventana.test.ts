@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
+import { computeLey73 } from '../ley73';
 import { computeProyectoMod40 } from '../mod40-proyecto';
 import { modalidadDeRegistro, ventanaMod40, type RegistroHistorialMod40 } from '../mod40-ventana';
 import type { EntradaCalculo, Palancas } from '../types';
@@ -420,5 +421,72 @@ describe('fecha de trámite y edad van juntas', () => {
     const topeMensual = 2933.75 * 30.1; // 25 UMA 2026 × días de pensión
     expect(viejo.conProyecto.pensionMensual).toBeGreaterThan(0);
     expect(viejo.conProyecto.pensionMensual).toBeLessThan(topeMensual);
+  });
+});
+
+// ============================================================================
+// 6. Ley 73: la fecha de arranque del plan
+//
+// En esta pestaña la fecha de trámite NO es la del retiro (esa la fija la
+// edad): es el día en que se inscribe a Mod 40/10. De ella cuelgan el tramo
+// retroactivo y el arranque de la cotización futura. Lo que protege este
+// bloque es que el hueco entre hoy y la inscripción no se cuente dos veces.
+// ============================================================================
+
+describe('Ley 73 — fecha de arranque del plan', () => {
+  const conRetro = { ...palancasExcel73, recuperarSemanasMod40Retro: true };
+  const plan = (iso?: string) =>
+    computeLey73({ ...base, palancas: conRetro, ...(iso ? { fechaTramite: d(iso) } : {}) });
+
+  it('omitirla deja el cálculo idéntico al de siempre', () => {
+    const sinFecha = plan();
+    const enHoy = plan('2026-06-08'); // = HOY_EXCEL
+    expect(JSON.stringify(sinFecha)).toBe(JSON.stringify(enHoy));
+    expect(sinFecha.detalle.fechaTramite.getTime()).toBe(HOY_EXCEL.getTime());
+  });
+
+  it('mover el arranque NO cambia las semanas al retiro: solo de qué lado caen', () => {
+    // Con pct = 1 el cliente cotiza todo el tramo, se pague retroactivo o mes a
+    // mes. Las semanas totales son las mismas; lo que se mueve es la frontera.
+    // Si el motor contara el hueco dos veces (retro + futuro), esto crecería.
+    // MOJA se retira el 2026-11-07, así que las tres fechas caen dentro.
+    const a = plan('2026-06-08');
+    const b = plan('2026-09-08');
+    const c = plan('2026-11-01');
+    expect(b.detalle.semanasRetiro).toBeCloseTo(a.detalle.semanasRetiro, 6);
+    expect(c.detalle.semanasRetiro).toBeCloseTo(a.detalle.semanasRetiro, 6);
+    // Y el costo sí se mueve de bolsillo: más línea de captura, menos mensualidades.
+    expect(b.retro!.total).toBeGreaterThan(a.retro!.total);
+    expect(b.costoEstrategiaFutura).toBeLessThan(a.costoEstrategiaFutura);
+    expect(c.retro!.meses).toBeGreaterThan(b.retro!.meses);
+  });
+
+  it('el retroactivo recuperable crece con la fecha', () => {
+    expect(plan('2026-11-01').semanasRecuperablesRetro).toBeGreaterThan(
+      plan('2026-06-08').semanasRecuperablesRetro,
+    );
+  });
+
+  it('pasado el retiro el tramo futuro es cero, nunca negativo', () => {
+    // El tope lo pone la UI con `max` (no el motor: `fechaRetiro` trae el "−1
+    // día" del Excel y recortar ahí robaba un día de línea). Aquí solo se
+    // protege el piso: un arranque posterior al retiro no resta semanas.
+    const despues = plan('2027-06-08');
+    expect(despues.detalle.semanasRetiro).toBeGreaterThan(0);
+    expect(despues.costoEstrategiaFutura).toBe(0);
+  });
+
+  it('una fecha en el pasado se recorta a hoy', () => {
+    const pasado = plan('2020-01-01');
+    expect(pasado.detalle.fechaTramite.getTime()).toBe(HOY_EXCEL.getTime());
+    expect(JSON.stringify(pasado)).toBe(JSON.stringify(plan()));
+  });
+
+  it('aquí NO hay piso de 60 años: inscribirse a los 59 es el caso normal', () => {
+    // MOJA tiene 59.6 al 2026-06-08. En el proyecto Mod 40 esa fecha se recorre
+    // al cumpleaños 60 porque ahí se pensiona el mismo día; aquí no, porque
+    // inscribirse ahora y seguir cotizando hasta los 60 es justo la estrategia.
+    expect(plan('2026-06-08').detalle.fechaTramite.toISOString().slice(0, 10)).toBe('2026-06-08');
+    expect(computeProyectoMod40({ ...base, fechaTramite: d('2026-06-08') })!.recorridaA60).toBe(true);
   });
 });

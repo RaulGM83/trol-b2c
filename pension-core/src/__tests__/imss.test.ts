@@ -439,13 +439,13 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
   it('la Ley 73 y el proyecto Mod 40 cobran EXACTAMENTE la misma línea', () => {
     // El asesor ve las dos pestañas en la misma pantalla. Si divergen, una de
     // las dos está mintiendo. Comparten `lineasCapturaMod40` justo por esto.
-    // `computeLey73` sigue anclado en `hoy` (la pestaña Ley 73 no tiene fecha
-    // de trámite), así que la paridad se mide poniéndolo en la misma fecha con
-    // la que corrió el proyecto. Si algún día esa pestaña gana su propio
-    // selector, este es el punto que hay que volver a alinear.
+    // Las dos pestañas ya tienen fecha de arranque propia. Con la MISMA fecha
+    // tienen que cobrar exactamente lo mismo: comparten `lineasCapturaMod40`.
+    // (En el proyecto Mod 40 esa fecha es además la del retiro; en Ley 73 es
+    // solo la inscripción, y por eso aquí se pasa explícita.)
     const l73 = computeLey73({
       ...base,
-      hoy: r.fechaTramite,
+      fechaTramite: r.fechaTramite,
       palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
     });
     expect(l73.retro).not.toBeNull();
@@ -463,7 +463,12 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     };
     const palancas = { ...palancasExcel73, recuperarSemanasDescontadas: true };
     const proy = computeProyectoMod40({ ...base, perfil: perfilViejo, palancas })!;
-    const l73 = computeLey73({ ...base, hoy: proy.fechaTramite, perfil: perfilViejo, palancas });
+    const l73 = computeLey73({
+      ...base,
+      fechaTramite: proy.fechaTramite,
+      perfil: perfilViejo,
+      palancas,
+    });
     expect(proy.pagoImss.meses).toBe(60);
     expect(l73.retro!.meses).toBe(60);
     cerca(l73.retro!.total, proy.pagoImss.total, 0);

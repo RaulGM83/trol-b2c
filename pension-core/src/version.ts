@@ -32,7 +32,12 @@
 // `overrides.disponibleAfore`, `retroactivoAlPensionarse` y los ROUND quitados
 // de F10/F12/L12). Mueve los saldos y los valores totales del proyecto Mod 40
 // para quien llamaba a pension-core; la app ya calculaba así.
-export const ENGINE_VERSION = '2026.09.02.2';
+// 2026.09.02.3 — `computeLey73` gana `fechaTramite`: el arranque del plan (la
+// inscripción a Mod 40/10) se separa de `hoy`. La línea de captura cubre de la
+// baja a esa fecha y la cotización futura corre de ahí al retiro, así que el
+// hueco entre hoy y la inscripción ya no puede contarse dos veces. Omitirla
+// deja el cálculo idéntico: los goldens no se movieron.
+export const ENGINE_VERSION = '2026.09.02.3';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.
