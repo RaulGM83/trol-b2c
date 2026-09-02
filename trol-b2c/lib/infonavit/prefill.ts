@@ -12,7 +12,7 @@
 import { computeLey97, conservaValorSSV } from '@trol/pension-core';
 import type { EntradaCalculo, Palancas } from '@trol/pension-core/types';
 import type { TitularInfonavit } from '@trol/pension-core';
-import type { SemillaV2 } from '@/lib/imss/semilla';
+import type { SemillaV2 } from '@trol/pension-core/semilla';
 
 /** El motor trabaja en salario mensual; el IMSS registra salario diario. */
 export const DIAS_MES = 30.4;

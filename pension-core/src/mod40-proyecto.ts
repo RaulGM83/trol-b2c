@@ -57,7 +57,11 @@ export interface EntradaProyecto extends EntradaCalculo {
   edadEscenarioBase?: number;
   /** UMAs a las que se paga el proyecto (default 25 = tope). */
   umasProyecto?: number;
-  /** Semanas extra a sumar al cálculo (C29 de la hoja, ej. semanas por reconocer). */
+  /**
+   * Ajuste de semanas (±) al cálculo (C29 de la hoja): positivas = por
+   * reconocer, negativas = riesgo de no reconocimiento. Aplica también al
+   * escenario base interno. Si se omite, usa palancas.ajusteSemanas.
+   */
   semanasExtra?: number;
   /**
    * Fecha en que se inicia el trámite (default: `hoy`, y a su vez `new Date()`).
@@ -232,7 +236,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
 
   const sem = perfil.semanas;
   const semanasVigentes = sem.cotizadas - sem.descontadas + sem.recuperadas; // C16
-  const semanasExtra = entrada.semanasExtra ?? 0; // C29
+  const semanasExtra = entrada.semanasExtra ?? palancas.ajusteSemanas ?? 0; // C29 / ajuste ±
   // R19. OJO: el Excel suma C14 (descontadas COMPLETAS), lo que doble-cuenta
   // las ya recuperadas. Regla de negocio (Raul, jun-2026): lo recuperable es
   // descontadas − recuperadas.
@@ -298,6 +302,9 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
         pctTiempoCotizando: 0,
         recuperarSemanasDescontadas: false,
         recuperarSemanasMod40Retro: false,
+        // El ajuste de semanas es corrección de datos, no estrategia: aplica
+        // también a la base para comparar peras con peras.
+        ajusteSemanas: semanasExtra,
       },
     });
     pensionBase = base.pensionMensual ?? 0;
@@ -317,10 +324,18 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   const rcv = palancas.overrides?.rcv97 ?? saldos.rcv97;
   const sar = palancas.overrides?.sar92 ?? saldos.sar92;
   const inf = palancas.overrides?.infonavit ?? saldos.infonavit;
-  const efectivoSin = round(sar + rcv * 0.3 + inf, -5); // F10 (corregido)
+  // "Disponible AFORE" (ago-2026): un solo número frente al asesor. Mientras
+  // sea estimado = SAR92 + 30% del RCV97; si el asesor captura el dato real
+  // (overrides.disponibleAfore), ese manda.
+  const disponibleAfore = palancas.overrides?.disponibleAfore ?? sar + rcv * 0.3;
+  // SIN redondeo (Raul, jul-2026): el Excel redondea F10 a cien miles
+  // (ROUND(...,-5)), lo que ocultaba el efecto de corregir saldos y
+  // distorsionaba los base. Los saldos pasan exactos.
+  const efectivoSin = disponibleAfore + inf; // F10 (corregido, sin ROUND)
   const efectivoCon = efectivoSin + retiro97 - efectivoNeto; // L10
-  const valorTotalSin = round(valorPensionSin + efectivoSin, -3); // F12
-  const valorTotalCon = round(valorPensionCon + efectivoCon, -3); // L12
+  // F12/L12 sin ROUND(-3): los totales arrastran los saldos exactos.
+  const valorTotalSin = valorPensionSin + efectivoSin; // F12
+  const valorTotalCon = valorPensionCon + efectivoCon; // L12
 
   return {
     fechaTramite,

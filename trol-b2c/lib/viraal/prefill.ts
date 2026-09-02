@@ -6,10 +6,10 @@
 // 24-ago-2026: la fecha de trámite dejó de ser "hoy" a fuerza. El asesor la
 // elige y todo se recalcula a esa fecha; la fecha elegida se congela en los
 // `inputs` de la autorización.
-import type { SerieINPC } from '@/lib/imss/inpc';
-import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
-import type { Palancas } from '@/lib/imss/types';
-import type { SemillaV2 } from '@/lib/imss/semilla';
+import type { SerieINPC } from '@trol/pension-core/inpc';
+import type { RegistroHistorialMod40 } from '@trol/pension-core/mod40-ventana';
+import type { Palancas } from '@trol/pension-core/types';
+import type { SemillaV2 } from '@trol/pension-core/semilla';
 import { construirSnapshot, type SnapshotEscenario, type VentanaSnapshot } from '@/lib/viraal/snapshot';
 
 export type PrefillViraal = Record<string, number | null>;

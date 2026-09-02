@@ -13,12 +13,12 @@
 // camino, que es donde se colarían las diferencias.
 // ============================================================================
 
-import type { SerieINPC } from '@/lib/imss/inpc';
-import { computeProyectoMod40 } from '@/lib/imss/mod40-proyecto';
-import type { RegistroHistorialMod40, VentanaMod40 } from '@/lib/imss/mod40-ventana';
-import { MOTOR_ID, MOTOR_VERSION } from '@/lib/imss/version';
-import type { SemillaV2 } from '@/lib/imss/semilla';
-import type { Palancas, ProyectoMod40 } from '@/lib/imss/types';
+import type { SerieINPC } from '@trol/pension-core/inpc';
+import { computeProyectoMod40 } from '@trol/pension-core/mod40-proyecto';
+import type { RegistroHistorialMod40, VentanaMod40 } from '@trol/pension-core/mod40-ventana';
+import { MOTOR_ID, MOTOR_VERSION } from '@trol/pension-core/version';
+import type { SemillaV2 } from '@trol/pension-core/semilla';
+import type { Palancas, ProyectoMod40 } from '@trol/pension-core/types';
 
 /**
  * Los diez bloques numéricos de `computeProyectoMod40`, sin fecha ni ventana.

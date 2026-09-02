@@ -71,12 +71,25 @@ export interface Palancas {
   usaCreditoInfonavit: boolean;
   /** Ley 97: aportación voluntaria mensual (default 0). */
   ahorroVoluntarioMensual: number;
+  /**
+   * Ajuste de semanas (±) sobre las semanas del cliente: positivas = semanas
+   * por recuperar/reconocer (trámite), negativas = riesgo de que el IMSS no
+   * reconozca algún periodo. Aplica en Ley 73 y en el proyecto Mod40 (vía
+   * semanasExtra). Default 0.
+   */
+  ajusteSemanas?: number;
   /** Overrides de saldos estimados (si el asesor tiene el dato real). */
   overrides?: {
     rcv97?: number;
     sar92?: number;
     infonavit?: number;
     ahorroVoluntario?: number;
+    /**
+     * "Disponible AFORE" real capturado por el asesor (un solo número). Si se
+     * define, reemplaza al estimado SAR92 + 30% del RCV97 en el efectivo del
+     * proyecto Mod40.
+     */
+    disponibleAfore?: number;
   };
 }
 
@@ -165,6 +178,20 @@ export interface ResultadoLey73 {
   retro: DesgloseRetro | null;
   aplicaRetroHoy: boolean;
   semanasRecuperablesRetro: number;
+  /**
+   * Retroactivo al pensionarse: si el cliente ya adquirió el derecho (60 años
+   * + más de 500 semanas + baja) y se pensiona sin volver a cotizar (pct = 0,
+   * sin Mod40 retro), el IMSS le paga la pensión desde la fecha en que
+   * adquirió el derecho, topado a 12 meses. null si no aplica.
+   */
+  retroactivoAlPensionarse: {
+    /** Cuándo cumplió todos los requisitos (la más reciente de: 60 años, baja). */
+    fechaDerechos: Date;
+    /** Meses de retroactivo (tope 12). */
+    meses: number;
+    /** pensionMensual × meses. */
+    monto: number;
+  } | null;
   /** Costo de la estrategia futura de cotización (Mod40/Mod10). */
   costoEstrategiaFutura: number;
   costoMensualPrimerMes: number;

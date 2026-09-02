@@ -12,7 +12,7 @@
 // tramo depende de proyecciones.
 // ============================================================================
 
-import { serieINPCDesdeFilas, type SerieINPC } from '@/lib/imss/inpc';
+import { serieINPCDesdeFilas, type SerieINPC } from '@trol/pension-core/inpc';
 
 interface ClienteINPC {
   from(tabla: string): {

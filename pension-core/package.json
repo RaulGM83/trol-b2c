@@ -11,7 +11,8 @@
     "./tablas": "./src/tablas.ts",
     "./types": "./src/types.ts",
     "./inpc": "./src/inpc.ts",
-    "./mod40-lineas": "./src/mod40-lineas.ts"
+    "./mod40-lineas": "./src/mod40-lineas.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "test": "vitest run",

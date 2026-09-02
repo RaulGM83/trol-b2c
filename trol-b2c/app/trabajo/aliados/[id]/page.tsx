@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { GestionAliado } from '@/components/trol3/GestionAliado';

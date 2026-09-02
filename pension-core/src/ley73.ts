@@ -93,7 +93,8 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     (diasEntre(hoy, fechaRetiro) * pct) / 7 +
     semanasVigentes +
     (recuperaRetro ? semanasRecuperablesRetro : 0) +
-    (palancas.recuperarSemanasDescontadas ? sem.descontadas - sem.recuperadas : 0);
+    (palancas.recuperarSemanasDescontadas ? sem.descontadas - sem.recuperadas : 0) +
+    (palancas.ajusteSemanas ?? 0);
 
   // ---- Promedios salariales ponderados (K3..K13) ----
   const mesesFuturos = Math.min(
@@ -190,6 +191,23 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const pensionMensual = negativa ? null : montoPorSemanas;
   // Solo tiene sentido ofrecerlo cuando la conservación es el ÚNICO obstáculo.
   const pensionSiReactiva = pierdeConservacion && !faltanSemanas ? montoPorSemanas : null;
+
+  // ---- Retroactivo al pensionarse (tope 12 meses) ----
+  // El derecho se adquiere al cumplir TODOS los requisitos: 60 años, más de
+  // 500 semanas y estar dado de baja → la fecha es la más reciente entre
+  // cumplir 60 y la última cotización. Solo aplica si se pensiona sin volver
+  // a cotizar (pct = 0) y sin Mod40 retroactivo (sería contradictorio cobrar
+  // pensión retroactiva por meses que se están pagando al IMSS). Con la
+  // conservación vencida tampoco: `negativa` ya lo cubre.
+  let retroactivoAlPensionarse: ResultadoLey73['retroactivoAlPensionarse'] = null;
+  if (pct === 0 && !recuperaRetro && !negativa && pensionMensual !== null) {
+    const fecha60 = addMeses(fnac, 60 * 12);
+    const fechaDerechos = diasEntre(fecha60, ultimaCot) > 0 ? ultimaCot : fecha60;
+    const meses = Math.min(12, Math.round(diasEntre(fechaDerechos, fechaRetiro) / DIAS_MES));
+    if (meses > 0) {
+      retroactivoAlPensionarse = { fechaDerechos, meses, monto: pensionMensual * meses };
+    }
+  }
 
   // ---- Costo Mod40 retroactivo (P/Q/R → D47..D49) ----
   // Es la MISMA línea de captura que cotiza el proyecto Mod 40, así que sale de
@@ -312,6 +330,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     retro,
     aplicaRetroHoy,
     semanasRecuperablesRetro,
+    retroactivoAlPensionarse,
     costoEstrategiaFutura,
     costoMensualPrimerMes,
     modalidadPrimerMes,

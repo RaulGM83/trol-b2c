@@ -4,7 +4,7 @@
 // Se comparte entre la Mesa Viraal y la pestaña Calculadoras: una sola pieza,
 // un solo copy. Los avisos AVISAN, nunca bloquean (igual que el checklist).
 
-import type { VentanaMod40 } from '@/lib/imss/mod40-ventana';
+import type { VentanaMod40 } from '@trol/pension-core/mod40-ventana';
 
 /**
  * La ventana llega con `Date` cuando viene del motor en vivo (pestaña

@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
 import { AvisosMod40, FechaTramiteInput } from '@/components/trol3/FechaTramite';
-import type { SerieINPC } from '@/lib/imss/inpc';
-import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
-import type { SemillaV2 } from '@/lib/imss/semilla';
+import type { SerieINPC } from '@trol/pension-core/inpc';
+import type { RegistroHistorialMod40 } from '@trol/pension-core/mod40-ventana';
+import type { SemillaV2 } from '@trol/pension-core/semilla';
 import { fechaMinimaTramite, isoFecha, mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
 
 type Prefill = Record<string, number | null>;

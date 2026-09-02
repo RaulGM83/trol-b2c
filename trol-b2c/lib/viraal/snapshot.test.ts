@@ -8,9 +8,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { INPC_MENSUAL, type SerieINPC } from '@/lib/imss/inpc';
-import { MOTOR_ID, MOTOR_VERSION } from '@/lib/imss/version';
-import type { Palancas } from '@/lib/imss/types';
+import { INPC_MENSUAL, type SerieINPC } from '@trol/pension-core/inpc';
+import { MOTOR_ID, MOTOR_VERSION } from '@trol/pension-core/version';
+import type { Palancas } from '@trol/pension-core/types';
 import {
   construirSnapshot,
   recomputarDesdeInputs,

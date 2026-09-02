@@ -12,17 +12,17 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { createClient } from "@/lib/supabase/client"
-import { computeLey73 } from "@/lib/imss/ley73"
-import { computeLey97 } from "@/lib/imss/ley97"
-import type { SerieINPC } from "@/lib/imss/inpc"
-import { computeProyectoMod40 } from "@/lib/imss/mod40-proyecto"
-import type { RegistroHistorialMod40 } from "@/lib/imss/mod40-ventana"
+import { computeLey73 } from "@trol/pension-core/ley73"
+import { computeLey97 } from "@trol/pension-core/ley97"
+import type { SerieINPC } from "@trol/pension-core/inpc"
+import { computeProyectoMod40 } from "@trol/pension-core/mod40-proyecto"
+import type { RegistroHistorialMod40 } from "@trol/pension-core/mod40-ventana"
 import { AvisosMod40, FechaTramiteInput } from "@/components/trol3/FechaTramite"
 import { isoFecha, parseFechaTramite } from "@/lib/viraal/prefill"
-import { addDias, addMeses, DIAS_ANIO } from "@/lib/imss/util"
-import type { SemillaV2 } from "@/lib/imss/semilla"
-import { SALARIO_MINIMO, UMA } from "@/lib/imss/tablas"
-import type { Palancas } from "@/lib/imss/types"
+import { addDias, addMeses, DIAS_ANIO } from "@trol/pension-core/util"
+import type { SemillaV2 } from "@trol/pension-core/semilla"
+import { SALARIO_MINIMO, UMA } from "@trol/pension-core/tablas"
+import type { Palancas } from "@trol/pension-core/types"
 import type {
   PdfEscenarioData,
   PdfFila,
@@ -633,6 +633,40 @@ function Calc73Panel({
             : null
         }
       />
+
+      {/* La conservación de derechos (art. 150/151) es un requisito aparte de
+          las semanas. Hasta hoy la calculadora del asesor no la miraba —esa
+          lógica solo vivía en pension-core, que es lo que ve el cliente en /mi—
+          y las dos pantallas podían contradecirse. */}
+      {r.status === "negativa_sin_reactivacion" && (
+        <Card className="border-2 border-amber-300 bg-amber-50">
+          <CardContent className="pt-6 flex flex-col gap-2">
+            <p className="font-heading font-bold text-base text-amber-900">
+              La negativa es por conservación de derechos, no por semanas
+            </p>
+            <p className="text-sm text-amber-900 leading-snug">
+              Tiene{" "}
+              {(r.razon?.semanasAlRetiro ?? 0).toLocaleString("es-MX")} semanas
+              al retiro —le bastan— pero lleva {r.razon?.gapMeses} meses sin
+              cotizar
+              {r.razon?.finConservacion
+                ? ` y su conservación venció el ${r.razon.finConservacion}`
+                : ""}
+              . Para pensionarse tiene que reingresar al régimen
+              {(r.razon?.semanasParaReactivar ?? 0) > 0
+                ? ` y cotizar ${r.razon?.semanasParaReactivar} semanas más (art. 151 LSS)`
+                : " (art. 151 LSS, fracc. I: el reconocimiento es inmediato al reinscribirse)"}
+              .
+            </p>
+            {r.pensionSiReactiva !== null && (
+              <p className="text-sm text-amber-900">
+                Si reactiva, con este escenario le corresponderían{" "}
+                <b className="tabular-nums">{fmt(r.pensionSiReactiva)}</b> al mes.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {r.retroactivoAlPensionarse && (
         <Card className="border-2 border-[var(--brand-accent)]/60">

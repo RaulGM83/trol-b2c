@@ -1,4 +1,19 @@
-export { ENGINE_VERSION } from './version';
+// ============================================================================
+// @trol/pension-core — el ÚNICO motor de cálculo.
+//
+// Del 15-ago al 2-sep-2026 existió un fork en `trol-b2c/lib/imss/`. Divergió en
+// las dos direcciones y la app terminó importando los dos a la vez: `/mi` y
+// `/calculadora` usaban este paquete (con la conservación de derechos del art.
+// 150/151 y el modelado de la negativa), mientras `/trabajo` y la Mesa Viraal
+// usaban el fork (con `ajusteSemanas`, "disponible AFORE" y los ROUND quitados,
+// pero SIN la conservación). Para la misma persona podían dar respuestas
+// distintas, y de hecho lo hacían.
+//
+// El fork ya no existe. Si mañana hace falta una regla que solo aplique a una
+// superficie, va como PARÁMETRO de entrada, no como copia del archivo.
+// ============================================================================
+
+export { ENGINE_VERSION, MOTOR_ID, MOTOR_VERSION } from './version';
 export * from './types';
 export * from './tablas';
 export { computeLey73 } from './ley73';

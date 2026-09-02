@@ -4,9 +4,9 @@
 // art. 220 da 2025-09-30, así que a día de hoy la ventana está VENCIDA.
 // Sirve para probar que el snapshot congela una ventana que ya no procede.
 
-import type { SalarioMes } from '@/lib/imss/types';
-import type { SemillaV2 } from '@/lib/imss/semilla';
-import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
+import type { SalarioMes } from '@trol/pension-core/types';
+import type { SemillaV2 } from '@trol/pension-core/semilla';
+import type { RegistroHistorialMod40 } from '@trol/pension-core/mod40-ventana';
 
 const salario60m: SalarioMes[] = [
   { mes: 1, salario_diario: 1500, salario_minimo: 248.93 },

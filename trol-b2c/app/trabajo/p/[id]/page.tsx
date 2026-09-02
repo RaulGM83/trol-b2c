@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, fmtHora, fmtFechaHora, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';

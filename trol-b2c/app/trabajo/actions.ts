@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { t3, requireMiembro, type Any } from '@/lib/trol3/server';
 import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib/trol3/documentos';
-import { parseSemillaV2 } from '@/lib/imss/semilla';
+import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/escenario';
 import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';

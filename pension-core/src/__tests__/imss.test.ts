@@ -642,8 +642,11 @@ describe('Proyecto Mod40 — cliente CAFE (Excel corregido)', () => {
   });
 
   it('efectivo sin proyecto usa SAR92 + 30% RCV (regla de negocio, no el 9% del Excel)', () => {
-    // F10 = sar92 24,834 + rcv×0.30 43,774.5 + infonavit 94,737 ≈ 163,346 → 200,000
-    cerca(r.sinProyecto.valorTotal - r.sinProyecto.valorPension, 200000, 0.01);
+    // F10 = sar92 24,834 + rcv×0.30 43,774.5 + infonavit 94,737 = 163,345.5.
+    // EXACTO, sin el ROUND(...,-5) del Excel: redondear a cien miles convertía
+    // esto en 200,000 y hacía invisible el efecto de corregir un saldo — que es
+    // justo para lo que el asesor captura el dato real (Raúl, jul-2026).
+    cerca(r.sinProyecto.valorTotal - r.sinProyecto.valorPension, 163345.5, 0.001);
     cerca(r.sinProyecto.valorPension, 1700000, 0.03);
     cerca(r.conProyecto.valorPension, 4200000, 0.02);
     // Identidad del flujo: resultado = disponible − neto a pagar

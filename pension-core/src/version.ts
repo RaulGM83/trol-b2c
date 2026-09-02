@@ -27,4 +27,24 @@
 // fecha de retiro y el hueco sumaba gratis), y el promedio de 250 semanas se
 // topa a 57 meses. Baja la pensión de todo el que no tenga 60 cumplidos y sube
 // el costo de esos casos.
-export const ENGINE_VERSION = '2026.09.02.1';
+// 2026.09.02.2 — se unifica el motor: `trol-b2c/lib/imss` deja de existir y
+// pension-core absorbe lo que solo vivía en el fork (`ajusteSemanas`,
+// `overrides.disponibleAfore`, `retroactivoAlPensionarse` y los ROUND quitados
+// de F10/F12/L12). Mueve los saldos y los valores totales del proyecto Mod 40
+// para quien llamaba a pension-core; la app ya calculaba así.
+export const ENGINE_VERSION = '2026.09.02.2';
+
+// ============================================================================
+// Identidad de la implementación que produjo un snapshot.
+//
+// Hasta el 2-sep-2026 esto vivía en `trol-b2c/lib/imss/version.ts` porque había
+// DOS implementaciones —pension-core y su fork— y el snapshot tenía que decir
+// cuál corrió. Ya no: hay una sola. `MOTOR_ID` se queda porque los snapshots
+// viejos traen 'trol-b2c/lib/imss' y hay que poder distinguirlos.
+// ============================================================================
+
+/** Implementación concreta que corrió. */
+export const MOTOR_ID = 'pension-core';
+
+/** Lo que se estampa en `trol3.escenarios.inputs.motor_version`. */
+export const MOTOR_VERSION = `${MOTOR_ID}@${ENGINE_VERSION}`;
