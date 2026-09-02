@@ -291,7 +291,12 @@
   // como string, y se estampa en `inputs` junto a pAdmin.
   const hoyLocal=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
   const HOY=hoyLocal();
+  // Piso de la fecha: el trámite es el de la pensión, así que no puede ser antes
+  // de que el cliente cumpla 60. Lo manda la pantalla contenedora en el prefill
+  // (`fechaMinimaTramite`); suelta, la calculadora solo impide el pasado.
+  let MIN=HOY;
   $('fechaTramite').value=HOY;
+  $('fechaTramite').min=MIN;
   const embebida=window.parent!==window;
 
   const IDS=['imss','gest','pApert','tasaCli','plazo','mDxnB','mDxnE','comB','comE','canB','canE',
@@ -365,12 +370,13 @@
     $('pAdmin').value=(''+aUso).replace(/\.0$/,'');
     $('pAdmin').readOnly=(adminManual===null);
     $('tablaFlag').innerHTML=t.hueco?'<span class="flag warn" style="margin-left:4px">tramo sin política</span>':'';
-    const fTram=$('fechaTramite').value||HOY;
-    $('fechaHint').textContent = fTram===HOY
-      ? 'Hoy. Los números de arriba se calcularon a esta fecha y queda congelada en la autorización.'
+    const fTram=$('fechaTramite').value||MIN;
+    const piso = MIN!==HOY ? ` No puede ser antes del ${MIN}: ese día cumple 60.` : '';
+    $('fechaHint').textContent = (fTram===MIN
+      ? 'Trámite y pensión a esta fecha. Los números de arriba se calcularon aquí y queda congelada en la autorización.'
       : (embebida
-          ? `Trámite al ${fTram} (no hoy). La línea de captura y la pensión se recalcularon a esa fecha.`
-          : `Trámite al ${fTram} (no hoy). Captura a mano la línea y la pensión que correspondan a esa fecha.`);
+          ? `Trámite al ${fTram}. La línea de captura y la pensión se recalcularon a esa fecha, que es también la de la pensión.`
+          : `Trámite al ${fTram}. Captura a mano la línea y la pensión que correspondan a esa fecha.`)) + piso;
     $('tablaHint').textContent=adminManual===null
       ? `Tabla: ${aTabla}% para una línea de captura de ${mx(v('imss'))}.`
       : `Ajustado a mano. Tabla diría ${aTabla}%.`;
@@ -455,8 +461,10 @@
   IDS.forEach(id=>$(id).addEventListener('input',()=>{if(id==='aporta')$('aportaR').value=$('aporta').value;render();}));
   $('aportaR').addEventListener('input',()=>{$('aporta').value=$('aportaR').value;render();});
   $('fechaTramite').addEventListener('change',()=>{
-    const f=$('fechaTramite').value;
-    if(!f){$('fechaTramite').value=HOY;return;}
+    let f=$('fechaTramite').value;
+    if(!f){$('fechaTramite').value=MIN;return;}
+    // El picker ya bloquea con `min`, pero un teclado puede colar una anterior.
+    if(f<MIN){f=MIN;$('fechaTramite').value=MIN;}
     // Embebida: el motor de pensiones vive fuera, así que se le pide a la
     // pantalla contenedora que recalcule y vuelva a prellenar.
     if(embebida) parent.postMessage({type:'viraal_fecha', fecha:f}, '*');
@@ -466,7 +474,7 @@
   $('pAdmin').addEventListener('input',()=>{const t=tabla(v('imss')).p; adminManual=Math.min(t, v('pAdmin')); if(v('pAdmin')>t) $('pAdmin').value=t; render();});
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
     const p=PRESETS[b.dataset.preset];for(const k in p)$(k).value=p[k];
-    $('fechaTramite').value=$('fechaTramite').value||HOY;
+    $('fechaTramite').value=$('fechaTramite').value||MIN;
     $('aportaR').value=p.aporta;adminManual=null;last=null;render();
   }));
   $('btnAdmin').addEventListener('click',()=>{
@@ -483,7 +491,13 @@
   });
   window.addEventListener('message',(e)=>{
     const d=e.data||{}; if(d.type!=='viraal_prefill'||!d.payload) return;
-    const p=d.payload; for(const k in p){ if(p[k]===null||p[k]===undefined) continue; const el=$(k); if(el) el.value=p[k]; }
+    const p=d.payload;
+    // No es un campo del formulario: es el piso del date picker.
+    if(typeof p.fechaMinimaTramite==='string'&&p.fechaMinimaTramite){
+      MIN=p.fechaMinimaTramite; $('fechaTramite').min=MIN;
+      if(($('fechaTramite').value||'')<MIN) $('fechaTramite').value=MIN;
+    }
+    for(const k in p){ if(k==='fechaMinimaTramite') continue; if(p[k]===null||p[k]===undefined) continue; const el=$(k); if(el) el.value=p[k]; }
     if('aporta' in p && $('aportaR')) $('aportaR').value=p.aporta;
     adminManual=null; last=null; render();
   });

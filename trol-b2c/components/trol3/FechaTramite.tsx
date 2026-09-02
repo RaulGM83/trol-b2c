@@ -26,12 +26,19 @@ const fmtFecha = (d: Date | string | null) => {
 export function FechaTramiteInput({
   value,
   onChange,
+  min,
   id = 'fecha-tramite',
   hint = 'Todo el proyecto se calcula a esta fecha: ventana, meses de retroactivo, UMA y edad.',
 }: {
   /** ISO YYYY-MM-DD. */
   value: string;
   onChange: (iso: string) => void;
+  /**
+   * Fecha más temprana admisible (ISO): el día que el cliente cumple 60, o hoy
+   * si ya los cumplió. El trámite ES el de la pensión y no puede ser antes. El
+   * motor aplica el mismo piso; esto solo evita que el picker deje pedirlo.
+   */
+  min?: string;
   id?: string;
   hint?: string;
 }) {
@@ -44,8 +51,15 @@ export function FechaTramiteInput({
         id={id}
         type="date"
         value={value}
+        min={min}
         // Una fecha vacía dejaría el proyecto sin ancla: se ignora el borrado.
-        onChange={(e) => e.target.value && onChange(e.target.value)}
+        // Una anterior al piso tampoco entra: el picker la bloquea, pero un
+        // teclado puede colarla.
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) return;
+          onChange(min && v < min ? min : v);
+        }}
         className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm tabular-nums"
       />
       <p className="text-xs text-muted">{hint}</p>

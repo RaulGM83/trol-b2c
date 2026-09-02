@@ -6,7 +6,7 @@ import { AvisosMod40, FechaTramiteInput } from '@/components/trol3/FechaTramite'
 import type { SerieINPC } from '@/lib/imss/inpc';
 import type { RegistroHistorialMod40 } from '@/lib/imss/mod40-ventana';
 import type { SemillaV2 } from '@/lib/imss/semilla';
-import { mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
+import { fechaMinimaTramite, isoFecha, mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
 
 type Prefill = Record<string, number | null>;
 type Autorizacion = {
@@ -75,16 +75,24 @@ export function MesaViraal({
   // Fecha de inicio de trámite: default hoy, la mueve el asesor y todo se
   // recalcula. Se congela en los `inputs` de la autorización.
   const [fechaTramite, setFechaTramite] = useState(hoyIso);
+  // El trámite es el de la pensión: nunca antes de cumplir 60. El motor recorre
+  // igual, pero el picker no debe dejar pedir algo que no va a calcular.
+  const minIso = useMemo(() => {
+    const m = semilla ? fechaMinimaTramite(semilla.perfil.fecha_nacimiento) : null;
+    const iso = m ? isoFecha(m) : hoyIso;
+    return iso > hoyIso ? iso : hoyIso;
+  }, [semilla, hoyIso]);
+  const fechaEfectiva = fechaTramite < minIso ? minIso : fechaTramite;
 
   const datos = useMemo(() => {
     if (!semilla) return null;
-    const f = parseFechaTramite(fechaTramite) ?? parseFechaTramite(hoyIso) ?? new Date();
+    const f = parseFechaTramite(fechaEfectiva) ?? parseFechaTramite(minIso) ?? new Date();
     return mesaViraalDesdeSemilla(semilla, saldosLiquidos, f, {
       historial: historialLaboral,
       limiteInscripcionMod40,
       serieINPC,
     });
-  }, [semilla, saldosLiquidos, fechaTramite, hoyIso, historialLaboral, limiteInscripcionMod40, serieINPC]);
+  }, [semilla, saldosLiquidos, fechaEfectiva, minIso, historialLaboral, limiteInscripcionMod40, serieINPC]);
 
   const variante = datos ? (recuperar && datos.con ? datos.con : datos.sin) : null;
   const prefillActivo: Prefill = variante ? { ...prefill, ...variante.prefill } : prefill;
@@ -92,20 +100,20 @@ export function MesaViraal({
   // El listener de `message` se registra una vez y congelaría los valores del
   // primer render: la autorización guardaría la fecha original aunque el asesor
   // la haya movido. Este ref siempre trae lo de AHORA.
-  const vivo = useRef({ datos, variante, recuperar, fechaTramite, prefillActivo });
-  vivo.current = { datos, variante, recuperar, fechaTramite, prefillActivo };
+  const vivo = useRef({ datos, variante, recuperar, fechaTramite: fechaEfectiva, prefillActivo });
+  vivo.current = { datos, variante, recuperar, fechaTramite: fechaEfectiva, prefillActivo };
 
   useEffect(() => {
     // La fecha viaja al iframe como string: la calculadora la muestra y la
     // arrastra a `inputs`, pero quien la manda es esta pantalla.
     if (listo) {
       ref.current?.contentWindow?.postMessage(
-        { type: 'viraal_prefill', payload: { ...prefillActivo, fechaTramite } },
+        { type: 'viraal_prefill', payload: { ...prefillActivo, fechaTramite: fechaEfectiva, fechaMinimaTramite: minIso } },
         '*',
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recuperar, listo, fechaTramite, datos]);
+  }, [recuperar, listo, fechaEfectiva, minIso, datos]);
 
   useEffect(() => {
     function onMsg(e: MessageEvent) {
@@ -114,7 +122,7 @@ export function MesaViraal({
       if (d.type === 'viraal_ready') {
         setListo(true);
         const v = vivo.current;
-        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: { ...v.prefillActivo, fechaTramite: v.fechaTramite } }, '*');
+        ref.current?.contentWindow?.postMessage({ type: 'viraal_prefill', payload: { ...v.prefillActivo, fechaTramite: v.fechaTramite, fechaMinimaTramite: minIso } }, '*');
       } else if (d.type === 'viraal_height' && d.height) {
         setAlto(Math.max(600, Math.min(4000, d.height + 24)));
       } else if (d.type === 'viraal_fecha' && typeof d.fecha === 'string') {
@@ -198,19 +206,29 @@ export function MesaViraal({
                 {c.meses_retro != null && (
                   <span>
                     Retroactivo: <b className="text-ink">{c.meses_retro} meses</b>
-                    {fechaTramite === hoyIso ? ' (a hoy)' : ` (al ${fechaTramite})`}
+                    {fechaEfectiva === hoyIso ? ' (a hoy)' : ` (al ${fechaEfectiva})`}
                   </span>
                 )}
               </div>
               <div className="mt-3 max-w-xs">
-                <FechaTramiteInput value={fechaTramite} onChange={setFechaTramite} id="viraal-fecha-tramite" />
-                {fechaTramite !== hoyIso && (
+                <FechaTramiteInput
+                  value={fechaEfectiva}
+                  min={minIso}
+                  onChange={setFechaTramite}
+                  id="viraal-fecha-tramite"
+                  hint={
+                    minIso === hoyIso
+                      ? 'Es también la fecha de pensión. Todo el proyecto se calcula ahí: ventana, meses de retroactivo, UMA y semanas.'
+                      : `Es también la fecha de pensión, así que no puede ser antes del ${minIso}, el día que cumple 60.`
+                  }
+                />
+                {fechaEfectiva !== minIso && (
                   <button
                     type="button"
-                    onClick={() => setFechaTramite(hoyIso)}
+                    onClick={() => setFechaTramite(minIso)}
                     className="mt-1 text-xs font-semibold text-ink underline"
                   >
-                    Volver a hoy
+                    {minIso === hoyIso ? 'Volver a hoy' : `Volver al ${minIso}`}
                   </button>
                 )}
               </div>

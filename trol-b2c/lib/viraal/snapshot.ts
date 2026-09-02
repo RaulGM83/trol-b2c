@@ -29,7 +29,7 @@ import type { Palancas, ProyectoMod40 } from '@/lib/imss/types';
  */
 export type ResultadoSnapshot = Omit<
   ProyectoMod40,
-  'fechaTramite' | 'ventana' | 'avisos' | 'lineas'
+  'fechaTramite' | 'fechaMinimaTramite' | 'recorridaA60' | 'ventana' | 'avisos' | 'lineas'
 >;
 
 /**
@@ -120,6 +120,9 @@ function bloquesNumericos(p: ProyectoMod40): ResultadoSnapshot {
     efectivo: p.efectivo,
     multiplicadorPension: p.multiplicadorPension,
     multiplicadorValor: p.multiplicadorValor,
+    // La edad a la que se pensiona ya no es una palanca aparte: es la que se
+    // tiene en `fecha_tramite`. Va en el resultado porque es lo que se imprime.
+    edadProyecto: p.edadProyecto,
   };
 }
 
@@ -154,7 +157,9 @@ export function construirSnapshot(e: EntradaSnapshot): SnapshotEscenario | null 
       motor_id: MOTOR_ID,
       semilla: e.semilla,
       historial,
-      fecha_tramite: iso(e.fechaTramite),
+      // La EFECTIVA, no la pedida: si la pedida caía antes de cumplir 60, el
+      // motor la recorrió, y el snapshot tiene que decir con cuál corrió.
+      fecha_tramite: iso(proy.fechaTramite),
       limite_inscripcion_mod40: e.limiteInscripcionMod40 ?? null,
       palancas: e.palancas,
       umas_proyecto: e.umasProyecto ?? null,

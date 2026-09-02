@@ -338,29 +338,32 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     cerca(r.conProyecto.pensionMensual, 40600, 0.01);
   });
 
-  // ---- GOLDENS v2 (24-ago-2026, líneas de captura día a día) --------------
-  // REVISADO tras restaurar el tope de 60 meses (Raúl, 24-ago noche): NO
-  // vuelven a un valor intermedio. El periodo de MOJA son 34 meses, así que el
-  // tope no muerde ni antes ni ahora — el tope nunca fue lo que los movió.
+  // ---- GOLDENS v3 (2-sep-2026, fecha de trámite = fecha de pensión) -------
+  // MOJA nace 1966-11-08 y la hoja del Excel tramita el 2026-06-08, con 59.58
+  // años. El proyecto ahora se calcula el día que cumple 60 (2026-11-08), que
+  // es cuando de verdad puede pensionarse.
   //
-  // El pago al IMSS y todo lo que cuelga de él (gastos admin, comisión,
-  // financiamiento, total, efectivo neto) se movieron con `lineasCapturaMod40`.
-  // Dos causas, las dos deliberadas:
-  //  1. El tramo ya no llega al MES DE RETIRO sino al MES DE TRÁMITE. MOJA
-  //     tiene 59.58 años y `edadRetiro: 60`, así que el retiro cae ~5 meses
-  //     después: pasó de 39 meses cobrados a 34. Esos 5 meses no son retro —
-  //     se cotizan mes a mes en Mod 40 y hoy salen sólo como aviso.
-  //  2. Los extremos van prorrateados por días y el INPC sale de la serie de
-  //     `trol3.inpc_mensual`, no de la del Excel de junio.
-  // Los valores viejos (cuotaBase 403,175.40 · total 544,420.72 · totalAPagar
-  // 1,040,194.36) quedan aquí escritos a propósito: si algún día se decide
-  // volver a cobrar hasta el retiro, este es el número al que hay que regresar.
-  it('pago al IMSS (I7..I10) — v2 día a día', () => {
-    expect(r.pagoImss.meses).toBe(34);
-    cerca(r.pagoImss.cuotaBase, 333002.5471, 0.001);
-    cerca(r.pagoImss.actualizaciones, 18957.6756, 0.001);
-    cerca(r.pagoImss.recargos, 84072.8237, 0.001);
-    cerca(r.pagoImss.total, 436033.0465, 0.001);
+  // Lo notable: **la pensión y todo el comparativo VUELVEN a los valores del
+  // Excel** (L8 = 40,600 · L9 = 7.9M · F8 = 7,600). No es casualidad. La hoja
+  // ya contaba las semanas hasta la fecha de RETIRO —noviembre— y solo cobraba
+  // hasta junio: ese era el hueco gratis. Al mover el trámite a noviembre, lo
+  // que se cuenta y lo que se cobra por fin son el mismo periodo.
+  //
+  // Lo que se mueve es el COSTO: 39 meses de línea en vez de 34, porque esos
+  // cinco meses ahora se pagan. Historial de este golden, para no volver a
+  // discutirlo:
+  //   · v1 (Excel, meses completos, hasta el retiro): cuota 403,175.40 · total
+  //     544,420.72 · totalAPagar 1,040,194.36.
+  //   · v2 (24-ago, día a día, hasta el trámite en junio): total 436,033.05 —
+  //     con la pensión calculada sobre semanas que no se pagaban.
+  //   · v3 (hoy): total 529,811.12, coherente con esa misma pensión.
+  it('pago al IMSS (I7..I10) — v3, trámite al cumplir 60', () => {
+    expect(r.fechaTramite.toISOString().slice(0, 10)).toBe('2026-11-08');
+    expect(r.pagoImss.meses).toBe(39);
+    cerca(r.pagoImss.cuotaBase, 390301.2613, 0.001);
+    cerca(r.pagoImss.actualizaciones, 25270.355, 0.001);
+    cerca(r.pagoImss.recargos, 114239.5058, 0.001);
+    cerca(r.pagoImss.total, 529811.1221, 0.001);
   });
 
   it('el pago al IMSS es exactamente la línea de captura del desglose', () => {
@@ -373,25 +376,46 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     expect(ultimo.prorrateo).toBeCloseTo((30 - 16) / 30, 9);
   });
 
-  it('avisa que el hueco hasta el retiro NO está cobrado', () => {
-    expect(r.avisos.some((a) => a.includes('cubre hasta la fecha de trámite'))).toBe(true);
+  it('el hueco entre trámite y retiro ya no existe (el bug que se cerró)', () => {
+    // Tramitando el día del Excel —con 59.58 años, que el producto ya no
+    // permite— se cobran 34 meses y la pensión baja a 35,800: es lo que de
+    // verdad compraban esos 34 meses. La hoja mostraba 40,600 cobrando 34,
+    // porque contaba semanas hasta noviembre. La diferencia entre las dos
+    // corridas son exactamente los 5 meses que nadie pagaba.
+    const enJunio = computeProyectoMod40({
+      ...base,
+      palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
+      pensionEscenarioBase: 7639,
+      edadEscenarioBase: 60,
+      permitirMenorDe60: true,
+    })!;
+    expect(enJunio.pagoImss.meses).toBe(34);
+    expect(enJunio.conProyecto.pensionMensual).toBe(35800);
+    expect(r.pagoImss.meses).toBe(enJunio.pagoImss.meses + 5);
+    expect(r.conProyecto.pensionMensual).toBe(40600);
+    // Y ningún aviso de tramo sin cobrar: no queda ninguno.
+    expect(r.recorridaA60).toBe(true);
+    expect(r.avisos.some((a) => a.includes('el día que cumple 60 años'))).toBe(true);
+    expect(r.avisos.some((a) => a.includes('cubre hasta la fecha de trámite'))).toBe(false);
   });
 
-  it('costos del despacho (I13..I16) — v2', () => {
+  it('costos del despacho (I13..I16) — v3', () => {
     expect(r.costos.gestorias).toBe(80000);
-    cerca(r.costos.gastosAdministrativos, 130809.914, 0.001);
-    cerca(r.costos.comisionApertura, 19405.2888, 0.001);
+    cerca(r.costos.gastosAdministrativos, 158943.3366, 0.001);
+    cerca(r.costos.comisionApertura, 23062.6338, 0.001);
   });
 
-  it('financiamiento y total a pagar (I21/I25) — v2', () => {
-    cerca(r.financiamiento.interes, 187882.0063, 0.001);
-    cerca(r.totalAPagar, 854136.3026, 0.001);
+  it('financiamiento y total a pagar (I21/I25) — v3', () => {
+    cerca(r.financiamiento.interes, 223292.4201, 0.001);
+    cerca(r.totalAPagar, 1015115.5596, 0.001);
   });
 
-  it('crédito DXN y efectivo (I26..I28) — v2', () => {
+  it('crédito DXN y efectivo (I26..I28) — v3', () => {
     cerca(r.creditoDxn.credito, 40600 * 9, 0.01); // I26 = L8 × 9 (antes ×8)
-    cerca(r.creditoDxn.retroactivo, 243600, 0.01); // I27 = L8 × 6
-    cerca(r.creditoDxn.efectivoNeto, 245136.3026, 0.001);
+    // I27 = L8 × 6. Los 6 meses son del producto —lo que tarda la pensión en
+    // caer después del trámite—, no un retroactivo derivado de las fechas.
+    cerca(r.creditoDxn.retroactivo, 243600, 0.01);
+    cerca(r.creditoDxn.efectivoNeto, 406115.5596, 0.001);
   });
 
   it('comparativo sin/con proyecto (F8/F9/F10/L9/M8)', () => {
@@ -415,8 +439,13 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
   it('la Ley 73 y el proyecto Mod 40 cobran EXACTAMENTE la misma línea', () => {
     // El asesor ve las dos pestañas en la misma pantalla. Si divergen, una de
     // las dos está mintiendo. Comparten `lineasCapturaMod40` justo por esto.
+    // `computeLey73` sigue anclado en `hoy` (la pestaña Ley 73 no tiene fecha
+    // de trámite), así que la paridad se mide poniéndolo en la misma fecha con
+    // la que corrió el proyecto. Si algún día esa pestaña gana su propio
+    // selector, este es el punto que hay que volver a alinear.
     const l73 = computeLey73({
       ...base,
+      hoy: r.fechaTramite,
       palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
     });
     expect(l73.retro).not.toBeNull();
@@ -434,7 +463,7 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     };
     const palancas = { ...palancasExcel73, recuperarSemanasDescontadas: true };
     const proy = computeProyectoMod40({ ...base, perfil: perfilViejo, palancas })!;
-    const l73 = computeLey73({ ...base, perfil: perfilViejo, palancas });
+    const l73 = computeLey73({ ...base, hoy: proy.fechaTramite, perfil: perfilViejo, palancas });
     expect(proy.pagoImss.meses).toBe(60);
     expect(l73.retro!.meses).toBe(60);
     cerca(l73.retro!.total, proy.pagoImss.total, 0);
@@ -452,6 +481,7 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
       palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
       pensionEscenarioBase: 7639,
       edadEscenarioBase: 60,
+      permitirMenorDe60: true, // el corte del tope se mide al día del Excel
     })!;
     expect(viejo.lineas.mesesDelPeriodo).toBe(100);
     expect(viejo.pagoImss.meses).toBe(60);
@@ -465,8 +495,8 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
     expect(viejo.lineas.detalle[viejo.lineas.detalle.length - 1].prorrateo).toBe(1);
   });
 
-  it('el tope NO toca a MOJA: 34 meses de periodo', () => {
-    expect(r.lineas.mesesDelPeriodo).toBe(34);
+  it('el tope NO toca a MOJA: 39 meses de periodo', () => {
+    expect(r.lineas.mesesDelPeriodo).toBe(39);
     expect(r.lineas.topado).toBe(false);
     expect(r.lineas.mesesFueraDelTope).toBe(0);
   });
@@ -478,11 +508,12 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
       pensionEscenarioBase: 7639,
       edadEscenarioBase: 60,
       // Sólo el mes del trámite 20 % arriba: sube el numerador de todas las
-      // actualizaciones y no toca la cuota base.
+      // actualizaciones y no toca la cuota base. El mes del trámite es
+      // 2026-11 (cuando MOJA cumple 60), no el 2026-06 del Excel.
       serieINPC: Object.fromEntries(
         Object.entries(INPC_MENSUAL).map(([m, p]) => [
           m,
-          { indice: m === '2026-06' ? p.indice * 1.2 : p.indice, proyectado: p.proyectado },
+          { indice: m === '2026-11' ? p.indice * 1.2 : p.indice, proyectado: p.proyectado },
         ]),
       ),
     })!;
@@ -498,6 +529,9 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
         palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
         pensionEscenarioBase: 7639,
         edadEscenarioBase: 60,
+        // Las dos fechas caen antes de los 60 de MOJA: sin esto el motor
+        // recorrería las dos al mismo día y el test no mediría nada.
+        permitirMenorDe60: true,
       })!.pagoImss.total;
     const a = dia('2026-06-08');
     const b = dia('2026-06-15');

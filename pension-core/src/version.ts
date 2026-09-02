@@ -20,4 +20,11 @@
 // 2026.08.24.3 — se restaura el tope de 60 meses (art. 219) sobre el costo:
 // `mesesMax` con default 60, conservando los meses MÁS RECIENTES. Sólo mueve
 // números en tramos de más de 5 años. Decisión de Raúl.
-export const ENGINE_VERSION = '2026.08.24.3';
+// 2026.09.02.1 — la fecha de trámite y la edad dejan de ser variables
+// independientes en el proyecto Mod 40: el trámite ES el retiro, con piso en el
+// día que el cliente cumple 60. Las semanas y los meses que suben la pensión se
+// derivan de los días que la línea de captura cobra (antes se medían hasta la
+// fecha de retiro y el hueco sumaba gratis), y el promedio de 250 semanas se
+// topa a 57 meses. Baja la pensión de todo el que no tenga 60 cumplidos y sube
+// el costo de esos casos.
+export const ENGINE_VERSION = '2026.09.02.1';

@@ -75,12 +75,15 @@ describe('construirSnapshot — auto-contenido', () => {
     expect(s.inputs.palancas).toEqual(palancasMesa);
   });
 
-  it('trae los diez bloques numéricos y nada más', () => {
+  it('trae los bloques numéricos y nada más', () => {
     expect(Object.keys(s.resultado).sort()).toEqual(
       [
         'conProyecto',
         'costos',
         'creditoDxn',
+        // La edad a la que se pensiona es un NÚMERO del resultado, no una
+        // palanca: se deriva de `fecha_tramite` y es lo que se imprime.
+        'edadProyecto',
         'efectivo',
         'financiamiento',
         'multiplicadorPension',
@@ -92,6 +95,7 @@ describe('construirSnapshot — auto-contenido', () => {
     );
     // fechaTramite y ventana viven en sus propias columnas, no aquí.
     expect(s.resultado).not.toHaveProperty('fechaTramite');
+    expect(s.resultado).not.toHaveProperty('fechaMinimaTramite');
     expect(s.resultado).not.toHaveProperty('ventana');
   });
 
@@ -289,18 +293,35 @@ describe('round-trip contra el motor', () => {
 
 describe('una autorización nueva no modifica la anterior', () => {
   it('cambiar la fecha de trámite produce otro snapshot, sin tocar el primero', () => {
-    const primero = construirSnapshot(entrada('2025-06-01'))!;
+    const primero = construirSnapshot(entrada('2026-06-01'))!;
     const congelado = porJsonb(primero);
 
-    const segundo = construirSnapshot(entrada('2026-08-24'))!;
+    const segundo = construirSnapshot(entrada('2027-08-24'))!;
 
     expect(segundo.inputs.fecha_tramite).not.toBe(primero.inputs.fecha_tramite);
     expect(segundo.resultado.pagoImss.meses).not.toBe(primero.resultado.pagoImss.meses);
-    // La ventana estaba viva en junio de 2025 y vencida hoy: la evidencia de lo
-    // que se autorizó entonces no puede cambiar de opinión.
-    expect(primero.ventana.estado).toBe('vigente');
-    expect(segundo.ventana.estado).toBe('vencida');
+    expect(segundo.resultado.edadProyecto).toBeGreaterThan(primero.resultado.edadProyecto);
+    // La evidencia de lo que se autorizó entonces no puede cambiar de opinión.
     expect(porJsonb(primero)).toEqual(congelado);
+  });
+
+  it('una fecha anterior a los 60 se guarda ya recorrida', () => {
+    // El fixture nace el 1966-05-17: cumple 60 el 2026-05-17. Pedir el trámite
+    // en 2025 no es una opción del producto, y el snapshot tiene que decir con
+    // qué fecha corrió de verdad, no con la que se pidió.
+    const s2025 = construirSnapshot(entrada('2025-06-01'))!;
+    expect(s2025.inputs.fecha_tramite).toBe('2026-05-17');
+    expect(s2025.resultado.edadProyecto).toBeCloseTo(60, 2);
+  });
+
+  it('una ventana que vence antes de los 60 ya no se puede alcanzar', () => {
+    // Consecuencia directa de amarrar fecha y edad, y es información para el
+    // asesor: el límite de inscripción de este expediente es 2025-09-30 y el
+    // cliente cumple 60 en mayo de 2026. No hay fecha válida dentro de la
+    // ventana; antes la calculadora la enseñaba "vigente" porque tramitaba en
+    // una fecha en la que el cliente no podía pensionarse.
+    expect(construirSnapshot(entrada('2025-06-01'))!.ventana.estado).toBe('vencida');
+    expect(construirSnapshot(entrada('2026-08-24'))!.ventana.estado).toBe('vencida');
   });
 });
 

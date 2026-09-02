@@ -22,12 +22,10 @@ import {
 import { ventanaMod40, type RegistroHistorialMod40, type VentanaMod40 } from './mod40-ventana';
 import type { EntradaCalculo, ProyectoMod40 } from './types';
 import {
-  addDias,
+  addMeses,
   DIAS_ANIO,
-  DIAS_ANIO_RETIRO,
   DIAS_MES,
   DIAS_MES_PENSION,
-  diasDelMes,
   diasEntre,
   inicioMes,
   lookupAprox,
@@ -83,19 +81,39 @@ export interface EntradaProyecto extends EntradaCalculo {
    * corrigió ahí el límite de 12 meses. Si viene, manda sobre el cálculo local.
    */
   limiteInscripcionMod40?: string | Date | null;
+  /**
+   * Deja calcular con el cliente por DEBAJO de 60 años a la fecha de trámite.
+   * El producto no lo permite —este trámite es el de la pensión, y la Ley 73
+   * arranca a los 60 (regla de Raúl, sep-2026)—, así que solo lo usan los
+   * goldens que reproducen el Excel de referencia. Sin él, una fecha anterior
+   * al cumpleaños 60 se recorre a ese día y se avisa.
+   */
+  permitirMenorDe60?: boolean;
 }
 
 export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | null {
   const { perfil, saldos, salario_60m, palancas } = entrada;
-  // Ancla única del proyecto. `fechaTramite` gana; si no viene, se conserva el
-  // comportamiento histórico ("a hoy") para que los goldens no se muevan.
-  const fechaTramite = entrada.fechaTramite ?? entrada.hoy ?? new Date();
-  const anioTramite = fechaTramite.getUTCFullYear();
 
   const fnac = parseISO(perfil.fecha_nacimiento);
+  // El trámite de este proyecto ES el de la pensión: se paga el retroactivo y
+  // se pensiona en el mismo acto. Por eso no puede ocurrir antes de cumplir 60
+  // y por eso fecha y edad son UNA sola variable: mover una mueve la otra.
+  const fechaMinimaTramite = addMeses(fnac, 60 * 12); // el día que cumple 60
+  const fechaPedida = entrada.fechaTramite ?? entrada.hoy ?? new Date();
+  const recorridaA60 =
+    !entrada.permitirMenorDe60 && diasEntre(fechaPedida, fechaMinimaTramite) > 0;
+  const fechaTramite = recorridaA60 ? fechaMinimaTramite : fechaPedida;
+  const anioTramite = fechaTramite.getUTCFullYear();
+
   const edadActual = diasEntre(fnac, fechaTramite) / DIAS_ANIO; // C12 (a la fecha de trámite)
-  const edadProyecto = Math.max(palancas.edadRetiro, Math.max(60, edadActual)); // F16
-  const fechaRetiro = addDias(fechaTramite, (edadProyecto - edadActual) * DIAS_ANIO_RETIRO - 1); // F17
+  // F16. `palancas.edadRetiro` ya NO mueve el retiro: la edad del proyecto es
+  // la que se tiene el día del trámite. La palanca sobrevive en la UI, pero
+  // ahí elegir una edad mueve la fecha, no el cálculo por su cuenta.
+  const edadProyecto = Math.max(60, edadActual);
+  // F17. El retiro ES el trámite. Antes se proyectaba hacia adelante cuando la
+  // edad elegida era mayor que la del día, y ese hueco sumaba semanas que la
+  // línea de captura nunca cobró.
+  const fechaRetiro = fechaTramite;
 
   const ultimaCotValida = parseISO(perfil.fechas.ultima_cotizacion_valida);
   const ultimaCotMod40 = perfil.fechas.ultima_cotizacion_mod40
@@ -112,11 +130,6 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   if (!aplica) return null;
 
   const umasProyecto = entrada.umasProyecto ?? UMAS_PROYECTO_DEFAULT; // F21
-  const semanasRec = diasEntre(ultimaCot, fechaRetiro) / 7; // F20: hasta la fecha de retiro
-  const mesesRetroN = Math.trunc((semanasRec * 7) / DIAS_MES); // R5
-  const mesesFuturos = 0; // R4 (R26 = 0% en la hoja)
-  const mesesPasados = Math.max(MESES_BASE_250 - mesesFuturos - mesesRetroN, 0); // R3
-
   const salarioRetro = porAnio(UMA, ultimaCot.getUTCFullYear()) * umasProyecto; // U
 
   // ---- Línea de captura del IMSS, con precisión DIARIA ---------------------
@@ -143,9 +156,24 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   );
   const pagoImssTotal = lineas.total; // I10
 
+  // F20/R5. Las semanas y los meses que suben la pensión salen de los días que
+  // la línea DE VERDAD cobra: mismo prorrateo de los extremos y mismo tope de
+  // 60 meses del art. 219. Antes se medían aparte, hasta la fecha de retiro, y
+  // todo lo que quedaba entre el trámite y el retiro subía la pensión gratis.
+  const diasPagados = lineas.detalle.reduce((a, d) => a + d.dias * d.prorrateo, 0);
+  const semanasRec = diasPagados / 7;
+  const mesesRetroN = Math.trunc(diasPagados / DIAS_MES); // R5
+  const mesesFuturos = 0; // R4 (R26 = 0% en la hoja)
+  // El promedio de 250 semanas se pondera sobre 57 meses: con un tramo retro
+  // más largo, `mesesRetroN` empujaba el salario base POR ENCIMA del tope de
+  // 25 UMA y la pensión salía al máximo por construcción. La Ley 73 ya topa
+  // así (K4/K5); aquí faltaba.
+  const mesesRetroSal = Math.min(mesesRetroN, MESES_BASE_250);
+  const mesesPasados = Math.max(MESES_BASE_250 - mesesFuturos - mesesRetroSal, 0); // R3
+
   // La serie mensual sigue viva SOLO para el lado de la pensión (el salario
-  // mínimo promedio del tramo retroactivo, R11). Esa parte no cambió: se mide
-  // hasta el MES DE RETIRO, que es hasta donde cuentan las semanas.
+  // mínimo promedio del tramo retroactivo, R11), anclada en el mes del trámite
+  // — que ahora es también el del retiro.
   const serie: Date[] = [];
   let m = inicioMes(fechaRetiro); // T5
   while (serie.length < MESES_RETRO_ART219) {
@@ -161,16 +189,11 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   });
   const avisos = [...ventana.avisos, ...lineas.avisos];
 
-  // La línea cubre HASTA LA FECHA DE TRÁMITE. Si el retiro es posterior (el
-  // cliente aún no cumple la edad), las semanas de ese hueco sí cuentan para la
-  // pensión de abajo, pero NO están cobradas aquí: se pagan mes a mes como
-  // Mod 40 vigente. Modelarlas es trabajo aparte (ver `claude/10`, pendientes).
-  const mesesHastaRetiro =
-    (fechaRetiro.getUTCFullYear() - fechaTramite.getUTCFullYear()) * 12 +
-    (fechaRetiro.getUTCMonth() - fechaTramite.getUTCMonth());
-  if (mesesHastaRetiro > 0) {
+  // La línea cubre exactamente hasta la fecha de trámite, que es la del retiro:
+  // ya no queda un tramo sin cobrar que después sume semanas.
+  if (recorridaA60) {
     avisos.push(
-      `La línea de captura cubre hasta la fecha de trámite. Los ${mesesHastaRetiro} meses que faltan para el retiro se cotizan mes a mes en Modalidad 40 y NO están incluidos en este monto.`,
+      `El proyecto se calcula al ${fechaMinimaTramite.toISOString().slice(0, 10)}: es el día que cumple 60 años y el trámite no puede hacerse antes. La línea de captura cubre hasta esa fecha.`,
     );
   }
 
@@ -187,6 +210,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     );
   }
 
+  // Solo alcanzable con `permitirMenorDe60` (goldens del Excel).
   if (edadActual < 60) {
     avisos.push(
       `A la fecha de trámite tendrías ${edadActual.toFixed(1)} años: la pensión Ley 73 arranca a los 60, así que el proyecto se calcula a esa edad.`,
@@ -204,9 +228,9 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     serie.map((s) => porAnio(SALARIO_MINIMO, s.getUTCFullYear())),
     serie.length,
   ); // R11
-  const salarioCot250 = (mesesPasados * scPasado + mesesRetroN * salarioRetro) / MESES_BASE_250; // R8
+  const salarioCot250 = (mesesPasados * scPasado + mesesRetroSal * salarioRetro) / MESES_BASE_250; // R8
   const salarioMin250 =
-    (mesesPasados * smPasado + mesesFuturos * porAnio(SALARIO_MINIMO, anioTramite - 1) + mesesRetroN * smRetro) /
+    (mesesPasados * smPasado + mesesFuturos * porAnio(SALARIO_MINIMO, anioTramite - 1) + mesesRetroSal * smRetro) /
     60; // R12
   const factor = Math.max(1, salarioCot250 / salarioMin250); // R13
 
@@ -315,6 +339,9 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
 
   return {
     fechaTramite,
+    fechaMinimaTramite,
+    recorridaA60,
+    edadProyecto,
     ventana,
     avisos,
     lineas,

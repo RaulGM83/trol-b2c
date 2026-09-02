@@ -60,8 +60,20 @@ describe('fechaTramite — compatibilidad con los goldens', () => {
     expect(num(sinFecha)).toEqual(num(conFechaIgualAHoy));
   });
 
-  it('fechaTramite = hoy es equivalente a pasar `hoy`', () => {
-    expect(sinFecha.fechaTramite.getTime()).toBe(HOY_EXCEL.getTime());
+  it('fechaTramite = hoy se recorre al día que cumple 60 (MOJA tiene 59.6)', () => {
+    // El trámite de este proyecto ES el de la pensión, así que no puede caer
+    // antes del cumpleaños 60. Los dos caminos —con y sin `fechaTramite`— se
+    // recorren igual, que es lo que protege el test de arriba.
+    expect(sinFecha.recorridaA60).toBe(true);
+    expect(sinFecha.fechaTramite.toISOString().slice(0, 10)).toBe('2026-11-08');
+    expect(sinFecha.fechaMinimaTramite.toISOString().slice(0, 10)).toBe('2026-11-08');
+    expect(conFechaIgualAHoy.fechaTramite.getTime()).toBe(sinFecha.fechaTramite.getTime());
+  });
+
+  it('con la salida explícita del Excel sí respeta el día pedido', () => {
+    const excel = computeProyectoMod40({ ...base, permitirMenorDe60: true })!;
+    expect(excel.recorridaA60).toBe(false);
+    expect(excel.fechaTramite.getTime()).toBe(HOY_EXCEL.getTime());
   });
 });
 
@@ -108,10 +120,14 @@ describe('fechaTramite — mover la fecha', () => {
     );
   });
 
-  it('avisa (no bloquea) cuando a la fecha aún no cumple 60', () => {
-    // MOJA nace 1966-11-08: al 2026-06-08 tiene 59.6.
+  it('una fecha anterior a los 60 se recorre a ese día y se avisa', () => {
+    // MOJA nace 1966-11-08: al 2026-06-08 tiene 59.6, así que el proyecto se
+    // calcula al 2026-11-08. Antes se calculaba en junio pero se contaban las
+    // semanas hasta noviembre.
     expect(hoy.conProyecto.pensionMensual).toBeGreaterThan(0);
-    expect(hoy.avisos.some((a) => a.includes('la pensión Ley 73 arranca a los 60'))).toBe(true);
+    expect(hoy.recorridaA60).toBe(true);
+    expect(hoy.fechaTramite.toISOString().slice(0, 10)).toBe('2026-11-08');
+    expect(hoy.avisos.some((a) => a.includes('el día que cumple 60 años'))).toBe(true);
   });
 
   it('ya cumplidos los 60 el aviso desaparece', () => {
@@ -322,5 +338,87 @@ describe('computeProyectoMod40 — ventana y avisos', () => {
       historial: [mod40Baja('2026-03-31', 2500)],
     })!;
     expect(r.avisos.some((a) => a.includes('no puede ser menor'))).toBe(true);
+  });
+});
+
+// ============================================================================
+// 5. Fecha y edad son UNA sola variable
+//
+// El bug que cerró este bloque (sep-2026): la línea de captura cobraba hasta la
+// fecha de trámite, pero las semanas y los meses que suben la pensión se medían
+// hasta la fecha de RETIRO, que salía de `palancas.edadRetiro`. Todo lo que
+// quedaba en medio subía la pensión sin costar un peso.
+// ============================================================================
+
+describe('fecha de trámite y edad van juntas', () => {
+  const enFechaEdad = (iso: string, edadRetiro: number) =>
+    computeProyectoMod40({
+      ...base,
+      fechaTramite: d(iso),
+      palancas: { ...palancasExcel73, edadRetiro },
+    })!;
+
+  it('`edadRetiro` ya no sube la pensión: la edad la manda la fecha', () => {
+    const a = enFechaEdad('2027-06-08', 60);
+    const b = enFechaEdad('2027-06-08', 67);
+    expect(b.conProyecto.pensionMensual).toBe(a.conProyecto.pensionMensual);
+    expect(b.pagoImss.total).toBe(a.pagoImss.total);
+    expect(b.edadProyecto).toBeCloseTo(a.edadProyecto, 9);
+  });
+
+  it('la edad del proyecto es la edad exacta a la fecha de trámite', () => {
+    // MOJA nace 1966-11-08. Al 2028-11-08 cumple 62.
+    expect(enFechaEdad('2028-11-08', 60).edadProyecto).toBeCloseTo(62, 2);
+    expect(enFechaEdad('2027-05-08', 60).edadProyecto).toBeCloseTo(60.5, 2);
+  });
+
+  it('mover la fecha mueve la pensión Y el costo, nunca uno solo', () => {
+    const a = enFechaEdad('2027-06-08', 60);
+    const b = enFechaEdad('2029-06-08', 60);
+    expect(b.pagoImss.meses).toBeGreaterThan(a.pagoImss.meses);
+    expect(b.pagoImss.total).toBeGreaterThan(a.pagoImss.total);
+    expect(b.conProyecto.pensionMensual).toBeGreaterThan(a.conProyecto.pensionMensual);
+  });
+
+  it('las semanas que suman son exactamente las que cobra la línea', () => {
+    // Con el tope del art. 219 mordiendo, la pensión no puede seguir contando
+    // los meses que el IMSS ya no deja cubrir. Una baja de 2016 son ~130 meses
+    // de hueco y solo 60 cobrados: mover la fecha 6 meses más allá ya no suma
+    // semanas nuevas al tramo (entra por un lado y sale por el otro), así que
+    // la pensión se queda quieta aunque el costo cambie de meses.
+    const viejo = (iso: string) =>
+      computeProyectoMod40({
+        ...base,
+        perfil: {
+          ...perfilMoja,
+          fechas: { ...perfilMoja.fechas, ultima_cotizacion_valida: '2016-03-14' },
+        },
+        fechaTramite: d(iso),
+        palancas: palancasExcel73,
+      })!;
+    const a = viejo('2027-06-08');
+    const b = viejo('2027-12-08');
+    expect(a.pagoImss.meses).toBe(60);
+    expect(b.pagoImss.meses).toBe(60);
+    expect(b.conProyecto.pensionMensual).toBe(a.conProyecto.pensionMensual);
+  });
+
+  it('el promedio de 250 semanas no se pasa del tope con un tramo largo', () => {
+    // Antes, `mesesRetroN` sin topar metía ~130 meses de 25 UMA en un promedio
+    // ponderado sobre 57: el salario base salía al doble del tope y la pensión
+    // se iba al máximo por construcción, con cualquier baja vieja. Ahora el
+    // tramo que pondera son 57 meses y la pensión queda por debajo del tope.
+    const viejo = computeProyectoMod40({
+      ...base,
+      perfil: {
+        ...perfilMoja,
+        fechas: { ...perfilMoja.fechas, ultima_cotizacion_valida: '2016-03-14' },
+      },
+      fechaTramite: d('2027-06-08'),
+      palancas: palancasExcel73,
+    })!;
+    const topeMensual = 2933.75 * 30.1; // 25 UMA 2026 × días de pensión
+    expect(viejo.conProyecto.pensionMensual).toBeGreaterThan(0);
+    expect(viejo.conProyecto.pensionMensual).toBeLessThan(topeMensual);
   });
 });

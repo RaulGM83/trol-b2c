@@ -19,6 +19,7 @@ import { computeProyectoMod40 } from "@/lib/imss/mod40-proyecto"
 import type { RegistroHistorialMod40 } from "@/lib/imss/mod40-ventana"
 import { AvisosMod40, FechaTramiteInput } from "@/components/trol3/FechaTramite"
 import { isoFecha, parseFechaTramite } from "@/lib/viraal/prefill"
+import { addDias, addMeses, DIAS_ANIO } from "@/lib/imss/util"
 import type { SemillaV2 } from "@/lib/imss/semilla"
 import { SALARIO_MINIMO, UMA } from "@/lib/imss/tablas"
 import type { Palancas } from "@/lib/imss/types"
@@ -1023,21 +1024,38 @@ function Mod40Panel({
   pdfCtx: PdfCtx
 }) {
   const { perfil, saldos, salario_60m } = semilla
-  // Fecha de inicio de trámite: default hoy (UTC, como todo el motor). Mueve la
-  // ventana, los meses de retroactivo, la UMA del año y la edad.
+  // Fecha de inicio de trámite: el ancla de todo el proyecto (ventana, meses de
+  // retroactivo, UMA del año y edad). El trámite ES el de la pensión, así que
+  // no puede ser antes de cumplir 60 ni antes de hoy: fecha y edad son la misma
+  // variable con dos vistas, y mover cualquiera de las dos mueve la otra.
   const hoyIso = useMemo(() => isoFecha(new Date()), [])
-  const [fechaTramiteIso, setFechaTramiteIso] = useState(hoyIso)
+  const fnac = useMemo(
+    () => new Date(`${perfil.fecha_nacimiento.slice(0, 10)}T00:00:00.000Z`),
+    [perfil.fecha_nacimiento],
+  )
+  const fecha60Iso = useMemo(() => isoFecha(addMeses(fnac, 60 * 12)), [fnac])
+  const minIso = fecha60Iso > hoyIso ? fecha60Iso : hoyIso
+  const [fechaTramiteIso, setFechaTramiteIso] = useState(minIso)
   const fechaTramite = useMemo(
-    () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(hoyIso) ?? new Date(),
-    [fechaTramiteIso, hoyIso],
+    () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(minIso) ?? new Date(),
+    [fechaTramiteIso, minIso],
   )
   const edadActual = edadActualDe(perfil.fecha_nacimiento, fechaTramite)
-  const edades = useMemo(() => opcionesEdad(edadActual), [edadActual])
-
-  const [edadRetiro, setEdadRetiro] = useState(edades[0])
-  // Mover la fecha corre el piso de edades: si la elegida se salió de la lista,
-  // se cae a la mínima en vez de mandar al motor una edad que ya no existe.
-  const edadRetiroEfectiva = edades.includes(edadRetiro) ? edadRetiro : edades[0]
+  // La lista de edades se ancla en la fecha MÍNIMA, no en la elegida: si se
+  // recalculara con la fecha, el slider se movería solo al mover el calendario.
+  const edadMinima = useMemo(
+    () => edadActualDe(perfil.fecha_nacimiento, parseFechaTramite(minIso) ?? new Date()),
+    [perfil.fecha_nacimiento, minIso],
+  )
+  const edades = useMemo(() => opcionesEdad(edadMinima), [edadMinima])
+  /** Elegir una edad = ponerse en la fecha en que la cumple. */
+  const fechaDeEdad = (e: number) => {
+    const iso = isoFecha(addDias(fnac, e * DIAS_ANIO))
+    return iso < minIso ? minIso : iso
+  }
+  // Etiqueta de la fecha en el escalón de la lista: el slider refleja la fecha,
+  // no manda por su cuenta.
+  const edadEnLista = edades.reduce((a, b) => (b <= edadActual + 0.05 ? b : a), edades[0])
   const [umas, setUmas] = useState(25)
   const [recuperarDesc, setRecuperarDesc] = useState(semanasRecuperables(perfil) > 0)
   const [semanasExtra, setSemanasExtra] = useState(0)
@@ -1095,8 +1113,8 @@ function Mod40Panel({
         limiteInscripcionMod40,
         serieINPC,
         palancas: {
+          // `edadRetiro` ya no viaja: el motor la deriva de la fecha.
           ...PALANCAS_DEFAULT,
-          edadRetiro: edadRetiroEfectiva,
           recuperarSemanasDescontadas: recuperarDesc,
           overrides,
         },
@@ -1105,7 +1123,6 @@ function Mod40Panel({
       perfil,
       saldos,
       salario_60m,
-      edadRetiroEfectiva,
       umas,
       recuperarDesc,
       semanasExtra,
@@ -1138,13 +1155,16 @@ function Mod40Panel({
     hero: {
       etiqueta: `Pensión con proyecto (×${r.multiplicadorPension.toFixed(1)} vs sin proyecto)`,
       valor: `${fmt(r.conProyecto.pensionMensual)} /mes`,
-      sub: `Sin proyecto: ${fmt(r.sinProyecto.pensionMensual)} /mes · Edad de pensión: ${edadRetiroEfectiva} años · Trámite: ${fechaTramiteIso}`,
+      sub: `Sin proyecto: ${fmt(r.sinProyecto.pensionMensual)} /mes · Edad de pensión: ${r.edadProyecto.toFixed(1)} años · Trámite: ${isoFecha(r.fechaTramite)}`,
     },
     palancas: [
       // La fecha va primero: es la que da contexto a todo lo de abajo y la que
       // queda congelada en el escenario.
-      { label: "Fecha de inicio de trámite", value: fechaTramiteIso },
-      { label: "Edad de pensión del proyecto", value: `${edadRetiroEfectiva} años` },
+      { label: "Fecha de trámite y de pensión", value: isoFecha(r.fechaTramite) },
+      {
+        label: "Edad a esa fecha",
+        value: `${r.edadProyecto.toFixed(1)} años`,
+      },
       {
         label: "UMAs del proyecto",
         value: `${umas} UMA (${fmt((UMA[ANIO] ?? 117.35) * umas)}/día)`,
@@ -1328,22 +1348,24 @@ function Mod40Panel({
           <FechaTramiteInput
             id="m40-fecha-tramite"
             value={fechaTramiteIso}
+            min={minIso}
             onChange={setFechaTramiteIso}
+            hint={`Es también la fecha de pensión: a esa fecha tendría ${r.edadProyecto.toFixed(1)} años. Todo el proyecto se calcula ahí — ventana, meses de retroactivo, UMA y semanas.`}
           />
-          {fechaTramiteIso !== hoyIso && (
+          {fechaTramiteIso !== minIso && (
             <button
               type="button"
-              onClick={() => setFechaTramiteIso(hoyIso)}
+              onClick={() => setFechaTramiteIso(minIso)}
               className="-mt-1 w-fit text-xs font-semibold underline"
             >
-              Volver a hoy
+              {minIso === hoyIso ? "Volver a hoy" : `Volver a la fecha más temprana (${minIso})`}
             </button>
           )}
           <SelectorEdad
             edades={edades}
-            value={edadRetiroEfectiva}
-            onChange={setEdadRetiro}
-            label="Edad de pensión del proyecto"
+            value={edadEnLista}
+            onChange={(e) => setFechaTramiteIso(fechaDeEdad(e))}
+            label="Edad a la que se pensiona"
           />
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">

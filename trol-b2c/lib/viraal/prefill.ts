@@ -69,9 +69,9 @@ export interface OpcionesMesaViraal {
 }
 
 const SALARIO_25_UMA = 2933.75; // tope Mod40
-// "A día de hoy": el motor toma edadProyecto = max(edadRetiro, 60, edadActual); con 0 el retiro es
-// a la fecha de trámite (o a los 60 si aún no los cumple) y el retroactivo cubre desde la última
-// cotización hasta ahí.
+// El motor ya no lee `edadRetiro` en el proyecto Mod 40: la edad la deriva de la
+// fecha de trámite (que es la de la pensión, con piso a los 60). La palanca se
+// queda por compatibilidad de tipo y no mueve nada.
 const EDAD_PROYECTO_HOY = 0;
 
 /** Fecha (UTC) → 'YYYY-MM-DD', el formato que come un <input type="date">. */
@@ -100,6 +100,18 @@ function palancas(over: Partial<Palancas> = {}): Palancas {
   };
 }
 
+/**
+ * El día en que cumple 60: el trámite no puede ser antes, porque este trámite
+ * ES el de la pensión. Espejo de lo que hace `computeProyectoMod40`; aquí sirve
+ * para que la mesa muestre la fecha con la que de verdad corrió el motor.
+ */
+export function fechaMinimaTramite(fechaNac: string | null | undefined): Date | null {
+  if (!fechaNac) return null;
+  const d = new Date(`${fechaNac.slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear() + 60, d.getUTCMonth(), d.getUTCDate()));
+}
+
 function edadDe(fechaNac: string | null | undefined, en: Date): number | null {
   if (!fechaNac) return null;
   const d = new Date(fechaNac);
@@ -124,11 +136,15 @@ export function mesaViraalDesdeSemilla(
 ): MesaViraalData {
   const { perfil } = semilla;
   const recuperables = Math.max(0, perfil.semanas.descontadas - perfil.semanas.recuperadas);
+  // Se recorre igual que en el motor, para que la edad y la fecha que ve el
+  // asesor sean las del cálculo y no las que pidió.
+  const minima = fechaMinimaTramite(perfil.fecha_nacimiento);
+  const fecha = minima && fechaTramite < minima ? minima : fechaTramite;
   const cliente: ClienteViraal = {
     nombre: perfil.nombre,
     curp: perfil.curp,
     nss: perfil.nss,
-    edad: edadDe(perfil.fecha_nacimiento, fechaTramite),
+    edad: edadDe(perfil.fecha_nacimiento, fecha),
     semanas_cotizadas: perfil.semanas.cotizadas,
     semanas_descontadas: perfil.semanas.descontadas,
     semanas_recuperadas: perfil.semanas.recuperadas,
@@ -147,7 +163,7 @@ export function mesaViraalDesdeSemilla(
       const snapshot = construirSnapshot({
         semilla,
         historial: opts.historial ?? null,
-        fechaTramite,
+        fechaTramite: fecha,
         limiteInscripcionMod40: opts.limiteInscripcionMod40 ?? null,
         serieINPC: opts.serieINPC,
         palancas: palancas({ recuperarSemanasDescontadas: recuperar }),
@@ -178,5 +194,5 @@ export function mesaViraalDesdeSemilla(
   };
   const sin = perfil.ley === 'Ley73' ? variante(false) : null;
   const con = perfil.ley === 'Ley73' && recuperables > 0 ? variante(true) : null;
-  return { cliente, fechaTramite: isoFecha(fechaTramite), ventana, avisos, sin, con };
+  return { cliente, fechaTramite: isoFecha(fecha), ventana, avisos, sin, con };
 }

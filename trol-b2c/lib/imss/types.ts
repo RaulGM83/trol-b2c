@@ -184,8 +184,18 @@ export interface ResultadoLey97 {
 }
 
 export interface ProyectoMod40 {
-  /** Fecha de inicio de trámite con la que se calculó todo el proyecto. */
+  /**
+   * Fecha de inicio de trámite con la que se calculó todo el proyecto. Es
+   * también la fecha de retiro: en este producto se paga el retroactivo y se
+   * pensiona en el mismo acto, así que fecha y edad no son independientes.
+   */
   fechaTramite: Date;
+  /** El día que el cliente cumple 60: el trámite no puede ser antes. */
+  fechaMinimaTramite: Date;
+  /** true si la fecha pedida era anterior a los 60 y se recorrió a ese día. */
+  recorridaA60: boolean;
+  /** Edad exacta a `fechaTramite` (piso 60). La UI la muestra derivada. */
+  edadProyecto: number;
   /**
    * Ventana de reingreso (art. 219 / 220 LSS) a esa fecha. Informativa: una
    * ventana vencida NO anula los números, solo los acompaña de un aviso.
