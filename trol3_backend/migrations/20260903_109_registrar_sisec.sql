@@ -1,3 +1,4 @@
+-- 109 (en Supabase quedó registrada como "108_registrar_sisec"; el 108 real es retroactivo_desde_baja)
 -- 108 — registrar el SISEC generado por un proveedor (Jordan/Belvo) en trol3.documentos
 --
 -- Hasta hoy el PDF del SISEC que baja el Waterfall PDF Jordan subía a la carpeta
