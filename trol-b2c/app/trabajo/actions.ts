@@ -150,11 +150,34 @@ export async function reevaluar(personaId: string) {
 
 const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
 
+/** Quién es dueño de un teléfono, para avisar en el alta antes de que `alta_por_telefono` lo reutilice. */
+export type DuenoTelefono = { persona_id: string; nombre: string | null; apellidos: string | null; curp: string | null; etapa: string | null };
+
+export async function buscarPorTelefono(telefono: string): Promise<DuenoTelefono | null> {
+  await requireMiembro();
+  const t10 = telefono.replace(/\D/g, '').slice(-10);
+  if (t10.length < 10) return null;
+  const db = t3();
+  const c = await db.from('contactos').select('persona_id').eq('tipo', 'telefono').eq('normalizado', t10).limit(1).maybeSingle();
+  if (!c.data?.persona_id) return null;
+  const p = await db.from('personas').select('id,nombre,apellidos,curp,etapa,merged_into').eq('id', c.data.persona_id).maybeSingle();
+  if (!p.data) return null;
+  const pid = (p.data.merged_into as string | null) ?? (p.data.id as string);
+  return { persona_id: pid, nombre: p.data.nombre as string | null, apellidos: p.data.apellidos as string | null, curp: p.data.curp as string | null, etapa: p.data.etapa as string | null };
+}
+
 export async function altaPersona(telefono: string, nombre: string, canal: string, curp?: string) {
   const m = await requireMiembro();
   const db = t3();
   const c = (curp ?? '').trim().toUpperCase();
   if (c && !CURP_RE.test(c)) return fail('CURP inválida (18 caracteres).');
+  // `alta_por_telefono` reutiliza la persona dueña del teléfono. Si esa persona ya tiene otra
+  // CURP, crear "encima" mezclaría dos personas: se frena y se manda al expediente existente.
+  const dueno = await buscarPorTelefono(telefono);
+  if (dueno && c && dueno.curp && dueno.curp !== c) {
+    const quien = [dueno.nombre, dueno.apellidos].filter(Boolean).join(' ') || 'otra persona';
+    return { ok: false, error: `Ese teléfono ya es de ${quien} con otra CURP (${dueno.curp}). Usa otro teléfono o abre su expediente.`, persona_id: dueno.persona_id };
+  }
   if (c) {
     // Si la CURP ya está en otra persona, no duplicamos: avisamos y damos el link.
     const dup = await db.from('personas').select('id').eq('curp', c).is('merged_into', null).maybeSingle();
