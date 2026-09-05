@@ -457,11 +457,20 @@ export async function guardarSupuestosInfonavit(patch: Record<string, unknown>) 
 // Asesoría Infonavit: cotitular, guardado e historial.
 // ---------------------------------------------------------------------------
 
-/** Busca al cónyuge entre los expedientes de Trol para no teclear sus datos a mano. */
+/**
+ * Busca al cónyuge entre los expedientes de Trol para no teclear sus datos a
+ * mano. Usa `buscar_cotitular` (110b), que además dice si califica para un
+ * crédito conyugal: activo y con saldo arriba de `saldo_min_cotitular`.
+ *
+ * Hasta el 5-sep llamaba a `buscar_personas`, que tenía dos sobrecargas y
+ * fallaba con "function is not unique" antes de buscar nada. La pantalla
+ * convertía ese error en una lista vacía, así que parecía que la persona no
+ * existía — ni buscándola por CURP. El error ahora sube.
+ */
 export async function buscarCotitular(q: string) {
   await requireMiembro();
   if (!q || q.trim().length < 3) return ok({ personas: [] });
-  const { data, error } = await t3().rpc('buscar_personas', { p_q: q.trim(), p_limit: 8 });
+  const { data, error } = await t3().rpc('buscar_cotitular', { p_q: q.trim(), p_limit: 8 });
   if (error) return fail(error);
   return ok({ personas: (data ?? []) as Any[] });
 }

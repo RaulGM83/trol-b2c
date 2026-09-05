@@ -153,6 +153,7 @@ export function ProyectosInfonavit({ proyectos, supuestos }: { proyectos: Proyec
             ['monto_max_credito', 'Monto máximo de crédito por titular', 1],
             ['meses_cotizando_default', 'Meses que asumimos que sigue cotizando', 1],
             ['saldo_min_asesoria', 'Saldo desde el que abre la pestaña', 1000],
+            ['saldo_min_cotitular', 'Saldo mínimo para entrar como cotitular', 1000],
           ] as [string, string, number][]).map(([k, label, step]) => (
             <Campo key={k} label={label}>
               <input type="number" step={step} value={numSup(k)} onChange={(e) => setSupK(k, Number(e.target.value))} className={inp} />
@@ -164,7 +165,7 @@ export function ProyectosInfonavit({ proyectos, supuestos }: { proyectos: Proyec
         </label>
         <div className="mt-3 flex items-center gap-2">
           <button disabled={pending} className={btnDark} onClick={() => start(async () => {
-            const campos = ['r_ssv','inflacion','mantenimiento','gestion','comision_venta','alterno','uma_mensual','monto_max_credito','meses_cotizando_default','saldo_min_asesoria','aplica_gestion'];
+            const campos = ['r_ssv','inflacion','mantenimiento','gestion','comision_venta','alterno','uma_mensual','monto_max_credito','meses_cotizando_default','saldo_min_asesoria','saldo_min_cotitular','aplica_gestion'];
             const patch = Object.fromEntries(campos.map((k) => [k, sup[k]]));
             const r = (await guardarSupuestosInfonavit(patch)) as R;
             setSupMsg(r.ok ? 'Guardado.' : r.error ?? 'error');

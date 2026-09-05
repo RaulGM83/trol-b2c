@@ -31,6 +31,9 @@ export interface SupuestosGlobales {
   gestion: number; aplica_gestion: boolean; comision_venta: number; alterno: number;
   base_plusvalia: string; uma_mensual: number; monto_max_credito: number;
   horizontes: number[]; meses_cotizando_default: number; saldo_min_asesoria: number;
+  /** Mínimo para entrar como cotitular. Más bajo que el de asesoría a
+   *  propósito: en conyugal Infonavit suma el monto máximo de cada titular. */
+  saldo_min_cotitular: number;
   credito_minimo: number;
 }
 
@@ -106,7 +109,14 @@ export interface AsesoriaGuardada {
 type Origen = { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
 type CotitularCliente = { personaId: string; nombre: string; origen: Origen; saldoCapa: string | null; creditoVigente: boolean | null };
 type ModoCotitular = 'no' | 'cliente' | 'manual';
-type Hallazgo = { id: string; nombre: string | null; apellidos: string | null; curp: string | null; edad: number | null; ley: string | null };
+type Hallazgo = {
+  id: string; nombre: string | null; apellidos: string | null; curp: string | null;
+  edad: number | null; ley: string | null;
+  // 110b: la búsqueda ya dice si califica, para no tener que cargar a la
+  // persona antes de saber que no puede entrar.
+  status_empleo: string | null; saldo_infonavit: number | null; saldo_capa: string | null;
+  credito_vigente: boolean | null; califica: boolean | null; motivo: string | null;
+};
 type R = { ok: boolean; error?: string; personas?: Hallazgo[]; id?: string } & Partial<CotitularCliente> & { titular?: TitularInfonavit };
 
 export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, proyectos, supuestos, historial, faltantes, desdeSemilla }: {
@@ -123,6 +133,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   historial: AsesoriaGuardada[];
 }) {
   const creditoMin = Number(supuestos.credito_minimo ?? 50000);
+  const minCotitular = Number(supuestos.saldo_min_cotitular ?? 100000);
   const enCatalogo = proyectos.filter((p) => p.disponible);
   // Default: el inmueble que le genera el crédito más chico por encima del mínimo.
   // Crédito con sobreprecio 0 = escrituración + notariales del crédito − saldo; si no
@@ -139,6 +150,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [modoCotitular, setModoCotitular] = useState<ModoCotitular>('no');
   const [q, setQ] = useState('');
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  // Una búsqueda que falla tiene que verse. Antes el error se convertía en
+  // lista vacía y era indistinguible de "no existe esa persona".
+  const [msgBusqueda, setMsgBusqueda] = useState<string | null>(null);
   const [cotitular, setCotitular] = useState<CotitularCliente | null>(null);
   const [buscando, buscar] = useTransition();
   const [guardando, guardar] = useTransition();
@@ -505,29 +519,60 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                     saldo {cotitular.saldoCapa === 'declarado' || cotitular.saldoCapa === 'validado' ? 'reportado' : 'estimado'}
                     {cotitular.creditoVigente ? ' · con crédito vigente' : ''}
                   </span>
-                  <button className="ml-auto rounded-lg border border-line bg-white px-2 py-0.5 font-semibold" onClick={() => { setCotitular(null); setHallazgos([]); }}>Quitar</button>
+                  <button className="ml-auto rounded-lg border border-line bg-white px-2 py-0.5 font-semibold" onClick={() => { setCotitular(null); setHallazgos([]); setMsgBusqueda(null); }}>Quitar</button>
                 </div>
               ) : (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder="Nombre o CURP del cónyuge" className="w-64 rounded-lg border border-line px-2 py-1 text-sm" />
                     <button disabled={buscando} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                      onClick={() => buscar(async () => { const r = (await buscarCotitular(q)) as R; setHallazgos(r.ok ? (r.personas ?? []) : []); })}>Buscar</button>
+                      onClick={() => buscar(async () => {
+                        const r = (await buscarCotitular(q)) as R;
+                        if (!r.ok) { setHallazgos([]); return setMsgBusqueda(r.error ?? 'No se pudo buscar.'); }
+                        const hs = r.personas ?? [];
+                        setHallazgos(hs);
+                        setMsgBusqueda(hs.length ? null : 'Nadie con ese nombre o CURP en los expedientes de Trol.');
+                      })}>Buscar</button>
                   </div>
+                  <p className="mt-1 text-[11px] text-muted">
+                    Basta con nombre y apellido, en cualquier orden. Para entrar al
+                    crédito conyugal el cónyuge debe estar cotizando y tener más de{' '}
+                    {money(minCotitular)} en su Infonavit.
+                  </p>
+                  {msgBusqueda && <p className="mt-1 text-xs text-brick">{msgBusqueda}</p>}
                   {hallazgos.length > 0 && (
                     <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
-                      {hallazgos.filter((h) => h.id !== personaId).map((h) => (
-                        <li key={h.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs">
-                          <span>{[h.nombre, h.apellidos].filter(Boolean).join(' ')} <span className="text-muted">{h.curp ?? 'sin CURP'} · {h.edad ?? '—'} años · {h.ley ?? '—'}</span></span>
-                          <button className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream" onClick={() => buscar(async () => {
-                            const r = (await cargarCotitular(h.id)) as R;
-                            if (!r.ok) return setMsgGuardar(r.error ?? 'error');
-                            setCotitular({ personaId: h.id, nombre: r.nombre as string, origen: r.origen as Origen, saldoCapa: r.saldoCapa ?? null, creditoVigente: r.creditoVigente ?? null });
-                            if (r.titular) setT2(r.titular);
-                            setMsgGuardar(null);
-                          })}>Usar</button>
-                        </li>
-                      ))}
+                      {hallazgos.filter((h) => h.id !== personaId).map((h) => {
+                        // `califica` viene de la base (110b). Si no califica se dice
+                        // por qué y no se deja usar: mejor un no explicado que un
+                        // botón que no hace nada.
+                        const puede = h.califica !== false;
+                        return (
+                          <li key={h.id} className={`flex items-center justify-between gap-2 px-3 py-1.5 text-xs ${puede ? '' : 'bg-cream/60'}`}>
+                            <span>
+                              {[h.nombre, h.apellidos].filter(Boolean).join(' ')}{' '}
+                              <span className="text-muted">
+                                {h.curp ?? 'sin CURP'} · {h.edad ?? '—'} años · {h.ley ?? '—'}
+                                {h.saldo_infonavit != null && ` · ${money(Number(h.saldo_infonavit))} en Infonavit`}
+                                {h.saldo_capa && h.saldo_capa !== 'validado' && h.saldo_capa !== 'declarado' ? ' (estimado)' : ''}
+                              </span>
+                              {!puede && h.motivo && <span className="ml-1 font-semibold text-brick">· {h.motivo}</span>}
+                              {puede && h.credito_vigente && <span className="ml-1 text-muted">· con crédito vigente</span>}
+                            </span>
+                            <button
+                              disabled={!puede}
+                              title={puede ? undefined : (h.motivo ?? undefined)}
+                              className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() => buscar(async () => {
+                                const r = (await cargarCotitular(h.id)) as R;
+                                if (!r.ok) return setMsgGuardar(r.error ?? 'error');
+                                setCotitular({ personaId: h.id, nombre: r.nombre as string, origen: r.origen as Origen, saldoCapa: r.saldoCapa ?? null, creditoVigente: r.creditoVigente ?? null });
+                                if (r.titular) setT2(r.titular);
+                                setMsgGuardar(null);
+                              })}>Usar</button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </>
