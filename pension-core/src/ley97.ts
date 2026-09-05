@@ -40,9 +40,10 @@ const RENDIMIENTO_REAL = 1.03; // AFORE/Siefore: rendimiento real anual de la pr
 // que inflaba el saldo de vivienda y con él la pensión Ley 97 y el bloque IV de la
 // asesoría Infonavit.
 const RENDIMIENTO_REAL_INFONAVIT = 1.0;
-// Ahorro fuera de la AFORE (plan privado/corporativo): 2% real anual, por
-// debajo del 3% de la Siefore (regla de negocio, Raúl 5-sep-2026).
-const RENDIMIENTO_REAL_EXTERNO = 1.02;
+// Vehículos fuera de la AFORE, con rendimiento real propio (regla de negocio,
+// Raúl 5-sep-2026). Fijos a propósito: un solo criterio para toda la empresa.
+const RENDIMIENTO_REAL_CORPORATIVO = 1.02; // plan de retiro de la empresa
+const RENDIMIENTO_REAL_OTROS = 1.01; // PPR de aseguradora, fondos, cajas de ahorro
 const MAX_MESES = 716; // filas 5:721
 const FACTOR_RETIRO = 0.81; // castigo del Excel al convertir saldo→pensión
 const CESANTIA_ANIO_TOPE = 2030;
@@ -111,9 +112,13 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   const gCes = grupoCesantia(ratioFuturo); // K18 - 1
   const umaCuotaSocial = porAnio(UMA, anioHoy) * 4; // W: tope de cuota social
   const av = palancas.ahorroVoluntarioMensual; // C52
+  const avCorp = palancas.planCorporativoMensual ?? 0;
+  const avOtros = palancas.otrosPlanesMensual ?? 0;
   let aportacionesFV = 0; // SUM(Y)
   let infonavitFV = 0; // SUM(AA)
   let ahorroVoluntarioFV = 0; // SUM(AC)
+  let corporativoFV = 0;
+  let otrosFV = 0;
   const meses: Date[] = [];
   for (let i = 1; i <= MAX_MESES; i++) {
     const n = addMeses(hoy, i);
@@ -137,24 +142,36 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     aportacionesFV += aporte * fv; // Y
     infonavitFV += rMensual * 0.05 * pct * fvInf; // Z→AA (0% real)
     ahorroVoluntarioFV += av * fv; // AB→AC
+    corporativoFV += avCorp * Math.pow(RENDIMIENTO_REAL_CORPORATIVO, aniosAlRetiro);
+    otrosFV += avOtros * Math.pow(RENDIMIENTO_REAL_OTROS, aniosAlRetiro);
   });
 
-  // ---- Saldos proyectados (K19..K21) ----
-  const fvHoy = Math.pow(RENDIMIENTO_REAL, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
-  const fvHoyInf = Math.pow(RENDIMIENTO_REAL_INFONAVIT, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
+  // ---- Saldos proyectados (K19..K21 + vehículos fuera de la AFORE) ----
+  // Cada vehículo se capitaliza a SU tasa real: AFORE 3%, corporativo 2%, otros
+  // 1%, vivienda 0%. `incluir` es una decisión de la corrida (no se guarda) y
+  // por default todo entra; el de Infonavit se sigue expresando al revés, con
+  // `usaCreditoInfonavit`, porque ahí lo natural es marcar la exclusión.
+  const inc = palancas.incluir ?? {};
+  const anios = diasEntre(hoy, fechaRetiro) / DIAS_ANIO;
+  const fvHoy = Math.pow(RENDIMIENTO_REAL, anios);
+  const fvHoyInf = Math.pow(RENDIMIENTO_REAL_INFONAVIT, anios);
   const rcvBase = palancas.overrides?.rcv97 ?? saldos.rcv97; // K25
   const infBase = palancas.overrides?.infonavit ?? saldos.infonavit; // K26
   const avBase = palancas.overrides?.ahorroVoluntario ?? saldos.ahorro_voluntario; // K27
-  const saldoAfore = rcvBase * fvHoy + aportacionesFV; // K19
+  const corpBase = palancas.overrides?.planCorporativo ?? 0;
+  const otrosBase = palancas.overrides?.otrosPlanes ?? 0;
+
+  const saldoAfore = (rcvBase * fvHoy + aportacionesFV) * ((inc.afore ?? true) ? 1 : 0); // K19
   const usaCredito = palancas.usaCreditoInfonavit || saldos.credito_infonavit_vigente; // C45
   const saldoInfonavit = (infBase * fvHoyInf + infonavitFV) * (usaCredito ? 0 : 1); // K20 (0% real)
-  const saldoAV = avBase * fvHoy + ahorroVoluntarioFV; // K21
-  // Ahorro fuera de la AFORE (plan privado/corporativo), capturado por el
-  // asesor: saldo en el momento 1, proyectado al mismo rendimiento real que la
-  // AFORE. Va aparte de `saldoAV` porque no vive en la cuenta individual.
-  const externoBase = palancas.overrides?.ahorroExterno ?? 0;
-  const fvHoyExterno = Math.pow(RENDIMIENTO_REAL_EXTERNO, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
-  const saldoExterno = externoBase * fvHoyExterno;
+  const saldoAV =
+    (avBase * fvHoy + ahorroVoluntarioFV) * ((inc.ahorroVoluntario ?? true) ? 1 : 0); // K21
+  const saldoCorporativo =
+    (corpBase * Math.pow(RENDIMIENTO_REAL_CORPORATIVO, anios) + corporativoFV) *
+    ((inc.planCorporativo ?? true) ? 1 : 0);
+  const saldoOtrosPlanes =
+    (otrosBase * Math.pow(RENDIMIENTO_REAL_OTROS, anios) + otrosFV) *
+    ((inc.otrosPlanes ?? true) ? 1 : 0);
 
   // ---- Pensiones (K22..K24) ----
   const negativa = !(semanasRetiro > semanasMinimasPMG);
@@ -164,7 +181,7 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     : Math.max(((saldoAfore + saldoInfonavit) / urv) * FACTOR_RETIRO / 12, pmg); // K23
   const pensionTotal = negativa
     ? null
-    : pensionAforeInfonavit! + (saldoAV + saldoExterno) / urv / 12; // K24
+    : pensionAforeInfonavit! + (saldoAV + saldoCorporativo + saldoOtrosPlanes) / urv / 12; // K24
 
   // La negativa es un RESULTADO, no un dato faltante: se acompaña de su razón
   // (semanas que tiene vs. las que exige su año de retiro) y de su salida
@@ -189,8 +206,9 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
         retiroUnaExhibicion: saldoAfore,
         devolucionVivienda: saldoInfonavit, // ya viene en 0 si hay crédito vigente
         ahorroVoluntario: saldoAV,
-        ahorroExterno: saldoExterno,
-        total: saldoAfore + saldoInfonavit + saldoAV + saldoExterno,
+        planCorporativo: saldoCorporativo,
+        otrosPlanes: saldoOtrosPlanes,
+        total: saldoAfore + saldoInfonavit + saldoAV + saldoCorporativo + saldoOtrosPlanes,
         semanasFaltantes,
       }
     : null;
@@ -212,7 +230,8 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       saldoAforeProyectado: saldoAfore,
       saldoInfonavitProyectado: saldoInfonavit,
       saldoAhorroVoluntario: saldoAV,
-      saldoAhorroExterno: saldoExterno,
+      saldoPlanCorporativo: saldoCorporativo,
+      saldoOtrosPlanes: saldoOtrosPlanes,
       urv,
       pmg,
       aportacionesFuturas: aportacionesFV,

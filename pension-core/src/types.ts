@@ -69,8 +69,24 @@ export interface Palancas {
   salarioCotizacionRetro: 'MINIMO' | 'MAXIMO';
   /** Ley 97: tiene/usará crédito Infonavit (anula saldo Infonavit de la pensión). */
   usaCreditoInfonavit: boolean;
-  /** Ley 97: aportación voluntaria mensual (default 0). */
+  /** Ley 97: aportación voluntaria mensual a la AFORE (default 0). */
   ahorroVoluntarioMensual: number;
+  /** Ley 97: aportación mensual al plan de retiro corporativo (default 0). */
+  planCorporativoMensual?: number;
+  /** Ley 97: aportación mensual a otros planes — PPR, fondos (default 0). */
+  otrosPlanesMensual?: number;
+  /**
+   * Qué vehículos entran en la pensión. Es una decisión DE LA CORRIDA, no un
+   * dato del cliente: no se guarda, y todo entra por default. El de Infonavit
+   * se expresa al revés en la UI ("lo usa o lo va a usar para otra cosa"),
+   * porque ahí lo natural es marcar la exclusión.
+   */
+  incluir?: {
+    afore?: boolean;
+    ahorroVoluntario?: boolean;
+    planCorporativo?: boolean;
+    otrosPlanes?: boolean;
+  };
   /**
    * Ajuste de semanas (±) sobre las semanas del cliente: positivas = semanas
    * por recuperar/reconocer (trámite), negativas = riesgo de que el IMSS no
@@ -85,13 +101,15 @@ export interface Palancas {
     infonavit?: number;
     ahorroVoluntario?: number;
     /**
-     * Ahorro que NO está en la AFORE: planes de pensión privados o
-     * corporativos, cajas de ahorro, saldos que el cliente tiene fuera del
-     * sistema (p. ej. el plan de Pepsico de Eva Santos). Se suma como saldo en
-     * el momento 1 y se proyecta al mismo rendimiento real que la AFORE, pero
-     * se reporta aparte: uno está en la AFORE y el otro no.
+     * Plan de retiro CORPORATIVO: el que le administra su empresa (p. ej. el
+     * de Pepsico de Eva Santos). Saldo de hoy; se proyecta al 2% real.
      */
-    ahorroExterno?: number;
+    planCorporativo?: number;
+    /**
+     * Otros planes de ahorro para el retiro: PPR de aseguradora, fondos de
+     * inversión, cajas de ahorro. Saldo de hoy; se proyecta al 1% real.
+     */
+    otrosPlanes?: number;
     /**
      * "Disponible AFORE" real capturado por el asesor (un solo número). Si se
      * define, reemplaza al estimado SAR92 + 30% del RCV97 en el efectivo del
@@ -272,8 +290,10 @@ export interface SalidaNegativa97 {
   devolucionVivienda: number;
   /** Ahorro voluntario, disponible en cualquier caso. */
   ahorroVoluntario: number;
-  /** Ahorro fuera de la AFORE (plan privado/corporativo). */
-  ahorroExterno: number;
+  /** Plan de retiro corporativo. */
+  planCorporativo: number;
+  /** Otros planes: PPR, fondos, cajas de ahorro. */
+  otrosPlanes: number;
   /** Total que se lleva si acepta la negativa. */
   total: number;
   /** Semanas que le faltan para revertirla cotizando. */
@@ -300,8 +320,10 @@ export interface ResultadoLey97 {
     saldoAforeProyectado: number;
     saldoInfonavitProyectado: number;
     saldoAhorroVoluntario: number;
-    /** Ahorro fuera de la AFORE, proyectado al retiro. */
-    saldoAhorroExterno: number;
+    /** Plan corporativo proyectado al retiro (2% real). */
+    saldoPlanCorporativo: number;
+    /** Otros planes proyectados al retiro (1% real). */
+    saldoOtrosPlanes: number;
     urv: number;
     pmg: number;
     aportacionesFuturas: number;
