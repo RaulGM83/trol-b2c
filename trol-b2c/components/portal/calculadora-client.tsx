@@ -955,6 +955,11 @@ function Calc97Panel({
   )
   const r = useMemo(() => computeLey97(entrada), [entrada])
   const d = r.detalle
+  // Cliente en el piso: lo que junte en la AFORE no alcanza la mínima
+  // garantizada y el gobierno completa. Es el dato que más confunde en una
+  // asesoría —el Infonavit deja de mover la pensión, y sólo lo que va ENCIMA
+  // del piso la sube— así que se dice en pantalla en vez de dejarlo deducir.
+  const enPMG = !r.negativa && r.pensionAfore !== null && r.pensionAfore <= d.pmg + 0.5
 
   const barrido = useMemo(
     () =>
@@ -1036,10 +1041,18 @@ function Calc97Panel({
           { label: "Solo AFORE", value: fmt(r.pensionAfore) },
           { label: "AFORE + Infonavit", value: fmt(r.pensionAforeInfonavit) },
           {
-            label: "Total (+ ahorro voluntario)",
+            label: "Total (+ ahorro encima)",
             value: fmt(r.pensionTotal),
             destacado: true,
           },
+          ...(enPMG
+            ? [
+                {
+                  label: "En pensión mínima garantizada",
+                  value: `Sí — el piso es ${fmt(d.pmg)}`,
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -1152,6 +1165,22 @@ function Calc97Panel({
         }
       />
 
+      {enPMG && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">
+            Está en la pensión mínima garantizada ({fmt(d.pmg)} al mes).
+          </p>
+          <p className="mt-1">
+            Lo que junte en su AFORE no alcanza ese piso y el gobierno completa
+            la diferencia. Mientras siga aquí, el saldo Infonavit no le sube la
+            pensión: entra antes del piso y se lo come la mínima. Lo único que
+            sí la mueve es el ahorro que va <b>encima</b> —voluntario, plan de
+            la empresa, otros planes— o juntar lo suficiente para rebasar el
+            piso por cuenta propia.
+          </p>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Saldos proyectados al retiro</CardTitle>
@@ -1160,6 +1189,8 @@ function Calc97Panel({
           <Stat label="AFORE (RCV)" value={fmt(d.saldoAforeProyectado)} />
           <Stat label="Infonavit" value={fmt(d.saldoInfonavitProyectado)} />
           <Stat label="Ahorro voluntario" value={fmt(d.saldoAhorroVoluntario)} />
+          <Stat label="Plan de la empresa" value={fmt(d.saldoPlanCorporativo)} />
+          <Stat label="Otros planes" value={fmt(d.saldoOtrosPlanes)} />
           <Stat label="Aportaciones futuras" value={fmt(d.aportacionesFuturas)} />
           <Stat label="URV (renta vitalicia)" value={d.urv.toFixed(2)} />
           <Stat label="PMG aplicable" value={fmt(d.pmg)} />
@@ -1171,9 +1202,19 @@ function Calc97Panel({
           <CardTitle className="text-base">Pensión por componentes</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <Stat label="Solo AFORE" value={fmt(r.pensionAfore)} />
-          <Stat label="AFORE + Infonavit" value={fmt(r.pensionAforeInfonavit)} />
-          <Stat label="Total (+ ahorro voluntario)" value={fmt(r.pensionTotal)} destacado />
+          <Stat
+            label={enPMG ? "Solo AFORE (en la mínima)" : "Solo AFORE"}
+            value={fmt(r.pensionAfore)}
+          />
+          <Stat
+            label={
+              enPMG && r.pensionAforeInfonavit === r.pensionAfore
+                ? "AFORE + Infonavit (no suma: PMG)"
+                : "AFORE + Infonavit"
+            }
+            value={fmt(r.pensionAforeInfonavit)}
+          />
+          <Stat label="Total (+ ahorro encima)" value={fmt(r.pensionTotal)} destacado />
         </CardContent>
       </Card>
 
