@@ -58,6 +58,48 @@ describe('ahorro en el momento 1', () => {
     expect(ratio).toBeLessThan(4.5);
   });
 
+  it('el plan privado rinde 2% real, por debajo del 3% de la AFORE', () => {
+    const r = con({ ahorroVoluntario: 100_000, ahorroExterno: 100_000 });
+    // Mismo monto y mismo horizonte: el de la AFORE termina más alto.
+    expect(r.detalle.saldoAhorroVoluntario).toBeGreaterThan(r.detalle.saldoAhorroExterno);
+  });
+
+  // --------------------------------------------------------------------------
+  // Quién sí y quién no mueve la aguja cuando el cliente cae en PMG.
+  // Regla (Raúl, 5-sep-2026): el ahorro voluntario y el plan privado SIEMPRE
+  // suman, porque van encima de la pensión. El único que puede no aportar nada
+  // es el Infonavit, porque entra ANTES del piso de la mínima garantizada.
+  // --------------------------------------------------------------------------
+  describe('cuando la AFORE no alcanza la PMG', () => {
+    const pobre = (overrides: Palancas['overrides']) =>
+      computeLey97({
+        ...base,
+        palancas: { ...palancas, overrides: { rcv97: 40_000, infonavit: 300_000, ...overrides } },
+      });
+
+    it('la pensión se va al piso de la mínima garantizada', () => {
+      const r = pobre(undefined);
+      expect(r.pensionAfore).toBe(r.detalle.pmg);
+    });
+
+    it('el Infonavit no aporta nada: se lo come la PMG', () => {
+      const r = pobre(undefined);
+      expect(r.pensionAforeInfonavit).toBe(r.pensionAfore);
+    });
+
+    it('el ahorro voluntario sí aporta, aun en PMG', () => {
+      const sin = pobre(undefined);
+      const conAV = pobre({ ahorroVoluntario: 300_000 });
+      expect(conAV.pensionTotal!).toBeGreaterThan(sin.pensionTotal!);
+    });
+
+    it('el plan privado sí aporta, aun en PMG', () => {
+      const sin = pobre(undefined);
+      const conPlan = pobre({ ahorroExterno: 300_000 });
+      expect(conPlan.pensionTotal!).toBeGreaterThan(sin.pensionTotal!);
+    });
+  });
+
   it('el externo no toca las pensiones de AFORE ni de AFORE+Infonavit', () => {
     const sin = con(undefined);
     const conPlan = con({ ahorroExterno: 1_000_000 });

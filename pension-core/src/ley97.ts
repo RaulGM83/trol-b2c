@@ -40,6 +40,9 @@ const RENDIMIENTO_REAL = 1.03; // AFORE/Siefore: rendimiento real anual de la pr
 // que inflaba el saldo de vivienda y con él la pensión Ley 97 y el bloque IV de la
 // asesoría Infonavit.
 const RENDIMIENTO_REAL_INFONAVIT = 1.0;
+// Ahorro fuera de la AFORE (plan privado/corporativo): 2% real anual, por
+// debajo del 3% de la Siefore (regla de negocio, Raúl 5-sep-2026).
+const RENDIMIENTO_REAL_EXTERNO = 1.02;
 const MAX_MESES = 716; // filas 5:721
 const FACTOR_RETIRO = 0.81; // castigo del Excel al convertir saldo→pensión
 const CESANTIA_ANIO_TOPE = 2030;
@@ -150,7 +153,8 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   // asesor: saldo en el momento 1, proyectado al mismo rendimiento real que la
   // AFORE. Va aparte de `saldoAV` porque no vive en la cuenta individual.
   const externoBase = palancas.overrides?.ahorroExterno ?? 0;
-  const saldoExterno = externoBase * fvHoy;
+  const fvHoyExterno = Math.pow(RENDIMIENTO_REAL_EXTERNO, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
+  const saldoExterno = externoBase * fvHoyExterno;
 
   // ---- Pensiones (K22..K24) ----
   const negativa = !(semanasRetiro > semanasMinimasPMG);
