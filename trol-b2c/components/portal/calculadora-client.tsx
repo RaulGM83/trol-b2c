@@ -32,6 +32,13 @@ import {
   ResumenCliente,
   type ResumenClienteData,
 } from "@/components/resumen-cliente"
+import {
+  camposDe,
+  PanelDatosAUtilizar,
+  type DatosAUtilizar,
+  type Incluir,
+  type VehiculoId,
+} from "@/components/portal/datos-a-utilizar"
 
 // ============================================================================
 // Utilidades compartidas
@@ -51,6 +58,17 @@ const ANIO = new Date().getFullYear()
 const SAL_MIN = SALARIO_MINIMO[ANIO] ?? 315.04
 const SAL_TOPE = (UMA[ANIO] ?? 117.35) * 25
 const PCTS = [0, 0.25, 0.5, 0.75, 1] as const
+
+// Qué vehículos muestra cada calculadora. Ley 73 / Mod 40 sólo mueve dinero
+// líquido (lo disponible en la AFORE y el Infonavit); Ley 97 proyecta los cinco.
+const VEHICULOS_M40: VehiculoId[] = ["disponible", "infonavit"]
+const VEHICULOS_97: VehiculoId[] = [
+  "afore",
+  "infonavit",
+  "voluntario",
+  "corporativo",
+  "otros",
+]
 
 function edadActualDe(fechaNacimiento: string, en?: Date): number {
   const ref = en?.getTime() ?? Date.now()
@@ -104,10 +122,19 @@ type Branding = {
  * Saldos reales capturados por el asesor y guardados en Supabase
  * (partner_transactions.saldos_corregidos / clientes.saldos_corregidos).
  */
-export type SaldosCorregidos = {
-  disponible_afore?: number
-  infonavit?: number
-  actualizado_at?: string
+export type SaldosCorregidos = DatosAUtilizar
+
+/** Del jsonb guardado a los datos del panel, tirando lo que no es número. */
+function datosDeSaldos(sc: SaldosCorregidos | null): DatosAUtilizar {
+  if (!sc) return {}
+  const d: DatosAUtilizar = {}
+  for (const k of camposDe(["afore", "disponible", "infonavit", "voluntario", "corporativo", "otros"])) {
+    const v = sc[k]
+    // El índice es una unión de claves, así que TS estrecha el tipo del valor
+    // a la intersección de todas: hay que decirle que es un número y ya.
+    if (typeof v === "number" && Number.isFinite(v)) (d as Record<string, number>)[k] = v
+  }
+  return d
 }
 
 /** "Retiro 62 con Mod40" → "Retiro-62-con-Mod40" (para el nombre de archivo). */
@@ -185,6 +212,61 @@ export function CalculadoraClient({
   const { perfil } = semilla
   const tabDefault = perfil.ley === "Ley97" ? "c97" : "c73"
   const back = backHref ?? `/consultas/${consultaId}`
+
+  // Los datos a utilizar viven aquí arriba: lo que el asesor corrige en la
+  // pestaña de Mod 40 tiene que verse igual en la de Ley 97, y guardarse una
+  // sola vez. Los interruptores de incluir/excluir NO viven aquí: son de cada
+  // escenario y se pierden al salir, a propósito.
+  const [datos, setDatos] = useState<DatosAUtilizar>(() =>
+    datosDeSaldos(saldosCorregidos),
+  )
+  const [guardando, setGuardando] = useState(false)
+  const [guardadoAt, setGuardadoAt] = useState<string | null>(
+    saldosCorregidos?.actualizado_at ?? null,
+  )
+  const setValor = (campo: keyof DatosAUtilizar, v: number | undefined) =>
+    setDatos((d) => ({ ...d, [campo]: v }))
+
+  /**
+   * Guarda los campos del panel que llama. `campos` acota el alcance: un panel
+   * que sólo muestra dos vehículos no puede borrar los otros siete, y los que
+   * quedaron vacíos en ese panel sí se borran — vaciar una casilla es una
+   * decisión, no un olvido.
+   */
+  async function guardarDatos(campos: (keyof DatosAUtilizar)[]) {
+    if (!guardarScope) return
+    const payload: Record<string, number> = {}
+    const borrar: string[] = []
+    for (const c of campos) {
+      const v = datos[c]
+      if (typeof v === "number" && Number.isFinite(v)) payload[c] = v
+      else borrar.push(c)
+    }
+    if (Object.keys(payload).length === 0 && borrar.length === 0) return
+
+    setGuardando(true)
+    const supabase = createClient()
+    const { error } =
+      guardarScope === "consulta_aliado"
+        ? await supabase.schema("trol3").rpc("guardar_saldos_consulta_aliado", {
+            p_consulta: consultaId,
+            p_datos: payload,
+            p_borrar: borrar,
+          })
+        : await supabase.rpc("guardar_saldos_corregidos", {
+            p_id: consultaId,
+            p_scope: guardarScope,
+            p_datos: payload,
+            p_borrar: borrar,
+          })
+    setGuardando(false)
+    if (error) {
+      toast.error(`No se pudieron guardar los datos: ${error.message}`)
+      return
+    }
+    setGuardadoAt(new Date().toISOString())
+    toast.success("Datos guardados")
+  }
 
   // Consecutivo del default "Escenario N" para los PDFs (compartido entre tabs)
   const [numEscenario, setNumEscenario] = useState(1)
@@ -269,7 +351,11 @@ export function CalculadoraClient({
         <TabsContent value="c97" className="mt-3 w-full">
           <Calc97Panel
             semilla={semilla}
-            saldosCorregidos={saldosCorregidos}
+            datos={datos}
+            setValor={setValor}
+            onGuardar={guardarScope ? guardarDatos : undefined}
+            guardando={guardando}
+            guardadoAt={guardadoAt}
             pdfCtx={pdfCtx}
           />
         </TabsContent>
@@ -277,9 +363,11 @@ export function CalculadoraClient({
           <TabsContent value="m40" className="mt-3 w-full">
             <Mod40Panel
               semilla={semilla}
-              consultaId={consultaId}
-              saldosCorregidos={saldosCorregidos}
-              guardarScope={guardarScope}
+              datos={datos}
+              setValor={setValor}
+              onGuardar={guardarScope ? guardarDatos : undefined}
+              guardando={guardando}
+              guardadoAt={guardadoAt}
               historialLaboral={historialLaboral}
               limiteInscripcionMod40={limiteInscripcionMod40}
               serieINPC={serieINPC}
@@ -802,11 +890,19 @@ function Calc73Panel({
 
 function Calc97Panel({
   semilla,
-  saldosCorregidos = null,
+  datos,
+  setValor,
+  onGuardar,
+  guardando = false,
+  guardadoAt = null,
   pdfCtx,
 }: {
   semilla: SemillaV2
-  saldosCorregidos?: SaldosCorregidos | null
+  datos: DatosAUtilizar
+  setValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
+  onGuardar?: (campos: (keyof DatosAUtilizar)[]) => void
+  guardando?: boolean
+  guardadoAt?: string | null
   pdfCtx: PdfCtx
 }) {
   const { perfil, saldos, salario_60m } = semilla
@@ -817,21 +913,45 @@ function Calc97Panel({
     ...PALANCAS_DEFAULT,
     edadRetiro: edades[0],
     recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
-    // Infonavit OFF por default: la pensión de entrada es solo AFORE; el asesor
-    // activa Infonavit manualmente si aplica.
-    usaCreditoInfonavit: true,
-    // El Infonavit real guardado en la calculadora Mod40 se comparte aquí.
-    overrides:
-      saldosCorregidos?.infonavit !== undefined
-        ? { infonavit: saldosCorregidos.infonavit }
-        : undefined,
   })
   const set = <K extends keyof Palancas>(k: K, v: Palancas[K]) =>
     setPalancas((p) => ({ ...p, [k]: v }))
 
+  // Qué dinero entra al cálculo. Sólo de la sesión: es una pregunta de
+  // escenario, no un dato del cliente. El Infonavit arranca FUERA porque la
+  // mayoría lo tiene comprometido con la casa; el asesor lo mete si aplica.
+  const [incluir, setIncluir] = useState<Incluir>({ infonavit: false })
+  const setIncluirClave = (k: keyof Incluir, v: boolean) =>
+    setIncluir((i) => ({ ...i, [k]: v }))
+
+  // Las palancas que ve el motor: las del escenario más los datos capturados.
+  // Los montos no viven en `palancas` porque se comparten con la pestaña de
+  // Mod 40 y se guardan; sólo se inyectan al momento de calcular.
+  const palancasConDatos = useMemo<Palancas>(
+    () => ({
+      ...palancas,
+      // El interruptor del Infonavit se expresa en el motor al revés: "lo usa
+      // para otra cosa" es exactamente `usaCreditoInfonavit`.
+      usaCreditoInfonavit: !(incluir.infonavit ?? false),
+      ahorroVoluntarioMensual: datos.ahorro_voluntario_mensual ?? 0,
+      planCorporativoMensual: datos.plan_corporativo_mensual ?? 0,
+      otrosPlanesMensual: datos.otros_planes_mensual ?? 0,
+      incluir,
+      overrides: {
+        ...palancas.overrides,
+        rcv97: datos.rcv97,
+        infonavit: datos.infonavit,
+        ahorroVoluntario: datos.ahorro_voluntario,
+        planCorporativo: datos.plan_corporativo,
+        otrosPlanes: datos.otros_planes,
+      },
+    }),
+    [palancas, datos, incluir],
+  )
+
   const entrada = useMemo(
-    () => ({ perfil, saldos, salario_60m, palancas }),
-    [perfil, saldos, salario_60m, palancas],
+    () => ({ perfil, saldos, salario_60m, palancas: palancasConDatos }),
+    [perfil, saldos, salario_60m, palancasConDatos],
   )
   const r = useMemo(() => computeLey97(entrada), [entrada])
   const d = r.detalle
@@ -841,17 +961,17 @@ function Calc97Panel({
       edades.map((edad) => {
         const res = computeLey97({
           ...entrada,
-          palancas: { ...palancas, edadRetiro: edad },
+          palancas: { ...palancasConDatos, edadRetiro: edad },
         })
         return {
           edad,
-          // Pensión total (incluye Infonavit y ahorro voluntario) para que
-          // las palancas de AV se reflejen también en el barrido por edad.
+          // Pensión total (incluye Infonavit, ahorro voluntario y planes
+          // privados) para que los datos capturados se vean también aquí.
           pension: res.pensionTotal,
           saldo: res.detalle.saldoAforeProyectado,
         }
       }),
-    [edades, entrada, palancas],
+    [edades, entrada, palancasConDatos],
   )
 
   const buildPdf = (): PdfEscenarioData => ({
@@ -878,40 +998,36 @@ function Calc97Panel({
           ]
         : []),
       {
-        label: "Crédito Infonavit",
-        value: palancas.usaCreditoInfonavit ? "Sí (anula saldo Infonavit)" : "No",
+        label: "Infonavit",
+        value: incluir.infonavit
+          ? "Entra al cálculo"
+          : "Fuera: lo usa para otra cosa",
       },
-      {
-        label: "Ahorro voluntario mensual",
-        value: fmt(palancas.ahorroVoluntarioMensual),
-      },
-      ...(palancas.overrides?.rcv97 !== undefined
-        ? [{ label: "Saldo AFORE corregido", value: fmt(palancas.overrides.rcv97) }]
-        : []),
-      ...(palancas.overrides?.infonavit !== undefined
-        ? [
-            {
-              label: "Saldo Infonavit corregido",
-              value: fmt(palancas.overrides.infonavit),
-            },
-          ]
-        : []),
-      ...(palancas.overrides?.ahorroExterno !== undefined
-        ? [
-            {
-              label: "Plan privado (fuera de AFORE)",
-              value: fmt(palancas.overrides.ahorroExterno),
-            },
-          ]
-        : []),
-      ...(palancas.overrides?.ahorroVoluntario !== undefined
-        ? [
-            {
-              label: "Ahorro voluntario actual corregido",
-              value: fmt(palancas.overrides.ahorroVoluntario),
-            },
-          ]
-        : []),
+      ...filasPdfVehiculo("AFORE (RCV)", datos.rcv97, undefined, incluir.afore),
+      ...filasPdfVehiculo(
+        "Infonavit",
+        datos.infonavit,
+        undefined,
+        incluir.infonavit ?? false,
+      ),
+      ...filasPdfVehiculo(
+        "Ahorro voluntario",
+        datos.ahorro_voluntario,
+        datos.ahorro_voluntario_mensual,
+        incluir.ahorroVoluntario,
+      ),
+      ...filasPdfVehiculo(
+        "Plan de retiro de la empresa",
+        datos.plan_corporativo,
+        datos.plan_corporativo_mensual,
+        incluir.planCorporativo,
+      ),
+      ...filasPdfVehiculo(
+        "Otros planes de ahorro",
+        datos.otros_planes,
+        datos.otros_planes_mensual,
+        incluir.otrosPlanes,
+      ),
     ],
     secciones: [
       {
@@ -932,6 +1048,8 @@ function Calc97Panel({
           { label: "AFORE (RCV)", value: fmt(d.saldoAforeProyectado) },
           { label: "Infonavit", value: fmt(d.saldoInfonavitProyectado) },
           { label: "Ahorro voluntario", value: fmt(d.saldoAhorroVoluntario) },
+          { label: "Plan de la empresa", value: fmt(d.saldoPlanCorporativo) },
+          { label: "Otros planes", value: fmt(d.saldoOtrosPlanes) },
           { label: "Aportaciones futuras", value: fmt(d.aportacionesFuturas) },
         ],
       },
@@ -993,26 +1111,22 @@ function Calc97Panel({
               onChange={(v) => set("recuperarSemanasDescontadas", v)}
             />
           )}
-          <Toggle
-            label="Tiene o usará crédito Infonavit"
-            checked={palancas.usaCreditoInfonavit}
-            onChange={(v) => set("usaCreditoInfonavit", v)}
-          />
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="av97">Ahorro voluntario mensual</Label>
-            <Input
-              id="av97"
-              type="number"
-              min={0}
-              step={500}
-              value={palancas.ahorroVoluntarioMensual}
-              onChange={(e) =>
-                set("ahorroVoluntarioMensual", Math.max(0, Number(e.target.value)))
-              }
-            />
-          </div>
           <Separator />
-          <OverridesSaldos saldos={saldos} palancas={palancas} set={set} conAhorro />
+          <PanelDatosAUtilizar
+            vehiculos={VEHICULOS_97}
+            estimados={{
+              rcv97: saldos.rcv97,
+              infonavit: saldos.infonavit,
+              ahorro_voluntario: saldos.ahorro_voluntario,
+            }}
+            valores={datos}
+            onValor={setValor}
+            incluir={incluir}
+            onIncluir={setIncluirClave}
+            onGuardar={onGuardar ? () => onGuardar(camposDe(VEHICULOS_97)) : undefined}
+            guardando={guardando}
+            guardadoAt={guardadoAt}
+          />
           <DescargarEscenario pdfCtx={pdfCtx} idSuffix="97" buildPayload={buildPdf} />
         </>
       }
@@ -1083,18 +1197,22 @@ function Calc97Panel({
 
 function Mod40Panel({
   semilla,
-  consultaId,
-  saldosCorregidos = null,
-  guardarScope = null,
+  datos,
+  setValor,
+  onGuardar,
+  guardando = false,
+  guardadoAt = null,
   historialLaboral = null,
   limiteInscripcionMod40 = null,
   serieINPC,
   pdfCtx,
 }: {
   semilla: SemillaV2
-  consultaId: string
-  saldosCorregidos?: SaldosCorregidos | null
-  guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
+  datos: DatosAUtilizar
+  setValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
+  onGuardar?: (campos: (keyof DatosAUtilizar)[]) => void
+  guardando?: boolean
+  guardadoAt?: string | null
   historialLaboral?: RegistroHistorialMod40[] | null
   limiteInscripcionMod40?: string | null
   serieINPC?: SerieINPC
@@ -1136,46 +1254,14 @@ function Mod40Panel({
   const [umas, setUmas] = useState(25)
   const [recuperarDesc, setRecuperarDesc] = useState(semanasRecuperables(perfil) > 0)
   const [semanasExtra, setSemanasExtra] = useState(0)
-  // Overrides precargados con los saldos reales guardados (si existen)
-  const [overrides, setOverrides] = useState<Palancas["overrides"]>(() =>
-    saldosCorregidos?.disponible_afore === undefined &&
-    saldosCorregidos?.infonavit === undefined
-      ? undefined
-      : {
-          disponibleAfore: saldosCorregidos?.disponible_afore,
-          infonavit: saldosCorregidos?.infonavit,
-        },
+  // Los montos vienen de arriba: son los mismos que ve la pestaña de Ley 97.
+  const overrides = useMemo<Palancas["overrides"]>(
+    () => ({
+      disponibleAfore: datos.disponible_afore,
+      infonavit: datos.infonavit,
+    }),
+    [datos.disponible_afore, datos.infonavit],
   )
-  const [guardando, setGuardando] = useState(false)
-  const [guardadoAt, setGuardadoAt] = useState<string | null>(
-    saldosCorregidos?.actualizado_at ?? null,
-  )
-
-  async function guardarSaldos() {
-    if (!guardarScope) return
-    setGuardando(true)
-    const supabase = createClient()
-    const { error } =
-      guardarScope === "consulta_aliado"
-        ? await supabase.schema("trol3").rpc("guardar_saldos_consulta_aliado", {
-            p_consulta: consultaId,
-            p_disponible_afore: overrides?.disponibleAfore ?? null,
-            p_infonavit: overrides?.infonavit ?? null,
-          })
-        : await supabase.rpc("guardar_saldos_corregidos", {
-            p_id: consultaId,
-            p_scope: guardarScope,
-            p_disponible_afore: overrides?.disponibleAfore ?? null,
-            p_infonavit: overrides?.infonavit ?? null,
-          })
-    setGuardando(false)
-    if (error) {
-      toast.error(`No se pudieron guardar los saldos: ${error.message}`)
-      return
-    }
-    setGuardadoAt(new Date().toISOString())
-    toast.success("Saldos guardados como correctos")
-  }
 
   const r = useMemo(
     () =>
@@ -1478,58 +1564,20 @@ function Mod40Panel({
             onChange={setSemanasExtra}
           />
           <Separator />
-          <details
-            className="flex flex-col gap-2"
-            open={
-              overrides?.disponibleAfore !== undefined ||
-              overrides?.infonavit !== undefined
+          <PanelDatosAUtilizar
+            vehiculos={VEHICULOS_M40}
+            estimados={{
+              disponible_afore: saldos.sar92 + saldos.rcv97 * 0.3,
+              infonavit: saldos.infonavit,
+            }}
+            valores={datos}
+            onValor={setValor}
+            onGuardar={
+              onGuardar ? () => onGuardar(camposDe(VEHICULOS_M40)) : undefined
             }
-          >
-            <summary className="text-sm font-medium cursor-pointer select-none">
-              Corregir saldos estimados
-            </summary>
-            <div className="flex flex-col gap-2 mt-2">
-              <OverrideInput
-                label="Disponible AFORE"
-                placeholder={saldos.sar92 + saldos.rcv97 * 0.3}
-                value={overrides?.disponibleAfore}
-                onChange={(v) =>
-                  setOverrides((o) => ({ ...o, disponibleAfore: v }))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Mientras no haya dato real, se estima como SAR 92 + 30% del RCV 97.
-              </p>
-              <OverrideInput
-                label="Saldo Infonavit"
-                placeholder={saldos.infonavit}
-                value={overrides?.infonavit}
-                onChange={(v) => setOverrides((o) => ({ ...o, infonavit: v }))}
-              />
-              {guardarScope && (
-                <div className="flex flex-col gap-1 mt-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={guardarSaldos}
-                    disabled={
-                      guardando ||
-                      (overrides?.disponibleAfore === undefined &&
-                        overrides?.infonavit === undefined)
-                    }
-                  >
-                    {guardando ? "Guardando…" : "Guardar como saldos correctos"}
-                  </Button>
-                  {guardadoAt && (
-                    <p className="text-xs text-muted-foreground">
-                      Guardados el {fmtFechaCorta(guardadoAt)} — se precargan al
-                      volver a abrir esta calculadora.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </details>
+            guardando={guardando}
+            guardadoAt={guardadoAt}
+          />
           <DescargarEscenario pdfCtx={pdfCtx} idSuffix="m40" buildPayload={buildPdf} />
         </>
       }
@@ -2045,61 +2093,20 @@ function SliderSalario({
   )
 }
 
-function OverridesSaldos({
-  saldos,
-  palancas,
-  set,
-  conAhorro = false,
-}: {
-  saldos: SemillaV2["saldos"]
-  palancas: Palancas
-  set: <K extends keyof Palancas>(k: K, v: Palancas[K]) => void
-  conAhorro?: boolean
-}) {
-  return (
-    <details className="flex flex-col gap-2">
-      <summary className="text-sm font-medium cursor-pointer select-none">
-        Corregir saldos estimados
-      </summary>
-      <div className="flex flex-col gap-2 mt-2">
-        <OverrideInput
-          label="Saldo AFORE (RCV97)"
-          placeholder={saldos.rcv97}
-          value={palancas.overrides?.rcv97}
-          onChange={(v) => set("overrides", { ...palancas.overrides, rcv97: v })}
-        />
-        <OverrideInput
-          label="Saldo Infonavit"
-          placeholder={saldos.infonavit}
-          value={palancas.overrides?.infonavit}
-          onChange={(v) => set("overrides", { ...palancas.overrides, infonavit: v })}
-        />
-        {conAhorro && (
-          <>
-            <OverrideInput
-              label="Ahorro voluntario actual (AFORE)"
-              placeholder={saldos.ahorro_voluntario}
-              value={palancas.overrides?.ahorroVoluntario}
-              onChange={(v) =>
-                set("overrides", { ...palancas.overrides, ahorroVoluntario: v })
-              }
-            />
-            {/* Dinero que NO está en la AFORE: plan de pensión corporativo,
-                caja de ahorro, inversión aparte. Se suma al retiro pero se
-                reporta por separado, porque no vive en la cuenta individual. */}
-            <OverrideInput
-              label="Plan privado o corporativo (fuera de la AFORE)"
-              placeholder={0}
-              value={palancas.overrides?.ahorroExterno}
-              onChange={(v) =>
-                set("overrides", { ...palancas.overrides, ahorroExterno: v })
-              }
-            />
-          </>
-        )}
-      </div>
-    </details>
-  )
+/** Un renglón de PDF por vehículo, sólo si el asesor lo capturó. */
+function filasPdfVehiculo(
+  etiqueta: string,
+  saldo: number | undefined,
+  mensual: number | undefined,
+  dentro: boolean | undefined,
+): PdfFila[] {
+  if (saldo === undefined && !mensual) return []
+  const partes = [
+    saldo !== undefined ? fmt(saldo) : null,
+    mensual ? `${fmt(mensual)}/mes` : null,
+    (dentro ?? true) ? null : "no incluido",
+  ].filter(Boolean)
+  return [{ label: etiqueta, value: partes.join(" · ") }]
 }
 
 function Stat({
@@ -2298,29 +2305,3 @@ function DescargarEscenario({
   )
 }
 
-function OverrideInput({
-  label,
-  placeholder,
-  value,
-  onChange,
-}: {
-  label: string
-  placeholder: number
-  value: number | undefined
-  onChange: (v: number | undefined) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
-      <Input
-        type="number"
-        min={0}
-        placeholder={`Estimado: ${mxn.format(placeholder)}`}
-        value={value ?? ""}
-        onChange={(e) =>
-          onChange(e.target.value === "" ? undefined : Math.max(0, Number(e.target.value)))
-        }
-      />
-    </div>
-  )
-}

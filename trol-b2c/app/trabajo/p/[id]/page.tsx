@@ -216,6 +216,31 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
+  // Los datos a utilizar viven en dos lados: el jsonb que escribe la
+  // calculadora y la capa declarada de trol3.datos, que es donde caen las
+  // ediciones hechas en la tabla del expediente. Manda el jsonb, porque es lo
+  // último que el asesor tecleó en la calculadora; lo que falte se rellena con
+  // el dato declarado para que ninguna captura se pierda de vista.
+  const num = (c: string): number | undefined => {
+    const v = datosMap.get(c)?.valor;
+    const n = v == null ? NaN : Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  saldosCorregidos = {
+    rcv97: num('saldo_rcv97'),
+    infonavit: num('saldo_infonavit'),
+    disponible_afore: num('disponible_afore'),
+    ahorro_voluntario: num('ahorro_voluntario'),
+    ahorro_voluntario_mensual: num('ahorro_voluntario_mensual'),
+    plan_corporativo: num('plan_corporativo'),
+    plan_corporativo_mensual: num('plan_corporativo_mensual'),
+    otros_planes: num('otros_planes'),
+    otros_planes_mensual: num('otros_planes_mensual'),
+    ...Object.fromEntries(
+      Object.entries(saldosCorregidos ?? {}).filter(([, v]) => v != null),
+    ),
+  } as SaldosCorregidos;
+
   const afLiq = (saldosCorregidos?.disponible_afore ?? e.saldo_rcv97) ?? null;
   const infLiq = (saldosCorregidos?.infonavit ?? e.saldo_infonavit) ?? null;
   const saldosLiq = (afLiq != null || infLiq != null) ? (Number(afLiq ?? 0) + Number(infLiq ?? 0)) : null;
@@ -310,7 +335,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
-              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'edad_actual', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit']} fechas={{ imss: e.ley_en }} />
+              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'edad_actual', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente', 'ahorro_voluntario', 'ahorro_voluntario_mensual', 'plan_corporativo', 'plan_corporativo_mensual', 'otros_planes', 'otros_planes_mensual'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado']} fechas={{ imss: e.ley_en }} />
               <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
             </section>
 
@@ -404,7 +429,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       {tab === 'datos' && (
         <section className="rounded-2xl border border-line bg-white p-5">
           <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
-          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
+          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
           <div className="mt-5 border-t border-line pt-4">
             <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
             <ul className="space-y-1 text-xs">
