@@ -314,7 +314,16 @@ export function resumenDesdeCalculoPensional(
 
   return {
     perfil_imss: {
-      edad: toNum(diag.edad_al_momento_del_reporte),
+      // Edad SIEMPRE a hoy y con un decimal. `edad_al_momento_del_reporte` es
+      // la del día en que se generó el cálculo y envejece mal: un reporte de
+      // hace ocho meses mostraba al cliente más joven de lo que es. Sólo se usa
+      // como respaldo cuando no hay fecha de nacimiento.
+      edad: (() => {
+        const fn = toStr(perfil.fecha_nacimiento)
+        if (!fn) return toNum(diag.edad_al_momento_del_reporte)
+        const anios = (Date.now() - new Date(fn).getTime()) / 86_400_000 / 365.25
+        return Number.isFinite(anios) ? Math.trunc(anios * 10) / 10 : toNum(diag.edad_al_momento_del_reporte)
+      })(),
       ley_aplicable: ley,
       situacion_laboral:
         toStr(diag.status_empleo) ?? toStr(perfil.status_empleo),

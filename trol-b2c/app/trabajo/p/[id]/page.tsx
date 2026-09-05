@@ -81,12 +81,23 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const [{ data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
+  const { data: personaMeta } = await db.from('personas').select('created_at').eq('id', params.id).maybeSingle();
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
   const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
-  // Edad actual: derivada de la fecha de nacimiento (v_expediente), solo lectura.
+  // Edad actual: derivada de la fecha de nacimiento, SIEMPRE a hoy y con un
+  // decimal. `v_expediente.edad` la trunca a años enteros con EXTRACT, y a los
+  // 60+ ese decimal es justo el que decide una ventana de Mod 40 o un mes de
+  // retroactivo. No confundir con `edad_base`/`edad_maxima`, que son la edad
+  // DEL ESCENARIO y sí se quedan congeladas.
+  const edadDecimal = e.fecha_nacimiento
+    ? Math.trunc(((Date.now() - new Date(e.fecha_nacimiento as string).getTime()) / 86_400_000 / 365.25) * 10) / 10
+    : (e.edad ?? null);
   {
     const i = rows.findIndex((r) => r.campo === 'fecha_nacimiento');
-    rows.splice(i < 0 ? rows.length : i + 1, 0, { campo: 'edad_actual', nombre: 'Edad actual', tipo: 'number', grupo: 'identidad', opciones: null, valor: e.edad ?? null, soloLectura: true } as DatoRow);
+    rows.splice(i < 0 ? rows.length : i + 1, 0, { campo: 'edad_actual', nombre: 'Edad actual', tipo: 'number', grupo: 'identidad', opciones: null, valor: edadDecimal, soloLectura: true } as DatoRow);
+    if (personaMeta?.created_at) {
+      rows.splice(i < 0 ? rows.length : i + 2, 0, { campo: 'fecha_registro', nombre: 'Registrado el', tipo: 'date', grupo: 'identidad', opciones: null, valor: String(personaMeta.created_at).slice(0, 10), soloLectura: true } as DatoRow);
+    }
   }
   const cabecera = (miembros ?? []).find((x: Any) => x.id === e.cabecera_id);
   const saldoPuntos = (puntos ?? []).reduce((s: number, p: Any) => s + (p.tipo === 'abono' ? p.puntos : -p.puntos), 0);
@@ -241,7 +252,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
           <div>
             <h1 className="text-2xl font-extrabold">{e.nombre ?? '(sin nombre)'} {e.apellidos ?? ''}</h1>
             <div className="mt-1 text-sm text-muted">
-              {e.edad ? `${e.edad} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
+              {edadDecimal ? `${edadDecimal} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
             <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
           </div>
