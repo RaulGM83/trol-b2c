@@ -119,9 +119,16 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   const ultimaCotMod40 = perfil.fechas.ultima_cotizacion_mod40
     ? parseISO(perfil.fechas.ultima_cotizacion_mod40)
     : null;
+  // O15. Quien SIGUE COTIZANDO no tiene baja, y antes eso dejaba el periodo
+  // retroactivo en cero: el proyecto se cotizaba completo y la pension salia
+  // identica a la de no hacer nada (caso Sergio SACS640526, sep-2026).
+  // Regla de negocio (Raul, 5-sep-2026): el proyecto asume que se da de baja
+  // HOY y que al llegar a la fecha de tramite/pension paga el retroactivo de
+  // todo ese tramo, con actualizaciones INPC y recargos a esa fecha.
+  const bajaHipotetica = entrada.hoy ?? new Date();
   const ultimaCot =
     perfil.status_empleo === 'empleado'
-      ? fechaTramite
+      ? bajaHipotetica
       : ultimaCotMod40 && ultimaCotMod40 > ultimaCotValida
         ? ultimaCotMod40
         : ultimaCotValida; // O15

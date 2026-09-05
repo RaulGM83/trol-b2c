@@ -111,7 +111,7 @@ export function AvisosMod40({
       : estado === 'por_vencer'
         ? 'La ventana de reingreso está por vencer'
         : ventana?.sinBaja
-          ? 'Sin baja: no hay periodo retroactivo'
+          ? 'Sin baja: el proyecto asume que deja de cotizar hoy'
           : 'Ventana de reingreso';
 
   return (
