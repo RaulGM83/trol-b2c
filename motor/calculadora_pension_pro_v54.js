@@ -196,7 +196,10 @@ const SUPUESTOS_RENDIMIENTO = {
     sar92_en_concentradora: false,
     inflacion_futura: 0.04,
     rendimiento_futuro_siefore: 0.03,
-    premio_infonavit_futuro: 0.01
+    // 0% REAL hacia adelante (regla de negocio, Raul 5-sep-2026): el Infonavit
+    // ajusta el saldo en linea con la inflacion (~4% nominal), asi que en pesos
+    // de hoy no gana nada. Antes se le asumia 1% de premio real.
+    premio_infonavit_futuro: 0
 };
 // ==========================================================================
 // v5.4 — PARÁMETROS F2 (retiros por desempleo) + CASTIGO PLANO

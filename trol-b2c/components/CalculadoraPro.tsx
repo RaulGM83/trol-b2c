@@ -54,7 +54,7 @@ export function CalculadoraPro({ semilla, embed = false }: { semilla: SemillaV2;
     palancas: {
       edadRetiro: edad, pctTiempoCotizando: pct, salarioMod40: salarioDiario,
       recuperarSemanasDescontadas: recuperar, recuperarSemanasMod40Retro: mod40retro,
-      salarioCotizacionRetro: 'MAXIMO', usaCreditoInfonavit: false, ahorroVoluntarioMensual: 0,
+      salarioCotizacionRetro: 'MAXIMO', usaCreditoInfonavit: true, ahorroVoluntarioMensual: 0,
       overrides,
     },
   });

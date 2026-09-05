@@ -94,7 +94,7 @@ function palancas(over: Partial<Palancas> = {}): Palancas {
     recuperarSemanasDescontadas: false,
     recuperarSemanasMod40Retro: false,
     salarioCotizacionRetro: 'MAXIMO',
-    usaCreditoInfonavit: false,
+    usaCreditoInfonavit: true,
     ahorroVoluntarioMensual: 0,
     ...over,
   };

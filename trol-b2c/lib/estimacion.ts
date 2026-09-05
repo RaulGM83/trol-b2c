@@ -169,7 +169,7 @@ export function estimarDireccional(inp: InputManual): EstimacionVM {
     recuperarSemanasDescontadas: false,
     recuperarSemanasMod40Retro: false,
     salarioCotizacionRetro: 'MAXIMO',
-    usaCreditoInfonavit: false,
+    usaCreditoInfonavit: true,
     ahorroVoluntarioMensual: 0,
   });
 

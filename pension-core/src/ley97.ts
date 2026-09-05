@@ -33,7 +33,13 @@ import {
   porAnio,
 } from './util';
 
-const RENDIMIENTO_REAL = 1.03; // rendimiento real anual de la proyección
+const RENDIMIENTO_REAL = 1.03; // AFORE/Siefore: rendimiento real anual de la proyección
+// Subcuenta de vivienda: 0% REAL hacia adelante (regla de negocio, Raúl 5-sep-2026).
+// El Infonavit ajusta el saldo en línea con la inflación (~4% nominal), así que en
+// pesos de hoy no gana nada. Antes se proyectaba al mismo 3% real que la AFORE, lo
+// que inflaba el saldo de vivienda y con él la pensión Ley 97 y el bloque IV de la
+// asesoría Infonavit.
+const RENDIMIENTO_REAL_INFONAVIT = 1.0;
 const MAX_MESES = 716; // filas 5:721
 const FACTOR_RETIRO = 0.81; // castigo del Excel al convertir saldo→pensión
 const CESANTIA_ANIO_TOPE = 2030;
@@ -122,20 +128,23 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       rMensual * 0.01125 * pct + // U: cesantía empleado
       rMensual * 0.00225 * pct + // V: cesantía gobierno
       (salario < umaCuotaSocial ? 7 * dias : 0) * pct; // W: cuota social
-    const fv = Math.pow(RENDIMIENTO_REAL, diasEntre(n, fechaRetiro) / DIAS_ANIO);
+    const aniosAlRetiro = diasEntre(n, fechaRetiro) / DIAS_ANIO;
+    const fv = Math.pow(RENDIMIENTO_REAL, aniosAlRetiro);
+    const fvInf = Math.pow(RENDIMIENTO_REAL_INFONAVIT, aniosAlRetiro);
     aportacionesFV += aporte * fv; // Y
-    infonavitFV += rMensual * 0.05 * pct * fv; // Z→AA
+    infonavitFV += rMensual * 0.05 * pct * fvInf; // Z→AA (0% real)
     ahorroVoluntarioFV += av * fv; // AB→AC
   });
 
   // ---- Saldos proyectados (K19..K21) ----
   const fvHoy = Math.pow(RENDIMIENTO_REAL, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
+  const fvHoyInf = Math.pow(RENDIMIENTO_REAL_INFONAVIT, diasEntre(hoy, fechaRetiro) / DIAS_ANIO);
   const rcvBase = palancas.overrides?.rcv97 ?? saldos.rcv97; // K25
   const infBase = palancas.overrides?.infonavit ?? saldos.infonavit; // K26
   const avBase = palancas.overrides?.ahorroVoluntario ?? saldos.ahorro_voluntario; // K27
   const saldoAfore = rcvBase * fvHoy + aportacionesFV; // K19
   const usaCredito = palancas.usaCreditoInfonavit || saldos.credito_infonavit_vigente; // C45
-  const saldoInfonavit = (infBase * fvHoy + infonavitFV) * (usaCredito ? 0 : 1); // K20
+  const saldoInfonavit = (infBase * fvHoyInf + infonavitFV) * (usaCredito ? 0 : 1); // K20 (0% real)
   const saldoAV = avBase * fvHoy + ahorroVoluntarioFV; // K21
 
   // ---- Pensiones (K22..K24) ----

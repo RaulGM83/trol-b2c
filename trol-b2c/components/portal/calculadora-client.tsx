@@ -85,7 +85,7 @@ const PALANCAS_DEFAULT: Palancas = {
   recuperarSemanasDescontadas: false,
   recuperarSemanasMod40Retro: false,
   salarioCotizacionRetro: "MAXIMO",
-  usaCreditoInfonavit: false,
+  usaCreditoInfonavit: true,
   ahorroVoluntarioMensual: 0,
   ajusteSemanas: 0,
 }
@@ -819,7 +819,7 @@ function Calc97Panel({
     recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
     // Infonavit OFF por default: la pensión de entrada es solo AFORE; el asesor
     // activa Infonavit manualmente si aplica.
-    usaCreditoInfonavit: false,
+    usaCreditoInfonavit: true,
     // El Infonavit real guardado en la calculadora Mod40 se comparte aquí.
     overrides:
       saldosCorregidos?.infonavit !== undefined
