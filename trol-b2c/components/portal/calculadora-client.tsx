@@ -896,6 +896,14 @@ function Calc97Panel({
             },
           ]
         : []),
+      ...(palancas.overrides?.ahorroExterno !== undefined
+        ? [
+            {
+              label: "Plan privado (fuera de AFORE)",
+              value: fmt(palancas.overrides.ahorroExterno),
+            },
+          ]
+        : []),
       ...(palancas.overrides?.ahorroVoluntario !== undefined
         ? [
             {
@@ -2067,14 +2075,27 @@ function OverridesSaldos({
           onChange={(v) => set("overrides", { ...palancas.overrides, infonavit: v })}
         />
         {conAhorro && (
-          <OverrideInput
-            label="Ahorro voluntario actual"
-            placeholder={saldos.ahorro_voluntario}
-            value={palancas.overrides?.ahorroVoluntario}
-            onChange={(v) =>
-              set("overrides", { ...palancas.overrides, ahorroVoluntario: v })
-            }
-          />
+          <>
+            <OverrideInput
+              label="Ahorro voluntario actual (AFORE)"
+              placeholder={saldos.ahorro_voluntario}
+              value={palancas.overrides?.ahorroVoluntario}
+              onChange={(v) =>
+                set("overrides", { ...palancas.overrides, ahorroVoluntario: v })
+              }
+            />
+            {/* Dinero que NO está en la AFORE: plan de pensión corporativo,
+                caja de ahorro, inversión aparte. Se suma al retiro pero se
+                reporta por separado, porque no vive en la cuenta individual. */}
+            <OverrideInput
+              label="Plan privado o corporativo (fuera de la AFORE)"
+              placeholder={0}
+              value={palancas.overrides?.ahorroExterno}
+              onChange={(v) =>
+                set("overrides", { ...palancas.overrides, ahorroExterno: v })
+              }
+            />
+          </>
         )}
       </div>
     </details>

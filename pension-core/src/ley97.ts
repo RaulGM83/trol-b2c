@@ -146,6 +146,11 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   const usaCredito = palancas.usaCreditoInfonavit || saldos.credito_infonavit_vigente; // C45
   const saldoInfonavit = (infBase * fvHoyInf + infonavitFV) * (usaCredito ? 0 : 1); // K20 (0% real)
   const saldoAV = avBase * fvHoy + ahorroVoluntarioFV; // K21
+  // Ahorro fuera de la AFORE (plan privado/corporativo), capturado por el
+  // asesor: saldo en el momento 1, proyectado al mismo rendimiento real que la
+  // AFORE. Va aparte de `saldoAV` porque no vive en la cuenta individual.
+  const externoBase = palancas.overrides?.ahorroExterno ?? 0;
+  const saldoExterno = externoBase * fvHoy;
 
   // ---- Pensiones (K22..K24) ----
   const negativa = !(semanasRetiro > semanasMinimasPMG);
@@ -153,7 +158,9 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   const pensionAforeInfonavit = negativa
     ? null
     : Math.max(((saldoAfore + saldoInfonavit) / urv) * FACTOR_RETIRO / 12, pmg); // K23
-  const pensionTotal = negativa ? null : pensionAforeInfonavit! + saldoAV / urv / 12; // K24
+  const pensionTotal = negativa
+    ? null
+    : pensionAforeInfonavit! + (saldoAV + saldoExterno) / urv / 12; // K24
 
   // La negativa es un RESULTADO, no un dato faltante: se acompaña de su razón
   // (semanas que tiene vs. las que exige su año de retiro) y de su salida
@@ -178,7 +185,8 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
         retiroUnaExhibicion: saldoAfore,
         devolucionVivienda: saldoInfonavit, // ya viene en 0 si hay crédito vigente
         ahorroVoluntario: saldoAV,
-        total: saldoAfore + saldoInfonavit + saldoAV,
+        ahorroExterno: saldoExterno,
+        total: saldoAfore + saldoInfonavit + saldoAV + saldoExterno,
         semanasFaltantes,
       }
     : null;
@@ -200,6 +208,7 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       saldoAforeProyectado: saldoAfore,
       saldoInfonavitProyectado: saldoInfonavit,
       saldoAhorroVoluntario: saldoAV,
+      saldoAhorroExterno: saldoExterno,
       urv,
       pmg,
       aportacionesFuturas: aportacionesFV,

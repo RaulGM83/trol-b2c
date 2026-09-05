@@ -85,6 +85,14 @@ export interface Palancas {
     infonavit?: number;
     ahorroVoluntario?: number;
     /**
+     * Ahorro que NO está en la AFORE: planes de pensión privados o
+     * corporativos, cajas de ahorro, saldos que el cliente tiene fuera del
+     * sistema (p. ej. el plan de Pepsico de Eva Santos). Se suma como saldo en
+     * el momento 1 y se proyecta al mismo rendimiento real que la AFORE, pero
+     * se reporta aparte: uno está en la AFORE y el otro no.
+     */
+    ahorroExterno?: number;
+    /**
      * "Disponible AFORE" real capturado por el asesor (un solo número). Si se
      * define, reemplaza al estimado SAR92 + 30% del RCV97 en el efectivo del
      * proyecto Mod40.
@@ -264,6 +272,8 @@ export interface SalidaNegativa97 {
   devolucionVivienda: number;
   /** Ahorro voluntario, disponible en cualquier caso. */
   ahorroVoluntario: number;
+  /** Ahorro fuera de la AFORE (plan privado/corporativo). */
+  ahorroExterno: number;
   /** Total que se lleva si acepta la negativa. */
   total: number;
   /** Semanas que le faltan para revertirla cotizando. */
@@ -290,6 +300,8 @@ export interface ResultadoLey97 {
     saldoAforeProyectado: number;
     saldoInfonavitProyectado: number;
     saldoAhorroVoluntario: number;
+    /** Ahorro fuera de la AFORE, proyectado al retiro. */
+    saldoAhorroExterno: number;
     urv: number;
     pmg: number;
     aportacionesFuturas: number;
