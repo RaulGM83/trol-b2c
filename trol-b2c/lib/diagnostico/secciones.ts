@@ -56,8 +56,10 @@ export const MODELO_REDACTOR = 'gpt-5.5'
  *                dos líneas; el rescate se argumenta por liquidez —el 4%
  *                nominal del instituto es ~0% real— y no por pensión extra;
  *                y con cotitular los montos no deben cuadrar con el escenario.
+ * 2026.09.06.4 — la pensión nunca se da sin la edad de retiro acordada, y la
+ *                tabla por edad se lee, no se transcribe.
  */
-export const PROMPT_VERSION = '2026.09.06.3'
+export const PROMPT_VERSION = '2026.09.06.4'
 
 /**
  * Cómo se le pegan los ajustes al prompt base.

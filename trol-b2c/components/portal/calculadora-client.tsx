@@ -976,6 +976,15 @@ function Calc73Panel({
                 },
                 semilla,
                 palancas,
+                // La tabla por edad se GUARDA, no se recalcula después. Es lo
+                // que el asesor le enseñó en pantalla; si el motor cambia, el
+                // documento tiene que seguir diciendo lo que se presentó ese
+                // día — que es la razón entera de cerrar un escenario.
+                barrido: barrido.map((b) => ({
+                  edad: b.edad,
+                  pension: b.pension,
+                  costo: b.costo,
+                })),
                 cerrado_en: new Date().toISOString(),
               },
               resultado: r as unknown as Record<string, unknown>,
@@ -1466,6 +1475,16 @@ function Calc97Panel({
                 datos,
                 incluir,
                 destino_infonavit: destinoInfonavit,
+                // Igual que en Ley 73: se guarda lo que se enseñó, no la
+                // receta para volver a calcularlo.
+                barrido: barrido.map((b) => ({
+                  edad: b.edad,
+                  cuenta_individual: b.cuentaIndividual,
+                  encima: b.encima,
+                  total: b.total,
+                  saldo_cuenta_individual: b.saldoCta,
+                  saldo_encima: b.saldoEncima,
+                })),
                 cerrado_en: new Date().toISOString(),
               },
               resultado: r as unknown as Record<string, unknown>,

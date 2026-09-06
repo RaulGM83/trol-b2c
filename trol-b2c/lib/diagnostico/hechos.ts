@@ -210,13 +210,22 @@ function escenarioNarrable(s: EscenarioCerrado, num: (v: unknown) => number | nu
   const ley = r.ley ?? (s.tipo.includes('97') ? 'Ley97' : 'Ley73');
   const resumen = (s.resumen ?? {}) as any;
 
+  // La tabla por edad se guardó al cerrar (no se recalcula: si el motor
+  // cambió, el documento debe decir lo que se le presentó ese día). Los
+  // escenarios cerrados antes de que se guardara simplemente no la traen, y
+  // entonces el documento no la enseña — mejor eso que una tabla distinta.
+  const barrido = ((s.inputs as any)?.barrido ?? null) as any[] | null;
+
   const base = {
     id: s.id,
     calculadora: s.tipo.replace('calc_', ''),
     ley,
     cerrado_en: s.creado_en,
     etiqueta: resumen.etiqueta ?? null,
-    edad_retiro: num(resumen.edad_retiro),
+    // La edad elegida es media conversación de la asesoría: sin ella el
+    // documento da una cifra sin decir cuándo.
+    edad_retiro: num(resumen.edad_retiro ?? (s.inputs as any)?.palancas?.edadRetiro),
+    tabla_por_edad: barrido?.length ? barrido : null,
     // El nombre es el mismo en las dos leyes a propósito: es la cifra que el
     // cliente recuerda, y el documento no debería llamarla distinto según su
     // régimen.
@@ -328,6 +337,10 @@ export function construirHechos({
 
     imss: {
       semanas_cotizadas: dato(num(e.semanas)),
+      // El promedio de las últimas 250 semanas decide la pensión de Ley 73 y
+      // NO existe en Ley 97, donde la pensión sale del saldo. Mandarlo igual
+      // es invitar a que aparezca en un documento donde no significa nada.
+      ...(e.ley === 'Ley73' ? { salario_promedio_250: dNum('salario_promedio_250') } : {}),
       semanas_descontadas: dNum('semanas_descontadas'),
       semanas_recuperadas: dNum('semanas_recuperadas'),
       primera_cotizacion: d('primera_cotizacion'),
@@ -335,7 +348,6 @@ export function construirHechos({
       ultima_modalidad: d('ultima_modalidad'),
       meses_sin_cotizar: dNum('gap_meses'),
       salario_diario: dNum('salario_diario'),
-      salario_promedio_250: dNum('salario_promedio_250'),
       conserva_derechos: dato(e.conserva_derechos ?? null),
       fin_conservacion: dato(e.fin_conservacion ?? null),
       pension_base: dato(num(e.pension_base), 'estimado'),
@@ -396,10 +408,21 @@ export function construirHechos({
               su_patron_sigue_aportando_al_credito: v.hay_aportaciones_patron ?? null,
             },
             // 3. Lo que recibe al final.
+            //
+            // La ventaja SÓLO se manda si es positiva. Un plan puede salir por
+            // debajo de dejar el saldo quieto —pasa cuando el plazo elegido es
+            // corto— y entonces el argumento no es ése: es la liquidez. Mandar
+            // un número negativo garantiza que el redactor lo narre, y el
+            // documento acabaría explicándole al cliente por qué le presentaron
+            // algo que pierde. Si no es positiva, no existe para el documento.
             al_vender: {
               recibe: num(v.recibe_al_vender),
-              ventaja_contra_no_hacerlo: num(v.ventaja_corte),
-              medida_a_anios: num(v.corte_anios),
+              ...(Number(v.ventaja_corte ?? 0) > 0
+                ? {
+                    ventaja_contra_no_hacerlo: num(v.ventaja_corte),
+                    medida_a_anios: num(v.corte_anios),
+                  }
+                : {}),
             },
           })),
         }

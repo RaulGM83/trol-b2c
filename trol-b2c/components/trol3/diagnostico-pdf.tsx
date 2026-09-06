@@ -256,7 +256,9 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
     ['Primera cotización', h.imss?.primera_cotizacion, false],
     ['Última cotización', h.imss?.ultima_cotizacion, false],
     ['Salario diario registrado', h.imss?.salario_diario, true],
-    ['Salario promedio (250 semanas)', h.imss?.salario_promedio_250, true],
+    ...(h.cliente?.ley === 'Ley73'
+      ? ([['Salario promedio (250 semanas)', h.imss?.salario_promedio_250, true]] as [string, any, boolean][])
+      : []),
     ['Saldo AFORE (RCV)', h.saldos?.afore_rcv97, true],
     ['Saldo subcuenta de vivienda', h.saldos?.infonavit, true],
     ['¿Crédito Infonavit vigente?', h.saldos?.credito_infonavit_vigente, false],
@@ -458,6 +460,77 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
                     ))}
                 </>
               ) : null}
+              {principal.tabla_por_edad?.length ? (
+                <View style={{ marginTop: 6 }}>
+                  <Text style={s.subT}>¿Y si te esperas?</Text>
+                  <Text style={s.p}>
+                    {principal.ley === 'Ley73'
+                      ? 'Cada año que esperas quita penalización por edad. Ésta es tu pensión estimada según cuándo te retires, con lo que costaría la estrategia en cada caso.'
+                      : 'Esperar hace dos cosas a la vez: tu saldo sigue creciendo y el factor con el que se convierte en pensión baja. Ésta es tu pensión estimada según cuándo te retires.'}
+                  </Text>
+                  {(() => {
+                    const filas = principal.tabla_por_edad as any[];
+                    const esc = principal.edad_retiro;
+                    const cols =
+                      principal.ley === 'Ley73'
+                        ? ['Si te retiras a los', 'Pensión mensual', 'Costo de la estrategia']
+                        : ['Si te retiras a los', 'De tu cuenta individual', 'Lo que va encima', 'Pensión mensual'];
+                    const celdas = (b: any) =>
+                      principal.ley === 'Ley73'
+                        ? [`${num(b.edad, 1)} años`, mx(b.pension), mx(b.costo)]
+                        : [
+                            `${num(b.edad, 1)} años`,
+                            mx(b.cuenta_individual),
+                            mx(b.encima),
+                            mx(b.total),
+                          ];
+                    const fila = (b: any, i: number) => {
+                      const esta = esc != null && Number(b.edad) === Number(esc);
+                      return (
+                        <View
+                          key={i}
+                          style={[s.tr, esta ? { backgroundColor: LIME } : i % 2 ? s.trAlt : {}] as any}
+                        >
+                          {celdas(b).map((c, j) => (
+                            <Text
+                              key={j}
+                              style={[
+                                j === 0 ? s.td : esta ? s.tdB : s.td,
+                                { flex: 1, textAlign: j === 0 ? 'left' : 'right' },
+                                j === celdas(b).length - 1 ? { fontFamily: 'Helvetica-Bold' } : {},
+                              ] as any}
+                            >
+                              {c}
+                            </Text>
+                          ))}
+                        </View>
+                      );
+                    };
+                    return (
+                      <>
+                        <View wrap={false}>
+                          <View style={s.thead}>
+                            {cols.map((c, j) => (
+                              <Text
+                                key={j}
+                                style={[s.th, { flex: 1, textAlign: j === 0 ? 'left' : 'right' }] as any}
+                              >
+                                {c}
+                              </Text>
+                            ))}
+                          </View>
+                          {filas.slice(0, 1).map(fila)}
+                        </View>
+                        {filas.slice(1).map((b, i) => fila(b, i + 1))}
+                      </>
+                    );
+                  })()}
+                  <Text style={s.nota}>
+                    {esc0(principal)} Los renglones marcados son el escenario que revisamos juntos.
+                  </Text>
+                </View>
+              ) : null}
+
               <Text style={s.nota}>
                 Todas las cifras están en pesos de hoy, para que puedas compararlas con lo que
                 gastas hoy. Es un escenario cerrado el {fecha(principal.cerrado_en)}: si tus datos
@@ -539,7 +612,7 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
                       <Text style={s.kpiLbl}>Al vender</Text>
                       <Text style={s.kpiVal}>{mx(p.al_vender?.recibe)}</Text>
                       <Text style={s.kpiSub}>recibes ese día, líquido</Text>
-                      {p.al_vender?.ventaja_contra_no_hacerlo ? (
+                      {Number(p.al_vender?.ventaja_contra_no_hacerlo ?? 0) > 0 ? (
                         <Text style={s.kpiSub}>
                           {`${mx(p.al_vender.ventaja_contra_no_hacerlo)} a tu favor contra no hacer nada` +
                             (p.al_vender?.medida_a_anios
@@ -657,6 +730,12 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
 }
 
 const LEY_LABEL: Record<string, string> = { Ley73: 'Ley 73', Ley97: 'Ley 97' };
+
+/** La frase que ancla la tabla al escenario acordado. */
+const esc0 = (p: any) =>
+  p?.edad_retiro != null
+    ? `Acordamos el retiro a los ${Number(p.edad_retiro).toLocaleString('es-MX', { maximumFractionDigits: 1 })} años.`
+    : '';
 
 const FUENTE: Record<string, string> = {
   rcv: 'Ahorro para el retiro del IMSS (RCV)',
