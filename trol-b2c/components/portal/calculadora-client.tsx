@@ -58,12 +58,13 @@ const fmtFecha = (d: Date) =>
 const ANIO = new Date().getFullYear()
 
 /**
- * Millones de pesos con un decimal. Los saldos al retiro son números de siete
- * cifras: puestos completos junto a las pensiones, la tabla se vuelve ilegible
- * y nadie compara nada.
+ * Millones de pesos con dos decimales. Los saldos al retiro son números de
+ * siete cifras: puestos completos junto a las pensiones, la tabla se vuelve
+ * ilegible y nadie compara nada. Dos decimales y no uno porque con uno la
+ * diferencia entre dos escenarios cercanos desaparecía en el redondeo.
  */
 const mdp = (n: number | null | undefined) =>
-  n === null || n === undefined || Number.isNaN(n) ? "—" : (n / 1_000_000).toFixed(1)
+  n === null || n === undefined || Number.isNaN(n) ? "—" : (n / 1_000_000).toFixed(2)
 
 /**
  * Todo el motor trabaja en términos reales: los rendimientos son reales, la
@@ -1127,6 +1128,7 @@ function Calc97Panel({
             .reduce((a, f) => a + (f.saldoAlRetiro ?? 0), 0)
         const saldoCta = saldoDe("cuenta_individual")
         const saldoEncima = saldoDe("encima")
+
         return {
           edad,
           // Las mismas tres piezas de la tabla de fuentes: lo que da la cuenta
@@ -1140,7 +1142,6 @@ function Calc97Panel({
           total: res.pensionTotal,
           saldoCta,
           saldoEncima,
-          saldoTotal: saldoCta + saldoEncima,
         }
       }),
     [edades, entrada, palancasConDatos],
@@ -1238,7 +1239,6 @@ function Calc97Panel({
         "Pensión total",
         "Saldo cta. indiv. (mdp)",
         "Saldo encima (mdp)",
-        "Saldo total (mdp)",
       ],
       filas: barrido.map((b) => [
         `${b.edad}`,
@@ -1247,7 +1247,6 @@ function Calc97Panel({
         b.total === null ? "—" : fmt(b.total),
         mdp(b.saldoCta),
         mdp(b.saldoEncima),
-        mdp(b.saldoTotal),
       ]),
       resaltada: barrido.findIndex((b) => b.edad === palancas.edadRetiro),
       nota: `Saldos en millones de pesos. ${NOTA_PESOS}`,
@@ -1366,7 +1365,6 @@ function Calc97Panel({
           "Pensión total",
           "Saldo cta. indiv. (mdp)",
           "Saldo encima (mdp)",
-          "Saldo total (mdp)",
         ]}
         filas={barrido.map((b) => [
           `${b.edad}`,
@@ -1375,7 +1373,6 @@ function Calc97Panel({
           b.total === null ? "—" : fmt(b.total),
           mdp(b.saldoCta),
           mdp(b.saldoEncima),
-          mdp(b.saldoTotal),
         ])}
         resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
         nota={`Saldos en millones de pesos. ${NOTA_PESOS}`}
