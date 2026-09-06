@@ -13,15 +13,26 @@
 
 import {
   MODELO_REDACTOR,
+  PROMPT_VERSION,
   SECCIONES_NARRATIVA,
   SYSTEM_PROMPT,
   USER_PROMPT,
+  conAjustes,
   type Narrativa,
 } from './prompt';
 
 export type ResultadoRedaccion =
-  | { ok: true; narrativa: Narrativa; modelo: string }
+  | { ok: true; narrativa: Narrativa; modelo: string; promptVersion: string }
   | { ok: false; error: string };
+
+/**
+ * Los ajustes que se le pegan al prompt base (117).
+ *
+ * `vigentes` es el bloque publicado para todo el equipo; `ensayo` aplica sólo a
+ * este documento. Van juntos aquí para que el redactor no tenga que saber de
+ * dónde salió cada uno — eso lo decide quien lo llama.
+ */
+export type Ajustes = { vigentes?: string | null; ensayo?: string | null };
 
 /**
  * El modelo devuelve JSON, pero a veces lo envuelve en ```json o deja una coma
@@ -48,7 +59,7 @@ function parsearRespuesta(texto: string): Narrativa {
 
 export async function redactarDiagnostico(
   hechos: unknown,
-  { signal }: { signal?: AbortSignal } = {},
+  { signal, ajustes }: { signal?: AbortSignal; ajustes?: Ajustes } = {},
 ): Promise<ResultadoRedaccion> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
@@ -74,7 +85,7 @@ export async function redactarDiagnostico(
         // van en los hechos, así que se le pide JSON estricto.
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: conAjustes(SYSTEM_PROMPT, ajustes ?? {}) },
           {
             role: 'user',
             content: `${USER_PROMPT}\n\nDATOS DEL CLIENTE (JSON):\n${JSON.stringify(hechos, null, 2)}`,
@@ -100,7 +111,7 @@ export async function redactarDiagnostico(
     if (Object.keys(narrativa).length === 0) {
       return { ok: false, error: 'La respuesta no traía ninguna sección reconocible.' };
     }
-    return { ok: true, narrativa, modelo: MODELO_REDACTOR };
+    return { ok: true, narrativa, modelo: MODELO_REDACTOR, promptVersion: PROMPT_VERSION };
   } catch (e) {
     // Se dice qué pasó en vez de dejar el borrador vacío: un fallo tiene que
     // verse como fallo, no como un documento en blanco.

@@ -37,6 +37,11 @@ import {
   type SeccionNarrativa,
 } from '@/lib/diagnostico/prompt';
 import { TareasPanel, type MiembroOpcion, type Tarea } from '@/components/trol3/TareasPanel';
+import {
+  AfinarRedactor,
+  type Feedback,
+  type InstruccionesVigentes,
+} from '@/components/trol3/AfinarRedactor';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -55,6 +60,9 @@ export type DiagnosticoRow = {
   escenario_ids: string[];
   redactor: string | null;
   motor_version: string | null;
+  prompt_version: string | null;
+  instrucciones_version: number | null;
+  ensayo: string | null;
   creado_en: string;
   actualizado_en: string;
   entregado_en: string | null;
@@ -257,6 +265,9 @@ export function DiagnosticoPanel({
   tareas,
   miembros,
   yoId,
+  esAdmin = false,
+  feedback = [],
+  vigentes = null,
 }: {
   personaId: string;
   diagnostico: DiagnosticoRow | null;
@@ -264,6 +275,10 @@ export function DiagnosticoPanel({
   tareas: Tarea[];
   miembros: MiembroOpcion[];
   yoId: string;
+  /** Afinar el prompt es de quien responde por el producto, no de cada asesor. */
+  esAdmin?: boolean;
+  feedback?: Feedback[];
+  vigentes?: InstruccionesVigentes;
 }) {
   const [pending, start] = useTransition();
   // Por default se marcan todos: el asesor cerró uno por calculadora y el
@@ -512,6 +527,19 @@ export function DiagnosticoPanel({
         origen="diagnostico"
         origenId={diagnostico.id}
       />
+
+      {esAdmin ? (
+        <AfinarRedactor
+          diagnosticoId={diagnostico.id}
+          personaId={personaId}
+          ensayo={diagnostico.ensayo}
+          feedback={feedback}
+          vigentes={vigentes}
+          promptVersion={diagnostico.prompt_version}
+          instruccionesVersion={diagnostico.instrucciones_version}
+          bloqueado={bloqueado}
+        />
+      ) : null}
     </div>
   );
 }

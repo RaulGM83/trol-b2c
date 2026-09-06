@@ -689,6 +689,19 @@ async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
 }
 
 /**
+ * El bloque de ajustes publicado para todo el equipo (117). Null si no hay
+ * ninguno: el prompt base solo ya escribe bien, los ajustes son encima.
+ */
+async function instruccionesVigentes(): Promise<{ version: number; texto: string } | null> {
+  const { data } = await t3()
+    .from('redactor_instrucciones')
+    .select('version,texto')
+    .eq('activa', true)
+    .maybeSingle();
+  return data ? { version: Number(data.version), texto: String(data.texto) } : null;
+}
+
+/**
  * Abre el borrador y le pide a OpenAI la narrativa.
  *
  * Si el redactor falla, el diagnóstico QUEDA ABIERTO con sus hechos y se
@@ -711,13 +724,21 @@ export async function generarBorradorDiagnostico(personaId: string, escenarioIds
     });
     if (error) return fail(error);
 
-    const r = await redactarDiagnostico(hechos);
+    const vigentes = await instruccionesVigentes();
+    const r = await redactarDiagnostico(hechos, { ajustes: { vigentes: vigentes?.texto } });
     if (r.ok) {
       const { error: e2 } = await t3().rpc('guardar_diagnostico', {
         p_diagnostico: id, p_narrativa: r.narrativa, p_acuerdos: null,
         p_hechos: null, p_redactor: r.modelo,
       });
       if (e2) return fail(e2);
+      // Qué escribió esto. Va en su propia RPC y no como parámetros nuevos de
+      // `guardar_diagnostico`, que se habría vuelto una sobrecarga.
+      await t3().rpc('registrar_redaccion', {
+        p_diagnostico: id, p_redactor: r.modelo,
+        p_prompt_version: r.promptVersion,
+        p_instrucciones_version: vigentes?.version ?? null,
+      });
     }
     revalidatePath(`/trabajo/p/${personaId}`);
     return ok({ id, aviso: r.ok ? null : r.error });
@@ -730,18 +751,26 @@ export async function regenerarNarrativa(diagnosticoId: string, personaId: strin
   try {
     const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
     const { data: d, error } = await t3()
-      .from('diagnosticos').select('contenido').eq('id', diagnosticoId).maybeSingle();
+      .from('diagnosticos').select('contenido,ensayo').eq('id', diagnosticoId).maybeSingle();
     if (error) return fail(error);
     const hechos = (d?.contenido as Any)?.hechos;
     if (!hechos) return fail(new Error('El diagnóstico no tiene hechos guardados.'));
 
-    const r = await redactarDiagnostico(hechos);
+    const vigentes = await instruccionesVigentes();
+    const r = await redactarDiagnostico(hechos, {
+      ajustes: { vigentes: vigentes?.texto, ensayo: (d as Any)?.ensayo ?? null },
+    });
     if (!r.ok) return fail(new Error(r.error));
     const { error: e2 } = await t3().rpc('guardar_diagnostico', {
       p_diagnostico: diagnosticoId, p_narrativa: r.narrativa, p_acuerdos: null,
       p_hechos: null, p_redactor: r.modelo,
     });
     if (e2) return fail(e2);
+    await t3().rpc('registrar_redaccion', {
+      p_diagnostico: diagnosticoId, p_redactor: r.modelo,
+      p_prompt_version: r.promptVersion,
+      p_instrucciones_version: vigentes?.version ?? null,
+    });
     revalidatePath(`/trabajo/p/${personaId}`);
     return ok();
   } catch (e) { return fail(e); }
@@ -789,5 +818,87 @@ export async function cambiarEstadoDiagnostico(
   const { error } = await t3().rpc('estado_diagnostico', { p_diagnostico: diagnosticoId, p_estado: estado });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Afinar el redactor (117)
+//
+// Tres alcances, a propósito distintos: el comentario no afecta a nadie, el
+// ensayo afecta sólo a ese documento, y el bloque vigente afecta a todo el
+// equipo. Quien afina va subiendo de alcance conforme la instrucción se prueba.
+// Todo esto es sólo-admin; el SQL lo verifica otra vez, no se confía en la UI.
+// ---------------------------------------------------------------------------
+
+export async function crearFeedback(input: {
+  diagnosticoId: string;
+  personaId: string;
+  comentario: string;
+  seccion?: string | null;
+  instruccion?: string | null;
+}) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('crear_feedback', {
+    p_diagnostico: input.diagnosticoId,
+    p_comentario: input.comentario,
+    p_seccion: input.seccion ?? null,
+    p_instruccion: input.instruccion ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok({ id: data });
+}
+
+export async function actualizarFeedback(input: {
+  id: string;
+  personaId: string;
+  estado?: 'abierto' | 'probado' | 'promovido' | 'descartado' | null;
+  instruccion?: string | null;
+  comentario?: string | null;
+  version?: number | null;
+}) {
+  await requireMiembro();
+  const { error } = await t3().rpc('actualizar_feedback', {
+    p_id: input.id,
+    p_estado: input.estado ?? null,
+    p_instruccion: input.instruccion ?? null,
+    p_comentario: input.comentario ?? null,
+    p_version: input.version ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok();
+}
+
+/** La instrucción que aplica SÓLO a este documento al regenerarlo. */
+export async function guardarEnsayo(diagnosticoId: string, personaId: string, ensayo: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('guardar_ensayo', {
+    p_diagnostico: diagnosticoId,
+    p_ensayo: ensayo,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/** Publica un bloque de ajustes para todos los asesores. */
+export async function promoverInstrucciones(texto: string, nota?: string | null) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('promover_instrucciones', {
+    p_texto: texto,
+    p_nota: nota ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo');
+  return ok({ version: data });
+}
+
+/** Revertir: volver a poner vigente una versión anterior. */
+export async function activarInstrucciones(version: number) {
+  await requireMiembro();
+  const { error } = await t3().rpc('activar_instrucciones', { p_version: version });
+  if (error) return fail(error);
+  revalidatePath('/trabajo');
   return ok();
 }

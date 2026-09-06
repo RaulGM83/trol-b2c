@@ -19,6 +19,7 @@ import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type Asesoria
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
 import { DiagnosticoPanel, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
+import type { Feedback, InstruccionesVigentes } from '@/components/trol3/AfinarRedactor';
 
 export const dynamic = 'force-dynamic';
 
@@ -240,7 +241,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // porque la pestaña lo edita; la vista sólo sirve para listar.
   const [{ data: diagRow }, { data: escsCerrados }] = await Promise.all([
     db.from('diagnosticos')
-      .select('id,estado,escenario_ids,redactor,motor_version,creado_en,actualizado_en,entregado_en,contenido,creado_por')
+      .select('id,estado,escenario_ids,redactor,motor_version,prompt_version,instrucciones_version,ensayo,creado_en,actualizado_en,entregado_en,contenido,creado_por')
       .eq('persona_id', params.id)
       .order('creado_en', { ascending: false })
       .limit(1)
@@ -251,6 +252,25 @@ export default async function Expediente({ params, searchParams }: { params: { i
       .order('creado_en', { ascending: false })
       .limit(20),
   ]);
+
+  // Afinar el redactor (117) es de quien responde por el producto. El RLS ya lo
+  // impide de todos modos: esto sólo evita enseñar una puerta que no abre.
+  const esAdmin = (m.roles ?? []).includes('admin');
+  let feedbackDiag: Feedback[] = [];
+  let instruccionesVigentes: InstruccionesVigentes = null;
+  if (esAdmin && diagRow) {
+    const [{ data: fb }, { data: vig }] = await Promise.all([
+      db.from('diagnostico_feedback')
+        .select('id,seccion,comentario,instruccion,estado,promovida_version,creado_en')
+        .eq('diagnostico_id', (diagRow as Any).id)
+        .order('creado_en', { ascending: false }),
+      db.from('redactor_instrucciones').select('version,texto,nota').eq('activa', true).maybeSingle(),
+    ]);
+    feedbackDiag = (fb ?? []) as Feedback[];
+    instruccionesVigentes = vig
+      ? { version: Number((vig as Any).version), texto: String((vig as Any).texto), nota: (vig as Any).nota ?? null }
+      : null;
+  }
 
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
@@ -455,6 +475,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
           tareas={((tareasCliente ?? []) as Any[]).filter((t) => t.origen === 'diagnostico' && (!diagRow || t.origen_id === (diagRow as Any).id)) as Tarea[]}
           miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre, email: x.email }))}
           yoId={m.id}
+          esAdmin={esAdmin}
+          feedback={feedbackDiag}
+          vigentes={instruccionesVigentes}
         />
       )}
 

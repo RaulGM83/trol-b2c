@@ -48,6 +48,45 @@ export const TITULO_SECCION: Record<SeccionNarrativa, string> = {
 /** El modelo que ya se usaba en n8n, con la misma cuenta de OpenAI. */
 export const MODELO_REDACTOR = 'gpt-5.5'
 
+/**
+ * Versión del prompt BASE. Cada diagnóstico guarda cuál lo escribió, así que
+ * cuando la calidad cambie se puede saber qué cambió.
+ *
+ * SÚBELA AL TOCAR EL PROMPT. Es la misma disciplina que ENGINE_VERSION, que ya
+ * mintió cuatro días seguidos: una versión que no se mueve cuando el contenido
+ * sí, es peor que no tenerla.
+ *
+ * 2026.09.06.1 — portado de n8n con las cuatro correcciones (Rescate
+ *                Infonavit, PMG desde los datos, Ley 97 con el modelo de
+ *                fuentes, prohibido inventar cifras).
+ */
+export const PROMPT_VERSION = '2026.09.06.1'
+
+/**
+ * Cómo se le pegan los ajustes al prompt base.
+ *
+ * Van AL FINAL y mandan sobre lo anterior, porque son correcciones a lo que ya
+ * dijo el base. Y se dice de dónde viene cada bloque: el vigente aplica a todos
+ * los asesores, el ensayo sólo a este documento.
+ */
+export function conAjustes(
+  base: string,
+  { vigentes, ensayo }: { vigentes?: string | null; ensayo?: string | null } = {},
+): string {
+  const partes = [base]
+  if (vigentes?.trim()) {
+    partes.push(
+      `\n# AJUSTES VIGENTES\nLo que sigue corrige lo anterior. Si algo se contradice, manda esto.\n\n${vigentes.trim()}`,
+    )
+  }
+  if (ensayo?.trim()) {
+    partes.push(
+      `\n# AJUSTE EN PRUEBA PARA ESTE CASO\nAplica sólo a este documento y manda sobre todo lo anterior.\n\n${ensayo.trim()}`,
+    )
+  }
+  return partes.join('\n')
+}
+
 export const SYSTEM_PROMPT = `
 # ROL DEL SISTEMA
 Eres el Asesor Experto Pensional de Trol Financiero. Dominas la asesoría integral de pensiones en México: IMSS Ley 73, IMSS Ley 97, ISSSTE Cuentas Individuales e ISSSTE Décimo Transitorio.
