@@ -59,6 +59,89 @@ const SAL_MIN = SALARIO_MINIMO[ANIO] ?? 315.04
 const SAL_TOPE = (UMA[ANIO] ?? 117.35) * 25
 const PCTS = [0, 0.25, 0.5, 0.75, 1] as const
 
+// Cómo se nombra cada bolsa de dinero frente al cliente. El motor devuelve
+// `fuentes` con ids; el nombre y la explicación son cosa de la pantalla.
+const FUENTE_NOMBRE: Record<string, { titulo: string; sub?: string }> = {
+  rcv: {
+    titulo: "Ahorro para el retiro (RCV)",
+    sub: "Lo que acumuló en su AFORE más lo que siga aportando",
+  },
+  infonavit: {
+    titulo: "Subcuenta de vivienda (Infonavit)",
+    sub: "Sólo si no la destina a su casa",
+  },
+  complemento_pmg: {
+    titulo: "Complemento del gobierno",
+    sub: "Lo que falta para llegar a la pensión mínima garantizada",
+  },
+  ahorro_voluntario: { titulo: "Ahorro voluntario en AFORE" },
+  plan_corporativo: { titulo: "Plan de retiro de la empresa" },
+  otros_planes: { titulo: "Otros planes (PPR, fondos, caja)" },
+}
+
+const CAPA_TITULO: Record<string, string> = {
+  cuenta_individual: "Cuenta individual · la topa la mínima garantizada",
+  encima: "Ahorro que se suma encima · la mínima no lo toca",
+}
+
+/**
+ * El desglose de la pensión, en el orden en que se cuenta la historia: primero
+ * lo que va a la cuenta individual (y compite contra el piso), luego lo que se
+ * suma encima. Un renglón por fuente, más los subtotales.
+ *
+ * Una fuente en cero se omite salvo que el asesor la haya apagado a propósito:
+ * ahí sí se enseña, atenuada, porque su ausencia es parte del escenario.
+ */
+function filasFuentes(
+  r: ReturnType<typeof computeLey97>,
+  fmtMoneda: (n: number | null | undefined) => string,
+): PdfFila[] {
+  if (r.negativa || r.fuentes.length === 0) return []
+  const filas: PdfFila[] = []
+  for (const capa of ["cuenta_individual", "encima"] as const) {
+    const enCapa = r.fuentes.filter(
+      (f) => f.capa === capa && (f.pensionMensual > 0.005 || !f.incluida),
+    )
+    if (enCapa.length === 0) continue
+    filas.push({ label: CAPA_TITULO[capa], value: "", tono: "grupo" })
+    for (const f of enCapa) {
+      const nombre = FUENTE_NOMBRE[f.id] ?? { titulo: f.id }
+      const sub = !f.incluida
+        ? "Fuera de este escenario"
+        : f.absorbidaPorPmg
+          ? "Se lo descuenta al complemento: no cambia la pensión"
+          : nombre.sub
+      filas.push({
+        label: nombre.titulo,
+        sub,
+        value: f.saldoAlRetiro === null ? "—" : fmtMoneda(f.saldoAlRetiro),
+        value2: fmtMoneda(f.pensionMensual),
+        tono: f.incluida ? undefined : "apagada",
+      })
+    }
+    if (capa === "cuenta_individual") {
+      filas.push({
+        label: "Pensión de la cuenta individual",
+        value: "",
+        value2: fmtMoneda(r.pensionAforeInfonavit),
+        tono: "suma",
+      })
+    }
+  }
+  filas.push({
+    label: "Pensión mensual total",
+    value: "",
+    value2: fmtMoneda(r.pensionTotal),
+    tono: "suma",
+  })
+  return filas
+}
+
+/** El pie que explica por qué un peso no rinde igual en todas las bolsas. */
+const NOTA_FACTOR =
+  "El RCV compra la renta vitalicia del IMSS, que reserva parte del saldo para el seguro de sobrevivencia (19%). La vivienda, el ahorro voluntario y los planes privados no pagan esa cobertura, así que por cada peso rinden más."
+
+
 // Qué vehículos muestra cada calculadora. Ley 73 / Mod 40 sólo mueve dinero
 // líquido (lo disponible en la AFORE y el Infonavit); Ley 97 proyecta los cinco.
 const VEHICULOS_M40: VehiculoId[] = ["disponible", "infonavit"]
@@ -955,11 +1038,10 @@ function Calc97Panel({
   )
   const r = useMemo(() => computeLey97(entrada), [entrada])
   const d = r.detalle
-  // Cliente en el piso: lo que junte en la AFORE no alcanza la mínima
-  // garantizada y el gobierno completa. Es el dato que más confunde en una
-  // asesoría —el Infonavit deja de mover la pensión, y sólo lo que va ENCIMA
-  // del piso la sube— así que se dice en pantalla en vez de dejarlo deducir.
-  const enPMG = !r.negativa && r.pensionAfore !== null && r.pensionAfore <= d.pmg + 0.5
+  // Cliente en el piso: su cuenta individual no alcanza la mínima garantizada
+  // y el gobierno completa. Lo calcula el motor, que es quien sabe cuánto
+  // pone cada fuente.
+  const enPMG = d.enPmg
 
   const barrido = useMemo(
     () =>
@@ -1036,35 +1118,14 @@ function Calc97Panel({
     ],
     secciones: [
       {
-        titulo: "Pensión por componentes",
-        stats: [
-          { label: "Solo AFORE", value: fmt(r.pensionAfore) },
-          { label: "AFORE + Infonavit", value: fmt(r.pensionAforeInfonavit) },
-          {
-            label: "Total (+ ahorro encima)",
-            value: fmt(r.pensionTotal),
-            destacado: true,
-          },
-          ...(enPMG
-            ? [
-                {
-                  label: "En pensión mínima garantizada",
-                  value: `Sí — el piso es ${fmt(d.pmg)}`,
-                },
-              ]
-            : []),
+        titulo: "De dónde sale su pensión",
+        filas: [
+          { label: "Concepto", value: "Saldo al retiro", value2: "Al mes" },
+          ...filasFuentes(r, fmt),
         ],
-      },
-      {
-        titulo: "Saldos proyectados al retiro",
-        stats: [
-          { label: "AFORE (RCV)", value: fmt(d.saldoAforeProyectado) },
-          { label: "Infonavit", value: fmt(d.saldoInfonavitProyectado) },
-          { label: "Ahorro voluntario", value: fmt(d.saldoAhorroVoluntario) },
-          { label: "Plan de la empresa", value: fmt(d.saldoPlanCorporativo) },
-          { label: "Otros planes", value: fmt(d.saldoOtrosPlanes) },
-          { label: "Aportaciones futuras", value: fmt(d.aportacionesFuturas) },
-        ],
+        nota: enPMG
+          ? `Su cuenta individual no alcanza la pensión mínima garantizada (${fmt(d.pmg)}), así que el gobierno completa la diferencia. Mientras eso pase, cada peso de la subcuenta de vivienda le quita un peso al complemento y la pensión no se mueve; el ahorro que va encima sí la sube. ${NOTA_FACTOR}`
+          : NOTA_FACTOR,
       },
       {
         titulo: "Detalle técnico",
@@ -1073,6 +1134,11 @@ function Calc97Panel({
           { label: "URV (renta vitalicia)", value: d.urv.toFixed(2) },
           { label: "PMG aplicable", value: fmt(d.pmg) },
           { label: "Semanas mínimas PMG", value: `${d.semanasMinimasPMG}` },
+          { label: "Aportaciones futuras al RCV", value: fmt(d.aportacionesFuturas) },
+          {
+            label: "Complemento del gobierno",
+            value: enPMG ? fmt(d.complementoPmg) : "no aplica",
+          },
         ],
       },
     ],
@@ -1080,8 +1146,8 @@ function Calc97Panel({
       titulo: "Pensión por edad de retiro (con las palancas del escenario)",
       columnas: [
         "Edad",
-        "Pensión total (AFORE + Inf + AV)",
-        "Saldo AFORE proyectado",
+        "Pensión mensual total",
+        "Saldo AFORE al retiro",
       ],
       filas: barrido.map((b) => [
         `${b.edad}`,
@@ -1147,8 +1213,8 @@ function Calc97Panel({
       <HeroPension
         pension={r.pensionTotal}
         negativa={r.negativa}
-        etiquetaDelta="pensión solo AFORE"
-        referencia={r.pensionAfore}
+        etiquetaDelta="pensión de la cuenta individual"
+        referencia={r.pensionAforeInfonavit}
         delta={null}
         stats={[
           { label: "Retiro estimado", value: fmtFecha(d.fechaRetiro) },
@@ -1156,7 +1222,7 @@ function Calc97Panel({
             label: "Semanas al retiro",
             value: Math.round(d.semanasRetiro).toLocaleString("es-MX"),
           },
-          { label: "Saldo AFORE proyectado", value: fmt(d.saldoAforeProyectado) },
+          { label: "Saldo AFORE al retiro", value: fmt(d.saldoAforeProyectado) },
         ]}
         advertencia={
           r.negativa
@@ -1171,56 +1237,30 @@ function Calc97Panel({
             Está en la pensión mínima garantizada ({fmt(d.pmg)} al mes).
           </p>
           <p className="mt-1">
-            Lo que junte en su AFORE no alcanza ese piso y el gobierno completa
-            la diferencia. Mientras siga aquí, el saldo Infonavit no le sube la
-            pensión: entra antes del piso y se lo come la mínima. Lo único que
-            sí la mueve es el ahorro que va <b>encima</b> —voluntario, plan de
-            la empresa, otros planes— o juntar lo suficiente para rebasar el
+            Su cuenta individual no alcanza ese piso y el gobierno completa la
+            diferencia. Mientras siga aquí, cada peso de la subcuenta de
+            vivienda le quita un peso al complemento: la pensión no se mueve. Lo
+            que sí la sube es el ahorro que va <b>encima</b> —voluntario, plan
+            de la empresa, otros planes— o juntar lo suficiente para rebasar el
             piso por cuenta propia.
           </p>
         </div>
       )}
 
+      <TablaFuentes r={r} enPMG={enPMG} pmg={d.pmg} />
+
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Saldos proyectados al retiro</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-          <Stat label="AFORE (RCV)" value={fmt(d.saldoAforeProyectado)} />
-          <Stat label="Infonavit" value={fmt(d.saldoInfonavitProyectado)} />
-          <Stat label="Ahorro voluntario" value={fmt(d.saldoAhorroVoluntario)} />
-          <Stat label="Plan de la empresa" value={fmt(d.saldoPlanCorporativo)} />
-          <Stat label="Otros planes" value={fmt(d.saldoOtrosPlanes)} />
+        <CardContent className="pt-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <Stat label="Saldo AFORE al retiro" value={fmt(d.saldoAforeProyectado)} />
           <Stat label="Aportaciones futuras" value={fmt(d.aportacionesFuturas)} />
           <Stat label="URV (renta vitalicia)" value={d.urv.toFixed(2)} />
           <Stat label="PMG aplicable" value={fmt(d.pmg)} />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Pensión por componentes</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <Stat
-            label={enPMG ? "Solo AFORE (en la mínima)" : "Solo AFORE"}
-            value={fmt(r.pensionAfore)}
-          />
-          <Stat
-            label={
-              enPMG && r.pensionAforeInfonavit === r.pensionAfore
-                ? "AFORE + Infonavit (no suma: PMG)"
-                : "AFORE + Infonavit"
-            }
-            value={fmt(r.pensionAforeInfonavit)}
-          />
-          <Stat label="Total (+ ahorro encima)" value={fmt(r.pensionTotal)} destacado />
-        </CardContent>
-      </Card>
-
       <TablaBarrido
         titulo="Pensión por edad de retiro (con las palancas actuales)"
-        columnas={["Edad", "Pensión total (AFORE + Inf + AV)", "Saldo AFORE proyectado"]}
+        columnas={["Edad", "Pensión mensual total", "Saldo AFORE al retiro"]}
         filas={barrido.map((b) => [
           `${b.edad}`,
           b.pension === null ? "Negativa" : fmt(b.pension),
@@ -2148,6 +2188,94 @@ function filasPdfVehiculo(
     (dentro ?? true) ? null : "no incluido",
   ].filter(Boolean)
   return [{ label: etiqueta, value: partes.join(" · ") }]
+}
+
+/**
+ * De dónde sale cada peso de la pensión.
+ *
+ * La sustituye a dos tarjetas que se leían por separado —una de saldos y otra
+ * de pensiones— y entre las dos no se podía contestar la pregunta que siempre
+ * hace el cliente: "¿y esto de dónde sale?". Aquí cada renglón es una bolsa de
+ * dinero, con lo que tendrá al retiro y lo que pone al mes, y los renglones
+ * suman el total que se ve arriba.
+ */
+function TablaFuentes({
+  r,
+  enPMG,
+  pmg,
+}: {
+  r: ReturnType<typeof computeLey97>
+  enPMG: boolean
+  pmg: number
+}) {
+  const filas = filasFuentes(r, fmt)
+  if (filas.length === 0) return null
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">De dónde sale su pensión</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-1">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className="text-xs text-muted-foreground">
+                <th className="text-left font-normal pb-1">Concepto</th>
+                <th className="text-right font-normal pb-1 w-32">Saldo al retiro</th>
+                <th className="text-right font-normal pb-1 w-28">Al mes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f, i) =>
+                f.tono === "grupo" ? (
+                  <tr key={`g${i}`}>
+                    <td
+                      colSpan={3}
+                      className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                    >
+                      {f.label}
+                    </td>
+                  </tr>
+                ) : (
+                  <tr
+                    key={`f${i}`}
+                    className={`border-t ${f.tono === "suma" ? "border-foreground/25" : "border-border/50"} ${
+                      f.tono === "apagada" ? "opacity-45" : ""
+                    }`}
+                  >
+                    <td className="py-1.5 pr-3">
+                      <span className={f.tono === "suma" ? "font-semibold" : ""}>
+                        {f.label}
+                      </span>
+                      {f.sub && (
+                        <span className="block text-xs text-muted-foreground">{f.sub}</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{f.value}</td>
+                    <td
+                      className={`py-1.5 text-right tabular-nums ${
+                        f.tono === "suma" ? "font-bold" : ""
+                      }`}
+                    >
+                      {f.value2}
+                    </td>
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {enPMG && (
+            <>
+              El piso de la mínima garantizada es {fmt(pmg)} al mes.{" "}
+            </>
+          )}
+          {NOTA_FACTOR}
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 function Stat({

@@ -16,6 +16,7 @@ import {
 import type {
   EntradaCalculo,
   EstatusPension97,
+  FuentePension,
   RazonNegativa97,
   ResultadoLey97,
   SalidaNegativa97,
@@ -45,7 +46,20 @@ const RENDIMIENTO_REAL_INFONAVIT = 1.0;
 const RENDIMIENTO_REAL_CORPORATIVO = 1.02; // plan de retiro de la empresa
 const RENDIMIENTO_REAL_OTROS = 1.01; // PPR de aseguradora, fondos, cajas de ahorro
 const MAX_MESES = 716; // filas 5:721
-const FACTOR_RETIRO = 0.81; // castigo del Excel al convertir saldo→pensión
+/**
+ * Castigo actuarial al convertir saldo → renta vitalicia del IMSS.
+ *
+ * Sale del Excel validado y representa, a grandes rasgos, lo que se reserva
+ * para el seguro de sobrevivencia. Aplica SÓLO al saldo de RCV, que es el que
+ * obligatoriamente compra esa renta: la subcuenta de vivienda, el ahorro
+ * voluntario y los planes privados no pagan esa cobertura y por eso convierten
+ * limpio.
+ *
+ * PENDIENTE (Raúl, 6-sep-2026): 0.81 es un promedio. El factor real depende de
+ * si la persona tiene dependientes económicos y de su edad al pensionarse.
+ * Modelarlo bien va junto con los beneficios fiscales del ahorro voluntario.
+ */
+const FACTOR_RETIRO = 0.81;
 const CESANTIA_ANIO_TOPE = 2030;
 
 function grupoPMG(ratio: number): number {
@@ -174,14 +188,77 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     ((inc.otrosPlanes ?? true) ? 1 : 0);
 
   // ---- Pensiones (K22..K24) ----
+  // Cada saldo se convierte a renta con la misma URV; sólo el RCV paga el
+  // castigo del seguro de sobrevivencia (ver FACTOR_RETIRO).
+  const aRenta = (saldo: number) => saldo / urv / 12;
   const negativa = !(semanasRetiro > semanasMinimasPMG);
-  const pensionAfore = negativa ? null : Math.max((saldoAfore / urv) * FACTOR_RETIRO / 12, pmg); // K22
-  const pensionAforeInfonavit = negativa
-    ? null
-    : Math.max(((saldoAfore + saldoInfonavit) / urv) * FACTOR_RETIRO / 12, pmg); // K23
-  const pensionTotal = negativa
-    ? null
-    : pensionAforeInfonavit! + (saldoAV + saldoCorporativo + saldoOtrosPlanes) / urv / 12; // K24
+
+  const rentaRCV = aRenta(saldoAfore * FACTOR_RETIRO);
+  const rentaInfonavit = aRenta(saldoInfonavit);
+  // Lo que la cuenta individual da por sí sola, antes del piso.
+  const rentaCuentaIndividual = rentaRCV + rentaInfonavit;
+  // El gobierno completa hasta la mínima garantizada. Con el piso puesto, cada
+  // peso de vivienda le quita un peso al complemento: la pensión no se mueve.
+  const complementoPmg = negativa ? 0 : Math.max(0, pmg - rentaCuentaIndividual);
+  const enPmg = complementoPmg > 0;
+
+  const pensionAfore = negativa ? null : Math.max(rentaRCV, pmg); // K22
+  const pensionAforeInfonavit = negativa ? null : rentaCuentaIndividual + complementoPmg; // K23
+  const rentaEncima = aRenta(saldoAV) + aRenta(saldoCorporativo) + aRenta(saldoOtrosPlanes);
+  const pensionTotal = negativa ? null : pensionAforeInfonavit! + rentaEncima; // K24
+
+  const fuentes: FuentePension[] = negativa
+    ? []
+    : [
+        {
+          id: 'rcv' as const,
+          capa: 'cuenta_individual' as const,
+          saldoAlRetiro: saldoAfore,
+          pensionMensual: rentaRCV,
+          absorbidaPorPmg: false,
+          incluida: (palancas.incluir?.afore ?? true),
+        },
+        {
+          id: 'infonavit' as const,
+          capa: 'cuenta_individual' as const,
+          saldoAlRetiro: saldoInfonavit,
+          pensionMensual: rentaInfonavit,
+          absorbidaPorPmg: enPmg && rentaInfonavit > 0,
+          incluida: !usaCredito,
+        },
+        {
+          id: 'complemento_pmg' as const,
+          capa: 'cuenta_individual' as const,
+          saldoAlRetiro: null,
+          pensionMensual: complementoPmg,
+          absorbidaPorPmg: false,
+          incluida: true,
+        },
+        {
+          id: 'ahorro_voluntario' as const,
+          capa: 'encima' as const,
+          saldoAlRetiro: saldoAV,
+          pensionMensual: aRenta(saldoAV),
+          absorbidaPorPmg: false,
+          incluida: (palancas.incluir?.ahorroVoluntario ?? true),
+        },
+        {
+          id: 'plan_corporativo' as const,
+          capa: 'encima' as const,
+          saldoAlRetiro: saldoCorporativo,
+          pensionMensual: aRenta(saldoCorporativo),
+          absorbidaPorPmg: false,
+          incluida: (palancas.incluir?.planCorporativo ?? true),
+        },
+        {
+          id: 'otros_planes' as const,
+          capa: 'encima' as const,
+          saldoAlRetiro: saldoOtrosPlanes,
+          pensionMensual: aRenta(saldoOtrosPlanes),
+          absorbidaPorPmg: false,
+          incluida: (palancas.incluir?.otrosPlanes ?? true),
+        },
+      ];
 
   // La negativa es un RESULTADO, no un dato faltante: se acompaña de su razón
   // (semanas que tiene vs. las que exige su año de retiro) y de su salida
@@ -235,7 +312,10 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       urv,
       pmg,
       aportacionesFuturas: aportacionesFV,
+      enPmg,
+      complementoPmg,
     },
+    fuentes,
   };
 }
 
@@ -252,9 +332,12 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
 export function conservaValorSSV(r: ResultadoLey97): number {
   const { urv, saldoInfonavitProyectado: inf, saldoAforeProyectado: afore, pmg } = r.detalle;
   if (inf <= 0 || urv <= 0) return 1;
-  const bruto = (inf / urv) * FACTOR_RETIRO / 12; // lo que aportaría si no hubiera piso
+  // La vivienda no compra el seguro de sobrevivencia, así que convierte limpio;
+  // el castigo es sólo del RCV.
+  const bruto = inf / urv / 12; // lo que aportaría si no hubiera piso
   if (bruto <= 0) return 1;
-  const sinInf = Math.max((afore / urv) * FACTOR_RETIRO / 12, pmg);
-  const conInf = Math.max(((afore + inf) / urv) * FACTOR_RETIRO / 12, pmg);
+  const rentaRcv = (afore * FACTOR_RETIRO) / urv / 12;
+  const sinInf = Math.max(rentaRcv, pmg);
+  const conInf = Math.max(rentaRcv + bruto, pmg);
   return Math.min(1, Math.max(0, (conInf - sinInf) / bruto));
 }

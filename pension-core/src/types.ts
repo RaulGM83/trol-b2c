@@ -300,6 +300,51 @@ export interface SalidaNegativa97 {
   semanasFaltantes: number;
 }
 
+/**
+ * De dónde sale cada peso de la pensión mensual.
+ *
+ * La pensión de Ley 97 no es un número que baja del cielo: es la suma de lo
+ * que aporta cada bolsa de dinero. Separarlas es lo único que permite
+ * responder la pregunta que siempre hace el cliente — "¿y si le meto más a X?"
+ * — y explicar por qué a veces la respuesta es "no cambia nada".
+ *
+ * Dos capas, y la diferencia importa:
+ *
+ *   `cuenta_individual`  RCV, vivienda y el complemento del gobierno. Se
+ *                        comparan contra la mínima garantizada: si entre las
+ *                        tres no la alcanzan, el gobierno completa, y entonces
+ *                        cada peso de vivienda sólo sustituye un peso de
+ *                        complemento.
+ *   `encima`             Ahorro voluntario y planes privados. Van arriba del
+ *                        piso, así que siempre suman.
+ */
+export type CapaFuente = 'cuenta_individual' | 'encima';
+
+export type IdFuente =
+  | 'rcv'
+  | 'infonavit'
+  | 'complemento_pmg'
+  | 'ahorro_voluntario'
+  | 'plan_corporativo'
+  | 'otros_planes';
+
+export interface FuentePension {
+  id: IdFuente;
+  capa: CapaFuente;
+  /** Saldo proyectado al retiro. null en el complemento: no es un saldo. */
+  saldoAlRetiro: number | null;
+  /** Pesos al mes que pone esta fuente. Las de las dos capas suman el total. */
+  pensionMensual: number;
+  /**
+   * Sólo en cuenta individual y sólo cuando aplica el piso: lo que esta fuente
+   * aporta se lo descuenta al complemento del gobierno, así que la pensión no
+   * se mueve. Es el caso del Infonavit en un cliente que cae en la PMG.
+   */
+  absorbidaPorPmg: boolean;
+  /** false cuando el asesor la excluyó del escenario (o hay crédito vigente). */
+  incluida: boolean;
+}
+
 export interface ResultadoLey97 {
   ley: 'Ley97';
   pensionAfore: number | null;
@@ -327,7 +372,17 @@ export interface ResultadoLey97 {
     urv: number;
     pmg: number;
     aportacionesFuturas: number;
+    /** true cuando la cuenta individual no alcanza la mínima y el gobierno completa. */
+    enPmg: boolean;
+    /** Lo que completa el gobierno para llegar al piso. 0 si no aplica. */
+    complementoPmg: number;
   };
+  /**
+   * El desglose por fuente. Las de capa `cuenta_individual` suman
+   * `pensionAforeInfonavit`; con las de `encima` suman `pensionTotal`.
+   * Vacío cuando hay negativa (no hay pensión que repartir).
+   */
+  fuentes: FuentePension[];
 }
 
 export interface ProyectoMod40 {

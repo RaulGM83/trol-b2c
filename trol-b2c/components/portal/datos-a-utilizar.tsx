@@ -66,15 +66,13 @@ type Vehiculo = {
   campoMensual?: keyof DatosAUtilizar
   /** Clave del interruptor; sin ella, el vehículo no se puede excluir. */
   incluir?: keyof Incluir
-  /** El switch pregunta lo contrario de "incluir" (caso Infonavit). */
-  incluirInvertido?: boolean
   etiquetaIncluir?: string
 }
 
 const VEHICULOS: Record<VehiculoId, Vehiculo> = {
   afore: {
     id: "afore",
-    etiqueta: "AFORE (RCV)",
+    etiqueta: "Ahorro para el retiro (RCV)",
     rendimiento: "3% real",
     campo: "rcv97",
     incluir: "afore",
@@ -87,12 +85,16 @@ const VEHICULOS: Record<VehiculoId, Vehiculo> = {
   },
   infonavit: {
     id: "infonavit",
-    etiqueta: "Infonavit",
+    etiqueta: "Subcuenta de vivienda (Infonavit)",
+    nota: "Si la destina a su casa o a un crédito, no entra a la pensión.",
     rendimiento: "0% real",
     campo: "infonavit",
     incluir: "infonavit",
-    incluirInvertido: true,
-    etiquetaIncluir: "Lo usa o lo va a usar para otra cosa",
+    // Es la única fuente cuyo interruptor arranca apagado, pero la pregunta se
+    // hace igual que en las demás: "¿este dinero entra a la pensión?". Antes
+    // preguntaba lo contrario ("lo usa para otra cosa") y rompía la lectura de
+    // la lista, donde todo lo demás se lee como fuente de recursos.
+    etiquetaIncluir: "Incluir en el cálculo de pensión",
   },
   voluntario: {
     id: "voluntario",
@@ -113,7 +115,7 @@ const VEHICULOS: Record<VehiculoId, Vehiculo> = {
   },
   otros: {
     id: "otros",
-    etiqueta: "Otros planes de ahorro",
+    etiqueta: "Otros planes (PPR, fondos, caja)",
     nota: "PPR de aseguradora, fondos de inversión, caja de ahorro propia.",
     rendimiento: "1% real",
     campo: "otros_planes",
@@ -176,18 +178,18 @@ export function PanelDatosAUtilizar({
     <details className="flex flex-col gap-2" open={abierto ?? hayCapturado}>
       <summary className="text-sm font-medium cursor-pointer select-none">{titulo}</summary>
       <p className="text-xs text-muted-foreground mt-1">
-        Lo que se deje vacío se calcula con el estimado. Los interruptores son de
-        este escenario y no se guardan.
+        Las fuentes de recursos con las que se calcula la pensión. Lo que se deje
+        vacío se estima. Los interruptores son de este escenario y no se guardan.
       </p>
 
       <div className="flex flex-col gap-4 mt-3">
         {vehiculos.map((id, i) => {
           const v = VEHICULOS[id]
           const clave = v.incluir
-          // Un vehículo entra por default. El Infonavit pregunta al revés:
-          // el switch encendido significa "lo usa para otra cosa", o sea fuera.
+          // Todos preguntan lo mismo: ¿este dinero entra a la pensión? Por
+          // default sí; el Infonavit es el único que llega apagado, y eso lo
+          // decide quien arma el escenario, no la etiqueta.
           const dentro = clave ? (incluir?.[clave] ?? true) : true
-          const switchEncendido = v.incluirInvertido ? !dentro : dentro
 
           return (
             <div key={id} className="flex flex-col gap-2">
@@ -224,8 +226,8 @@ export function PanelDatosAUtilizar({
               {clave && onIncluir && (
                 <InterruptorIncluir
                   etiqueta={v.etiquetaIncluir ?? "Incluir en el cálculo de pensión"}
-                  checked={switchEncendido}
-                  onChange={(on) => onIncluir(clave, v.incluirInvertido ? !on : on)}
+                  checked={dentro}
+                  onChange={(on) => onIncluir(clave, on)}
                 />
               )}
             </div>

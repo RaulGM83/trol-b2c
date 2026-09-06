@@ -24,7 +24,23 @@ import {
 export type PdfModo = "cliente" | "asesor"
 
 export type PdfStat = { label: string; value: string; destacado?: boolean }
-export type PdfFila = { label: string; value: string }
+export type PdfFila = {
+  label: string
+  value: string
+  /**
+   * Segunda columna. Con ella la fila se vuelve una tabla de tres columnas
+   * (concepto · saldo · al mes), que es como se lee el desglose por fuente.
+   */
+  value2?: string
+  /** Línea chica bajo la etiqueta: la aclaración que no cabe en el renglón. */
+  sub?: string
+  /**
+   * `grupo`  encabezado de bloque, sin números propios.
+   * `suma`   subtotal o total: se resalta.
+   * `apagada` la fuente no entra al cálculo; se atenúa.
+   */
+  tono?: "grupo" | "suma" | "apagada"
+}
 
 export type PdfSeccion = {
   titulo: string
@@ -147,6 +163,28 @@ const s = StyleSheet.create({
   },
   filaLabel: { fontSize: 8.5, color: GRIS, flexShrink: 1, paddingRight: 8 },
   filaValor: { fontSize: 8.5, fontFamily: "Helvetica-Bold" },
+  filaSub: { fontSize: 6.5, color: GRIS, marginTop: 0.5 },
+  // Tres columnas: el concepto se estira, los dos importes van alineados a la
+  // derecha con ancho fijo para que los pesos queden en columna.
+  filaConcepto: { flexGrow: 1, flexShrink: 1, paddingRight: 8 },
+  filaNum: { fontSize: 8.5, width: 78, textAlign: "right" as const },
+  filaNumFuerte: {
+    fontSize: 8.5,
+    width: 78,
+    textAlign: "right" as const,
+    fontFamily: "Helvetica-Bold",
+  },
+  filaGrupo: {
+    fontSize: 7,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.4,
+    color: GRIS,
+    marginTop: 6,
+    marginBottom: 1,
+    textTransform: "uppercase" as const,
+  },
+  filaSuma: { borderTopWidth: 0.8, borderTopColor: GRIS_CLARO, borderBottomWidth: 0 },
+  filaApagada: { opacity: 0.45 },
   nota: { fontSize: 7.5, color: GRIS, marginTop: 5, lineHeight: 1.4 },
   advertencia: {
     backgroundColor: AMBAR_BG,
@@ -194,6 +232,36 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
 })
+
+/**
+ * Una fila de sección. Con `value2` se vuelve una tabla de tres columnas —
+ * así se imprime el desglose por fuente, donde cada renglón dice cuánto saldo
+ * hay y cuántos pesos al mes pone.
+ */
+function FilaPdf({ f }: { f: PdfFila }) {
+  if (f.tono === "grupo") return <Text style={s.filaGrupo}>{f.label}</Text>
+  const fuerte = f.tono === "suma"
+  return (
+    <View
+      style={[s.fila, fuerte ? s.filaSuma : {}, f.tono === "apagada" ? s.filaApagada : {}]}
+    >
+      <View style={s.filaConcepto}>
+        <Text style={[s.filaLabel, fuerte ? { fontFamily: "Helvetica-Bold" } : {}]}>
+          {f.label}
+        </Text>
+        {f.sub ? <Text style={s.filaSub}>{f.sub}</Text> : null}
+      </View>
+      {f.value2 !== undefined ? (
+        <>
+          <Text style={s.filaNum}>{f.value}</Text>
+          <Text style={fuerte ? s.filaNumFuerte : s.filaNum}>{f.value2}</Text>
+        </>
+      ) : (
+        <Text style={s.filaValor}>{f.value}</Text>
+      )}
+    </View>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Documento
@@ -312,10 +380,7 @@ function EscenarioDoc({
             ) : null}
             {sec.filas
               ? sec.filas.map((f) => (
-                  <View key={f.label} style={s.fila}>
-                    <Text style={s.filaLabel}>{f.label}</Text>
-                    <Text style={s.filaValor}>{f.value}</Text>
-                  </View>
+                  <FilaPdf key={f.label} f={f} />
                 ))
               : null}
             {sec.nota ? <Text style={s.nota}>{sec.nota}</Text> : null}

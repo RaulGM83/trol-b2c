@@ -82,7 +82,7 @@ export type ResumenClienteData = {
     mod40_retroactiva_futura?: boolean | null
     credito_pension_con_capacidad?: boolean | null
     credito_pension_potencial?: boolean | null
-    infonavit_solucion_hogar?: boolean | null
+    infonavit_rescate?: boolean | null
     infonavit_mejoravit_activo?: boolean | null
     infonavit_mejoravit_inactivo?: boolean | null
     afore?: boolean | null
@@ -291,6 +291,11 @@ export function resumenDesdeCalculoPensional(
   )
 
   const oportunidadInfonavit = toStr(diag.oportunidad_infonavit)
+  // El motor legacy escribe "SOLUCIÓN HOGAR"; el producto se llama Rescate
+  // Infonavit desde el 6-sep-2026. Se traduce al mostrarlo en vez de tocar el
+  // dato, que sigue llegando así desde semillas ya generadas.
+  const nombreProducto = (s: string | null) =>
+    s == null ? null : s.replace(/soluci[oó]n\s+hogar/gi, "Rescate Infonavit")
   const oportunidadNorm = (oportunidadInfonavit ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -366,9 +371,13 @@ export function resumenDesdeCalculoPensional(
     sub_oportunidades: {
       mod40_retroactiva_hoy: mod40Hoy,
       mod40_retroactiva_futura: mod40Futuro,
-      infonavit_solucion_hogar: sinOportunidad
+      // El producto se llama Rescate Infonavit. "SOLUCION HOGAR" es como lo
+      // nombraba el motor legacy y sigue llegando así en semillas viejas, así
+      // que la detección conserva el término aunque la etiqueta ya no.
+      infonavit_rescate: sinOportunidad
         ? false
-        : oportunidadNorm.includes("SOLUCION HOGAR"),
+        : oportunidadNorm.includes("SOLUCION HOGAR") ||
+          oportunidadNorm.includes("RESCATE INFONAVIT"),
       infonavit_mejoravit_activo: sinOportunidad
         ? false
         : oportunidadNorm.includes("MEJORAVIT ACTIVO"),
@@ -376,7 +385,7 @@ export function resumenDesdeCalculoPensional(
         ? false
         : oportunidadNorm.includes("MEJORAVIT INACTIVO"),
     },
-    oportunidad_principal: sinOportunidad ? null : oportunidadInfonavit,
+    oportunidad_principal: sinOportunidad ? null : nombreProducto(oportunidadInfonavit),
     historia_laboral: historia,
     narrativa_cliente: toStr(diag.asesoria_basica),
   }
@@ -763,8 +772,8 @@ export function ResumenCliente({
                 label="Crédito pensión potencial"
               />
               <SubOp
-                value={subs?.infonavit_solucion_hogar}
-                label="Infonavit Solución Hogar"
+                value={subs?.infonavit_rescate}
+                label="Rescate Infonavit"
               />
               <SubOp
                 value={subs?.infonavit_mejoravit_activo}
