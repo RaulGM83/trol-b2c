@@ -32,6 +32,123 @@ export function capaDe(capaTrol3: string | null | undefined): Capa {
   }
 }
 
+/**
+ * Un periodo de la historia laboral, como viene del SISEC.
+ *
+ * Los nombres son los que trae el dato (`empleador`, `fecha_inicio`…), no unos
+ * bonitos: mapearlos a mano fue exactamente el error que dejó esta sección
+ * inservible — dieciséis renglones de nulls y el modelo diciendo, con razón,
+ * que no tenía el detalle de patrones.
+ */
+export type Periodo = {
+  empleador?: string | null;
+  registro_patronal?: string | null;
+  entidad_federativa?: string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  salario_base?: number | string | null;
+  // Tolerancia a otras fuentes: si algún día llega con otros nombres, se lee
+  // igual en vez de salir en blanco sin avisar.
+  patron?: string | null;
+  desde?: string | null;
+  hasta?: string | null;
+};
+
+const MAX_PERIODOS = 40;
+
+const mes = (d: string | null | undefined) =>
+  d && /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : null;
+
+/** Meses enteros entre dos fechas ISO. Null si falta alguna. */
+function mesesEntre(a: string | null | undefined, b: string | null | undefined): number | null {
+  if (!a || !b || !/^\d{4}-\d{2}-\d{2}/.test(a) || !/^\d{4}-\d{2}-\d{2}/.test(b)) return null;
+  const d1 = new Date(a + 'T00:00:00');
+  const d2 = new Date(b + 'T00:00:00');
+  if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return null;
+  return Math.round((d2.getTime() - d1.getTime()) / 86_400_000 / 30.44);
+}
+
+/**
+ * La historia laboral leída, no sólo listada.
+ *
+ * El prompt le pide al redactor una LECTURA —huecos, continuidad, salario—, y
+ * un modelo restando fechas a ojo se equivoca. Los huecos y los totales se
+ * calculan aquí; allá sólo se narran.
+ */
+export function resumenHistorial(historial: Periodo[]) {
+  const norm = (historial ?? []).map((h) => ({
+    empleador: h.empleador ?? h.patron ?? null,
+    registro_patronal: h.registro_patronal ?? null,
+    entidad: h.entidad_federativa ?? null,
+    desde: h.fecha_inicio ?? h.desde ?? null,
+    hasta: h.fecha_fin ?? h.hasta ?? null,
+    salario_base: h.salario_base == null ? null : Number(h.salario_base),
+  }));
+
+  // Sin nada legible se dice así, en vez de entregar una lista de nulls que
+  // invita al modelo a rellenarla.
+  const conAlgo = norm.filter((p) => p.empleador || p.desde);
+  if (conAlgo.length === 0) {
+    return {
+      sin_detalle: true,
+      nota: 'No tenemos el desglose de patrones y periodos de este cliente. No lo describas: di que hace falta pedir la constancia de semanas al IMSS.',
+      periodos: [] as unknown[],
+    };
+  }
+
+  // Del más viejo al más nuevo para poder medir los huecos entre uno y otro.
+  const asc = [...conAlgo].sort((a, b) => (a.desde ?? '').localeCompare(b.desde ?? ''));
+
+  const huecos: { desde: string; hasta: string; meses: number }[] = [];
+  for (let i = 1; i < asc.length; i++) {
+    const finAnterior = asc[i - 1].hasta;
+    const inicio = asc[i].desde;
+    const m = mesesEntre(finAnterior, inicio);
+    // Un mes de brinco es cambio de trabajo, no un hueco que valga contar.
+    if (m != null && m >= 2 && finAnterior && inicio) {
+      huecos.push({ desde: finAnterior, hasta: inicio, meses: m });
+    }
+  }
+
+  const vigente = asc.find((p) => !p.hasta) ?? null;
+  const salarios = asc.map((p) => p.salario_base).filter((n): n is number => typeof n === 'number' && n > 0);
+  const patrones = new Set(asc.map((p) => p.empleador).filter(Boolean));
+
+  // El más reciente primero: es como se lee y como se narra.
+  const desc = [...asc].reverse();
+  const listados = desc.slice(0, MAX_PERIODOS);
+
+  return {
+    sin_detalle: false,
+    periodos_totales: asc.length,
+    patrones_distintos: patrones.size,
+    primera_alta: asc[0]?.desde ?? null,
+    ultima_baja: vigente ? null : (desc[0]?.hasta ?? null),
+    sigue_cotizando_con: vigente?.empleador ?? null,
+    // Los huecos son la mitad de la lectura: explican semanas que faltan.
+    // El contador y la lista usan EL MISMO umbral: decir "3 huecos" y no
+    // enseñar ninguno es pedirle al modelo que se los invente.
+    huecos_mayores_a_un_mes: huecos.length,
+    meses_sin_cotizar_entre_empleos: huecos.reduce((s, h) => s + h.meses, 0),
+    hueco_mas_largo_meses: huecos.length ? Math.max(...huecos.map((h) => h.meses)) : 0,
+    huecos: huecos.slice(-12).reverse(),
+    huecos_no_listados: Math.max(0, huecos.length - 12),
+    salario_base_mayor: salarios.length ? Math.max(...salarios) : null,
+    salario_base_ultimo: desc[0]?.salario_base ?? null,
+    truncado: asc.length > MAX_PERIODOS
+      ? `Se listan los ${MAX_PERIODOS} más recientes de ${asc.length}. No digas que trabajó en ${MAX_PERIODOS} lugares.`
+      : null,
+    periodos: listados.map((p) => ({
+      empleador: p.empleador,
+      entidad: p.entidad,
+      desde: mes(p.desde),
+      hasta: p.hasta ? mes(p.hasta) : 'vigente',
+      meses: mesesEntre(p.desde, p.hasta ?? new Date().toISOString().slice(0, 10)),
+      salario_base_diario: p.salario_base,
+    })),
+  };
+}
+
 export type EscenarioCerrado = {
   id: string;
   tipo: string;
@@ -66,7 +183,7 @@ export function construirHechos({
    *  promedio de 250 semanas, las semanas descontadas. Leerlos del expediente
    *  los mandaba al documento como null. */
   datos?: MejorDato[];
-  historial: Array<{ desde?: string | null; hasta?: string | null; patron?: string | null }>;
+  historial: Periodo[];
   escenarios: EscenarioCerrado[];
   issste?: Record<string, any> | null;
 }) {
@@ -140,11 +257,7 @@ export function construirHechos({
 
     issste: issste ?? null,
 
-    historia_laboral: historial.slice(0, 30).map((h) => ({
-      desde: h.desde ?? null,
-      hasta: h.hasta ?? null,
-      patron: h.patron ?? null,
-    })),
+    historia_laboral: resumenHistorial(historial),
 
     // Lo que el asesor CERRÓ con el cliente. Es la diferencia entre este
     // documento y el que se generaba solo desde la semilla.
