@@ -24,12 +24,23 @@
 // se imprime igual que el final acaba en manos del cliente.
 // ============================================================================
 
-import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
 import type { Capitulo } from '@/lib/diagnostico/educacion';
 import { SECCIONES_NARRATIVA, TITULO_SECCION, type SeccionNarrativa } from '@/lib/diagnostico/secciones';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// react-pdf parte palabras largas y les mete un guion ("crédi-to"). Se apaga:
+// en prosa se tolera, pero al lado de una cifra se lee como signo de menos.
+//
+// OJO, esto NO basta: cuando una frase se arma con varios hijos adyacentes de
+// un mismo <Text> —texto suelto + {expresión}—, el motor junta los pedazos y
+// puede meter el guion EN LA COSTURA, sin pasar por este callback. Así salía
+// "tu subcuenta (-$343,374)" y "$8,100-, menos el pago": un menos inventado
+// sobre dinero, en el documento de un cliente. Por eso, donde hay cifras, la
+// frase se arma completa en JS y se pasa como UN solo hijo.
+Font.registerHyphenationCallback((palabra) => [palabra]);
 
 const DARK = '#26282B';
 const LIME = '#D1F069';
@@ -220,6 +231,11 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
     return { txt, capa: capa ? (CAPA[capa] ?? capa) : '' };
   };
 
+  const tieneValor = (x: any) => {
+    const v = x && typeof x === 'object' && 'valor' in x ? x.valor : x;
+    return v !== null && v !== undefined && v !== '';
+  };
+
   const filaDato = (label: string, x: any, money = false, i = 0) => {
     const { txt, capa } = dato(x, money);
     return (
@@ -280,12 +296,12 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
               mientras llega el dato firme. Si alguno no coincide con lo que sabes, dínoslo: lo
               corregimos y el diagnóstico se rehace.
             </Text>
-            <View style={s.thead}>
+            <View style={s.thead} minPresenceAhead={44}>
               <Text style={[s.th, { flex: 2.2 }] as any}>Dato</Text>
               <Text style={[s.th, { flex: 1.3, textAlign: 'right' }] as any}>Valor</Text>
               <Text style={[s.th, { flex: 1.4, textAlign: 'right' }] as any}>Fuente</Text>
             </View>
-            {datos.map(([l, v, m], i) => filaDato(l, v, m, i))}
+            {datos.filter(([, v]) => tieneValor(v)).map(([l, v, m], i) => filaDato(l, v, m, i))}
             {h.procedencia?.imss_sisec ? (
               <Text style={s.nota}>
                 Información del IMSS consultada el {fecha(h.procedencia.imss_sisec)}.
@@ -341,7 +357,16 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
         {borrador ? <Aviso /> : null}
 
         <View style={s.body}>
-          {principal ? (
+          {principal && principal.pension_mensual == null ? (
+            <Sec titulo="El escenario que revisamos">
+              <Text style={s.p}>
+                Los números de este escenario no están al día en el documento. Antes de entregarlo,
+                usa &quot;Refrescar con los datos de hoy&quot; en el expediente.
+              </Text>
+            </Sec>
+          ) : null}
+
+          {principal && principal.pension_mensual != null ? (
             <Sec titulo="El escenario que revisamos">
               {/* Las dos leyes se resumen con cifras distintas: en Ley 73 lo que
                   manda es el salario promedio y el castigo por edad; en Ley 97,
@@ -352,7 +377,8 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
                   <Text style={s.kpiLbl}>Pensión estimada</Text>
                   <Text style={s.kpiVal}>{mx(principal.pension_mensual)}</Text>
                   <Text style={s.kpiSub}>
-                    al mes{principal.edad_retiro ? `, retirándote a los ${num(principal.edad_retiro, 1)}` : ''}
+                    {'al mes' +
+                      (principal.edad_retiro ? `, retirándote a los ${num(principal.edad_retiro, 1)}` : '')}
                   </Text>
                 </View>
                 {principal.ley === 'Ley73' ? (
@@ -411,10 +437,10 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
 
               {Array.isArray(principal.fuentes) && principal.fuentes.length ? (
                 <>
-                  <View style={s.thead}>
+                  <View style={s.thead} minPresenceAhead={44}>
                     <Text style={[s.th, { flex: 2 }] as any}>De dónde sale</Text>
                     <Text style={[s.th, { flex: 1.2, textAlign: 'right' }] as any}>Saldo al retiro</Text>
-                    <Text style={[s.th, { flex: 1.2, textAlign: 'right' }] as any}>Aporta al mes</Text>
+                    <Text style={[s.th, { flex: 1.2, textAlign: 'right' }] as any}>Pensión mensual</Text>
                   </View>
                   {principal.fuentes
                     .filter((f: any) => f.incluida !== false)
@@ -450,32 +476,99 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
 
           {planes.length ? (
             <Sec titulo="El plan de vivienda">
-              {planes.map((p, i) => (
-                <View key={i} style={{ marginBottom: 8 }}>
+              <Text style={s.p}>
+                Comprar el inmueble no compite con tu pensión: es el primer tiempo de la misma
+                estrategia. Se compra con tu subcuenta de vivienda, se pone en renta —tú no lo
+                habitas—, y al vender ese dinero queda líquido para tu retiro.
+              </Text>
+              {planes.map((p: any, i: number) => (
+                <View key={i} style={{ marginBottom: 10 }}>
                   <Text style={s.subT}>
-                    {p.desarrollo ?? 'Inmueble'}
-                    {p.zona ? ` · ${p.zona}` : ''}
+                    {(p.desarrollo ?? 'Inmueble') +
+                      (p.zona ? ` · ${p.zona}` : '') +
+                      (p.plazo_meses ? ` · a ${num(p.plazo_meses)} meses` : '')}
                   </Text>
+
+                  {/* Los tres tiempos, en el mismo orden y con el mismo lenguaje
+                      que la propuesta de Infonavit: lo que pones, lo que pasa
+                      mientras es tuyo, y lo que recibes al final. Dos documentos
+                      del mismo plan no pueden contarlo de dos maneras. */}
                   <View style={s.kpis}>
                     <View style={s.kpi}>
-                      <Text style={s.kpiLbl}>Pago mensual</Text>
-                      <Text style={s.kpiVal}>{mx(p.pago_mensual)}</Text>
-                      <Text style={s.kpiSub}>durante {num(p.plazo_meses)} meses</Text>
+                      <Text style={s.kpiLbl}>Pones hoy</Text>
+                      <Text style={s.kpiVal}>{mx(p.pone_hoy?.de_su_bolsillo ?? 0)}</Text>
+                      <Text style={s.kpiSub}>
+                        {Number(p.pone_hoy?.de_su_bolsillo ?? 0) > 0
+                          ? 'gastos notariales, una sola vez'
+                          : 'de tu bolsillo'}
+                      </Text>
+                      {p.pone_hoy?.lo_paga_su_subcuenta ? (
+                        <Text style={s.kpiSub}>
+                          {`La compra la pagan tu subcuenta (${mx(p.pone_hoy.lo_paga_su_subcuenta)})` +
+                            (p.pone_hoy?.lo_paga_el_credito
+                              ? ` y el crédito Infonavit (${mx(p.pone_hoy.lo_paga_el_credito)})`
+                              : '')}
+                        </Text>
+                      ) : null}
                     </View>
+
                     <View style={s.kpi}>
-                      <Text style={s.kpiLbl}>Recibes al corte</Text>
-                      <Text style={s.kpiVal}>{mx(p.efectivo_al_corte)}</Text>
-                      <Text style={s.kpiSub}>disponible para tu retiro</Text>
+                      <Text style={s.kpiLbl}>Mientras es tuyo</Text>
+                      <Text style={s.kpiVal}>
+                        {p.mientras_es_suyo?.le_queda_cada_mes == null
+                          ? '—'
+                          : mx(p.mientras_es_suyo.le_queda_cada_mes)}
+                      </Text>
+                      <Text style={s.kpiSub}>
+                        {Number(p.mientras_es_suyo?.le_queda_cada_mes ?? 0) >= 0
+                          ? 'te quedan cada mes'
+                          : 'completas cada mes'}
+                      </Text>
+                      {p.mientras_es_suyo?.renta_neta_mensual ? (
+                        <Text style={s.kpiSub}>
+                          {`Renta${p.mientras_es_suyo?.renta_es_estimada ? ' estimada' : ''} ya sin gastos ` +
+                            mx(p.mientras_es_suyo.renta_neta_mensual) +
+                            (p.mientras_es_suyo?.pago_del_credito
+                              ? `, menos el pago del crédito ${mx(p.mientras_es_suyo.pago_del_credito)}`
+                              : '')}
+                        </Text>
+                      ) : null}
                     </View>
+
                     <View style={s.kpi}>
-                      <Text style={s.kpiLbl}>Contra no hacerlo</Text>
-                      <Text style={s.kpiVal}>{mx(p.ventaja_contra_no_hacerlo)}</Text>
-                      <Text style={s.kpiSub}>diferencia estimada</Text>
+                      <Text style={s.kpiLbl}>Al vender</Text>
+                      <Text style={s.kpiVal}>{mx(p.al_vender?.recibe)}</Text>
+                      <Text style={s.kpiSub}>recibes ese día, líquido</Text>
+                      {p.al_vender?.ventaja_contra_no_hacerlo ? (
+                        <Text style={s.kpiSub}>
+                          {`${mx(p.al_vender.ventaja_contra_no_hacerlo)} a tu favor contra no hacer nada` +
+                            (p.al_vender?.medida_a_anios
+                              ? `, a ${num(p.al_vender.medida_a_anios)} años`
+                              : '')}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
-                  {p.cotitular ? (
-                    <Text style={s.nota}>Plan a nombre de dos titulares, junto con {p.cotitular}.</Text>
+
+                  {p.mientras_es_suyo?.su_patron_sigue_aportando_al_credito ? (
+                    <View style={s.li}>
+                      <Text style={s.bullet}>—</Text>
+                      <Text style={s.liTxt}>
+                        Y por detrás, sin que hagas nada: tu patrón sigue aportando a capital del
+                        crédito, los intereses son deducibles y el inmueble gana valor con el tiempo.
+                      </Text>
+                    </View>
                   ) : null}
+                  {p.cotitular ? (
+                    <Text style={s.nota}>
+                      Plan a nombre de dos titulares, junto con {p.cotitular}. Por eso sus montos no
+                      cuadran con los saldos de tu escenario de pensión: los recursos son de los dos.
+                    </Text>
+                  ) : null}
+                  <Text style={s.nota}>
+                    La renta y la plusvalía son supuestos, no promesas. El detalle completo está en
+                    la propuesta de Infonavit que revisamos contigo.
+                  </Text>
                 </View>
               ))}
             </Sec>
@@ -493,20 +586,33 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
                     : ''}
                 .
               </Text>
-              <View style={s.thead}>
-                <Text style={[s.th, { flex: 2.6 }] as any}>Patrón</Text>
-                <Text style={[s.th, { flex: 1 }] as any}>Desde</Text>
-                <Text style={[s.th, { flex: 1 }] as any}>Hasta</Text>
-                <Text style={[s.th, { flex: 1, textAlign: 'right' }] as any}>Salario base</Text>
-              </View>
-              {(hl.periodos ?? []).map((p: any, i: number) => (
-                <View key={i} style={[s.tr, i % 2 ? s.trAlt : {}] as any}>
-                  <Text style={[s.td, { flex: 2.6 }] as any}>{p.empleador ?? '—'}</Text>
-                  <Text style={[s.td, { flex: 1 }] as any}>{p.desde ?? '—'}</Text>
-                  <Text style={[s.td, { flex: 1 }] as any}>{p.hasta ?? '—'}</Text>
-                  <Text style={[s.td, { flex: 1, textAlign: 'right' }] as any}>{mx(p.salario_base_diario)}</Text>
-                </View>
-              ))}
+              {(() => {
+                const filas = (hl.periodos ?? []) as any[];
+                const fila = (p: any, i: number) => (
+                  <View key={i} style={[s.tr, i % 2 ? s.trAlt : {}] as any}>
+                    <Text style={[s.td, { flex: 2.6 }] as any}>{p.empleador ?? '—'}</Text>
+                    <Text style={[s.td, { flex: 1 }] as any}>{p.desde ?? '—'}</Text>
+                    <Text style={[s.td, { flex: 1 }] as any}>{p.hasta ?? '—'}</Text>
+                    <Text style={[s.td, { flex: 1, textAlign: 'right' }] as any}>
+                      {mx(p.salario_base_diario)}
+                    </Text>
+                  </View>
+                );
+                return (
+                  <>
+                    <View wrap={false}>
+                      <View style={s.thead}>
+                        <Text style={[s.th, { flex: 2.6 }] as any}>Patrón</Text>
+                        <Text style={[s.th, { flex: 1 }] as any}>Desde</Text>
+                        <Text style={[s.th, { flex: 1 }] as any}>Hasta</Text>
+                        <Text style={[s.th, { flex: 1, textAlign: 'right' }] as any}>Salario base</Text>
+                      </View>
+                      {filas.slice(0, 1).map(fila)}
+                    </View>
+                    {filas.slice(1).map((p, i) => fila(p, i + 1))}
+                  </>
+                );
+              })()}
               {hl.truncado ? <Text style={s.nota}>Se listan los más recientes de {num(hl.periodos_totales)} periodos.</Text> : null}
             </Sec>
           ) : null}

@@ -28,6 +28,7 @@ import {
   generarBorradorDiagnostico,
   guardarDiagnostico,
   ligarAsesorias,
+  ligarEscenarios,
   refrescarHechosDiagnostico,
   regenerarNarrativa,
 } from '@/app/trabajo/actions';
@@ -299,7 +300,9 @@ export function DiagnosticoPanel({
   const [pending, start] = useTransition();
   // Por default se marcan todos: el asesor cerró uno por calculadora y el
   // documento los junta, que es justo lo que pidió el rediseño.
-  const [elegidos, setElegidos] = useState<string[]>(escenarios.map((e) => e.id));
+  const [elegidos, setElegidos] = useState<string[]>(
+    diagnostico?.escenario_ids?.length ? diagnostico.escenario_ids : escenarios.map((e) => e.id),
+  );
   // El plan de vivienda NO viene todo marcado como los escenarios: hay quien
   // guarda tres tanteando, y ninguna debe colarse sola al documento. Se marca
   // la más reciente, que es la que casi siempre se acaba de presentar.
@@ -528,6 +531,69 @@ export function DiagnosticoPanel({
           </button>
         </div>
         <Hechos h={diagnostico.contenido?.hechos} />
+
+        <div className="mt-4 border-t border-line pt-3">
+          <h3 className="mb-1 text-sm font-bold">Escenarios que dan las cifras</h3>
+          <p className="mb-2 text-xs text-muted">
+            Si cerraste uno mejor después, cámbialo aquí en vez de abrir otro diagnóstico: lo que
+            ya escribiste se conserva.
+          </p>
+          {escenarios.length === 0 ? (
+            <p className="text-sm text-muted">No hay escenarios cerrados en este expediente.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {escenarios.map((e) => (
+                <li key={e.id} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    disabled={bloqueado}
+                    checked={elegidos.includes(e.id)}
+                    onChange={() =>
+                      setElegidos((v) => (v.includes(e.id) ? v.filter((x) => x !== e.id) : [...v, e.id]))
+                    }
+                  />
+                  <span>
+                    {TIPO_LABEL[e.tipo] ?? e.tipo}
+                    <span className="text-xs text-muted">
+                      {' · '}
+                      {fechaHora(e.creado_en)}
+                      {e.resumen?.pension_mensual
+                        ? ` · ${mxn.format(Number(e.resumen.pension_mensual))} al mes`
+                        : ''}
+                      {e.resumen?.edad_retiro ? ` a los ${e.resumen.edad_retiro}` : ''}
+                    </span>
+                    {e.motor_actual === false ? (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                        motor anterior
+                      </span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            disabled={pending || bloqueado || elegidos.length === 0}
+            onClick={() =>
+              start(async () => {
+                const l = (await ligarEscenarios(diagnostico.id, personaId, elegidos)) as R;
+                if (!l.ok) {
+                  toast.error(l.error ?? 'No se pudo');
+                  return;
+                }
+                const r = (await refrescarHechosDiagnostico(
+                  diagnostico.id, personaId, elegidos,
+                )) as R;
+                if (r.ok) toast.success('Hechos al día con estos escenarios');
+                else toast.error(r.error ?? 'No se pudo');
+              })
+            }
+            className="mt-2 text-xs underline text-muted disabled:opacity-50"
+          >
+            Guardar y refrescar los hechos
+          </button>
+        </div>
 
         {asesorias.length ? (
           <div className="mt-4 border-t border-line pt-3">

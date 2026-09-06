@@ -689,9 +689,10 @@ async function hechosDeDiagnostico(
   // cliente. Sólo pasa lo que se nombra aquí.
   let vivienda: Any[] = [];
   if (asesoriaIds.length) {
+    const { derivar } = await import('@/lib/infonavit/derivar');
     const { data: ases } = await db
       .from('infonavit_asesorias')
-      .select('id,proyecto_id,persona_id,cotitular_persona_id,horizonte,credito,pmt,efectivo,ventaja_corte,resultado')
+      .select('*')
       .in('id', asesoriaIds);
     const filas = (ases ?? []) as Any[];
     const proyIds = [...new Set(filas.map((a) => a.proyecto_id).filter(Boolean))];
@@ -710,23 +711,36 @@ async function hechosDeDiagnostico(
     const nom = new Map(((pers ?? []) as Any[]).map((x) => [x.id, [x.nombre, x.apellidos].filter(Boolean).join(' ').trim()]));
     // Se respeta el orden en que el asesor las eligió.
     const porId = new Map(filas.map((a) => [a.id, a]));
+    // Los números salen de `derivar()`, el MISMO que arma el PDF de Infonavit.
+    // Recalcularlos aquí sería garantizar que un día los dos documentos digan
+    // cosas distintas del mismo plan.
     vivienda = asesoriaIds.map((id) => porId.get(id)).filter(Boolean).map((a: Any) => {
       const pr = proy.get(a.proyecto_id) ?? {};
       const otro = a.persona_id === personaId ? a.cotitular_persona_id : a.persona_id;
+      let d: Any = {};
+      try { d = derivar(a); } catch { d = {}; }
       return {
         id: a.id,
-        desarrollo: pr.desarrollo ?? null,
-        zona: pr.zona ?? null,
+        desarrollo: pr.desarrollo ?? d.desarrollo ?? null,
+        zona: pr.zona ?? d.zona ?? null,
         m2: pr.m2 ?? null,
         avaluo: pr.avaluo ?? null,
-        renta_estimada: pr.renta_estimada ?? null,
         horizonte: a.horizonte ?? null,
-        credito: a.credito ?? null,
-        pmt: a.pmt ?? null,
-        efectivo: a.efectivo ?? null,
-        ventaja_corte: a.ventaja_corte ?? null,
         cotitular_nombre: otro ? (nom.get(otro) ?? null) : null,
         lectura_salida: (a.resultado as Any)?.veredicto?.lectura_salida ?? null,
+        // Los tres tiempos. `sobreprecio`, el costo del aliado y la comisión
+        // del desarrollador NO están aquí y no pueden llegar al documento.
+        saldo_subcuenta: d.op?.saldo_apl == null ? null : Number(d.op.saldo_apl),
+        credito: d.credito ?? (a.credito == null ? null : Number(a.credito)),
+        notariales_cliente: d.notCliente ?? null,
+        renta_neta: d.rentaNeta ?? null,
+        pmt: d.pmt ?? (a.pmt == null ? null : Number(a.pmt)),
+        flujo_mensual: d.flujo ?? null,
+        recibe_al_vender: d.recibeDia ?? (a.efectivo == null ? null : Number(a.efectivo)),
+        ventaja_corte: d.ventajaCorte ?? (a.ventaja_corte == null ? null : Number(a.ventaja_corte)),
+        corte_anios: d.corte ?? null,
+        renta_es_estimada: d.rentaEstimada ?? null,
+        hay_aportaciones_patron: d.aportaciones != null ? Number(d.aportaciones) > 0 : null,
       };
     });
   }
@@ -848,10 +862,15 @@ export async function refrescarHechosDiagnostico(diagnosticoId: string, personaI
   try {
     // Las asesorías ligadas se leen del documento: son parte de lo que el
     // asesor ya decidió incluir, no algo que la pantalla tenga que reenviar.
+    // Escenarios y asesorías se leen del propio documento: son lo que el asesor
+    // ya decidió incluir, y desde 121 los escenarios también se pueden cambiar.
     const { data: d } = await t3()
-      .from('diagnosticos').select('asesoria_ids').eq('id', diagnosticoId).maybeSingle();
+      .from('diagnosticos').select('asesoria_ids,escenario_ids').eq('id', diagnosticoId).maybeSingle();
+    const escs = (((d as Any)?.escenario_ids ?? []) as string[]);
     const hechos = await hechosDeDiagnostico(
-      personaId, escenarioIds, ((d as Any)?.asesoria_ids ?? []) as string[],
+      personaId,
+      escs.length ? escs : escenarioIds,
+      ((d as Any)?.asesoria_ids ?? []) as string[],
     );
     const { error } = await t3().rpc('guardar_diagnostico', {
       p_diagnostico: diagnosticoId, p_narrativa: null, p_acuerdos: null,
@@ -1116,6 +1135,24 @@ export async function ligarAsesorias(diagnosticoId: string, personaId: string, a
   const { error } = await t3().rpc('ligar_asesorias', {
     p_diagnostico: diagnosticoId,
     p_asesorias: asesoriaIds,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/**
+ * Cambia qué escenarios cerrados le dan las cifras al diagnóstico (121).
+ *
+ * Como con los planes de vivienda: sólo mueve la liga. Los hechos se rehacen
+ * aparte, para poder ver qué entró antes de que el texto cambie debajo.
+ */
+export async function ligarEscenarios(diagnosticoId: string, personaId: string, escenarioIds: string[]) {
+  await requireMiembro();
+  if (!escenarioIds?.length) return fail(new Error('El diagnóstico necesita al menos un escenario.'));
+  const { error } = await t3().rpc('ligar_escenarios', {
+    p_diagnostico: diagnosticoId,
+    p_escenarios: escenarioIds,
   });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);

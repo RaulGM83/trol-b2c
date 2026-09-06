@@ -164,13 +164,20 @@ export type AsesoriaVivienda = {
   m2?: number | null;
   avaluo?: number | string | null;
   horizonte?: number | null;
-  credito?: number | string | null;
-  pmt?: number | string | null;
-  efectivo?: number | string | null;
-  ventaja_corte?: number | string | null;
-  renta_estimada?: number | string | null;
   cotitular_nombre?: string | null;
   lectura_salida?: string | null;
+  // Los tres tiempos, con los mismos nombres del PDF de Infonavit.
+  saldo_subcuenta?: number | null;
+  credito?: number | null;
+  notariales_cliente?: number | null;
+  renta_neta?: number | null;
+  pmt?: number | null;
+  flujo_mensual?: number | null;
+  recibe_al_vender?: number | null;
+  ventaja_corte?: number | null;
+  corte_anios?: number | null;
+  renta_es_estimada?: boolean | null;
+  hay_aportaciones_patron?: boolean | null;
 };
 
 export type EscenarioCerrado = {
@@ -364,20 +371,36 @@ export function construirHechos({
     // encadenado y no como dos oportunidades sueltas.
     plan_vivienda: (vivienda ?? []).length
       ? {
-          nota: 'Primer tiempo de la estrategia: se compra el inmueble usando la subcuenta de vivienda, y al corte el efectivo que sale puede pasar al ahorro que levanta la pensión. Narra SÓLO el plazo presentado; no sugieras otro.',
+          nota: 'Primer tiempo de la estrategia: se compra el inmueble usando la subcuenta de vivienda, y al vender el efectivo que sale puede pasar al ahorro que levanta la pensión. Narra SÓLO el plazo presentado; no sugieras otro. Cuéntalo en los tres tiempos: lo que pone hoy, lo que pasa mientras es suyo, y lo que recibe al vender.',
           planes: (vivienda ?? []).map((v) => ({
             desarrollo: v.desarrollo ?? null,
             zona: v.zona ?? null,
             m2: num(v.m2),
             avaluo: num(v.avaluo),
             plazo_meses: num(v.horizonte),
-            credito: num(v.credito),
-            pago_mensual: num(v.pmt),
-            efectivo_al_corte: num(v.efectivo),
-            ventaja_contra_no_hacerlo: num(v.ventaja_corte),
-            renta_estimada_mensual: num(v.renta_estimada),
             cotitular: v.cotitular_nombre ?? null,
             lectura: v.lectura_salida ?? null,
+            // 1. Lo que pone hoy. Casi siempre son sólo los notariales: la
+            //    compra la pagan su propia subcuenta y el crédito.
+            pone_hoy: {
+              de_su_bolsillo: num(v.notariales_cliente),
+              lo_paga_su_subcuenta: num(v.saldo_subcuenta),
+              lo_paga_el_credito: num(v.credito),
+            },
+            // 2. Lo que pasa mientras es suyo.
+            mientras_es_suyo: {
+              renta_neta_mensual: num(v.renta_neta),
+              renta_es_estimada: v.renta_es_estimada ?? null,
+              pago_del_credito: num(v.pmt),
+              le_queda_cada_mes: num(v.flujo_mensual),
+              su_patron_sigue_aportando_al_credito: v.hay_aportaciones_patron ?? null,
+            },
+            // 3. Lo que recibe al final.
+            al_vender: {
+              recibe: num(v.recibe_al_vender),
+              ventaja_contra_no_hacerlo: num(v.ventaja_corte),
+              medida_a_anios: num(v.corte_anios),
+            },
           })),
         }
       : null,
