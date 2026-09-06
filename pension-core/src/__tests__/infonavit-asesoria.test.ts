@@ -210,6 +210,7 @@ describe('conservaValorSSV — Ley 97 y la PMG', () => {
       saldoAforeProyectado: afore, saldoInfonavitProyectado: inf, saldoAhorroVoluntario: 0,
       saldoPlanCorporativo: 0, saldoOtrosPlanes: 0, urv, pmg, aportacionesFuturas: 0,
       destinoInfonavit: 'pension' as const, costoRescate: 0, costoRescatePct: 0,
+      sinCostoDesde: 169000,
       enPmg: false, complementoPmg: 0,
     },
     fuentes: [],

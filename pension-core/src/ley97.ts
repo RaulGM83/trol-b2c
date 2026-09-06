@@ -60,9 +60,9 @@ const RENDIMIENTO_REAL_OTROS = 1.01;
  * sale. El umbral se mide contra el saldo de HOY, que es el tamaño real de la
  * transacción que se arma (Raúl, 6-sep-2026).
  *
- * Son términos comerciales, no supuestos actuariales: si cambian, cambian aquí
- * — o se mueven a `trol3.infonavit_supuestos`, que es donde viven los demás
- * parámetros del producto y ya tiene editor en /trabajo/proyectos.
+ * Son términos comerciales, no supuestos actuariales, así que su casa es
+ * `trol3.infonavit_supuestos` (112) y se editan en /trabajo/proyectos. Estos
+ * valores son sólo el default: lo que llega en `palancas.rescate` manda.
  */
 export const RESCATE_SIN_COSTO_DESDE = 169_000;
 export const RESCATE_COSTO_PCT = 0.2; // PPR de aseguradora, fondos, cajas de ahorro
@@ -219,8 +219,9 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   // arma— y se descuenta de todo lo que sale, incluidas las aportaciones que
   // se vayan rescatando después: si el cliente está en el tramo chico, lo está
   // para todo el plan.
-  const costoRescatePct =
-    rescataInfonavit && infBase < RESCATE_SIN_COSTO_DESDE ? RESCATE_COSTO_PCT : 0;
+  const sinCostoDesde = palancas.rescate?.sinCostoDesde ?? RESCATE_SIN_COSTO_DESDE;
+  const costoPct = palancas.rescate?.costoPct ?? RESCATE_COSTO_PCT;
+  const costoRescatePct = rescataInfonavit && infBase < sinCostoDesde ? costoPct : 0;
   const rescateBruto = infBase * fvHoy + infonavitRescatadoFV;
   const costoRescate = rescateBruto * costoRescatePct;
   const saldoInfonavit =
@@ -375,6 +376,7 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       destinoInfonavit,
       costoRescate,
       costoRescatePct,
+      sinCostoDesde,
       enPmg,
       complementoPmg,
     },

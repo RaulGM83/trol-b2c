@@ -154,6 +154,7 @@ export function PanelDatosAUtilizar({
   onIncluir,
   destinoInfonavit = "pension",
   onDestinoInfonavit,
+  rescateSinCostoDesde = RESCATE_SIN_COSTO_DESDE,
   onGuardar,
   guardando = false,
   guardadoAt = null,
@@ -170,6 +171,11 @@ export function PanelDatosAUtilizar({
   /** Destino de la subcuenta de vivienda. Sólo si el panel la muestra. */
   destinoInfonavit?: DestinoInfonavit
   onDestinoInfonavit?: (d: DestinoInfonavit) => void
+  /**
+   * Saldo desde el que el rescate no le cuesta nada al cliente. Viene de
+   * `trol3.infonavit_supuestos` (112); el default es el del motor.
+   */
+  rescateSinCostoDesde?: number
   /** Sin esta prop el panel no muestra botón de guardar (modo sólo escenario). */
   onGuardar?: () => void
   guardando?: boolean
@@ -239,8 +245,9 @@ export function PanelDatosAUtilizar({
                 <SelectorDestino
                   valor={destinoInfonavit}
                   onChange={onDestinoInfonavit}
+                  sinCostoDesde={rescateSinCostoDesde}
                   saldoConCosto={
-                    (valores.infonavit ?? estimados.infonavit ?? 0) < RESCATE_SIN_COSTO_DESDE
+                    (valores.infonavit ?? estimados.infonavit ?? 0) < rescateSinCostoDesde
                   }
                 />
               )}
@@ -313,10 +320,12 @@ const DESTINO_INFONAVIT: Record<
 function SelectorDestino({
   valor,
   onChange,
+  sinCostoDesde,
   saldoConCosto = false,
 }: {
   valor: DestinoInfonavit
   onChange: (d: DestinoInfonavit) => void
+  sinCostoDesde: number
   /** El saldo de hoy está por debajo del umbral sin costo. */
   saldoConCosto?: boolean
 }) {
@@ -343,7 +352,7 @@ function SelectorDestino({
       <p className="text-xs text-muted-foreground">{DESTINO_INFONAVIT[valor].detalle}</p>
       {valor === "rescate" && saldoConCosto && (
         <p className="text-xs text-brick">
-          Con menos de {mxn.format(RESCATE_SIN_COSTO_DESDE)} de saldo no alcanza para armar
+          Con menos de {mxn.format(sinCostoDesde)} de saldo no alcanza para armar
           ese plan: el rescate se hace por otra vía que cobra el 20%, ya descontado en el
           cálculo.
         </p>

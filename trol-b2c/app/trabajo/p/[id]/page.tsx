@@ -143,7 +143,16 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // El crédito vigente NO bloquea: aparece como señal dentro de la pestaña.
   const { data: supRow } = await db.from('infonavit_supuestos').select('*').eq('id', 'default').maybeSingle();
   const supInfonavit = (supRow ?? null) as SupuestosGlobales | null;
-  const umbralInfonavit = Number(supInfonavit?.saldo_min_asesoria ?? 350000);
+  const umbralInfonavit = Number(supInfonavit?.saldo_min_asesoria ?? 100000);
+  // Los términos comerciales del Rescate Infonavit (112) viajan a la
+  // calculadora Ley 97: el precio lo fija el negocio en /trabajo/proyectos, no
+  // una constante del motor.
+  const rescateSupuestos = supRow
+    ? {
+        sinCostoDesde: Number((supRow as Any).rescate_sin_costo_desde),
+        costoPct: Number((supRow as Any).rescate_costo_pct),
+      }
+    : null;
   const aplicaInfonavit = e.status_empleo === 'empleado' && Number(e.saldo_infonavit ?? 0) > umbralInfonavit;
   let proyectosInf: Proyecto[] = [];
   let historialInf: AsesoriaGuardada[] = [];
@@ -390,6 +399,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 serieINPC={serieINPC}
                 saldosCorregidos={saldosCorregidos}
                 guardarScope={e.legacy_cliente_id ? 'cliente' : null}
+                rescate={rescateSupuestos}
               />
               <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
             </>

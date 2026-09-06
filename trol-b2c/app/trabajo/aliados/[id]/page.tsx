@@ -29,6 +29,19 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
   if (!c) notFound();
   const miembrosOpt = (miembros ?? []).map((x: Any) => ({ id: x.id, nombre: x.nombre ?? x.email }));
 
+  // Términos comerciales del Rescate Infonavit (112). La consulta de aliado
+  // usa la misma calculadora Ley 97, así que tiene que ver el mismo precio.
+  const { data: supRescate } = await db
+    .from('infonavit_supuestos')
+    .select('rescate_sin_costo_desde,rescate_costo_pct')
+    .eq('id', 'default')
+    .maybeSingle();
+  const rescateSupuestos = supRescate
+    ? {
+        sinCostoDesde: Number((supRescate as Any).rescate_sin_costo_desde),
+        costoPct: Number((supRescate as Any).rescate_costo_pct),
+      }
+    : null;
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('consulta_aliado_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
 
@@ -162,6 +175,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
                 serieINPC={serieINPC}
                 saldosCorregidos={corr}
                 guardarScope="consulta_aliado"
+                rescate={rescateSupuestos}
               />
               <p className="mt-2 px-3 text-xs text-muted">Los ajustes (semanas ±, saldos reales) son escenarios de esta consulta del aliado; no cambian los datos del aliado. Los saldos guardados se usan al prellenar la mesa Viraal.</p>
             </>

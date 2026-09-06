@@ -95,6 +95,18 @@ export interface Palancas {
    * ahí no hay nada que rescatar.
    */
   rescatarInfonavit?: boolean;
+  /**
+   * Términos comerciales del rescate. Viven en
+   * `trol3.infonavit_supuestos` (112) porque cambian por negociación con la
+   * constructora, no por un hallazgo del motor. Sin ellos se usan los defaults
+   * exportados por `ley97.ts`.
+   */
+  rescate?: {
+    /** Saldo de HOY desde el que el rescate no le cuesta nada al cliente. */
+    sinCostoDesde?: number;
+    /** Lo que se cobra por debajo de ese piso, como fracción (0.20 = 20%). */
+    costoPct?: number;
+  };
   incluir?: {
     afore?: boolean;
     ahorroVoluntario?: boolean;
@@ -409,8 +421,10 @@ export interface ResultadoLey97 {
      * armar ese plan (ver RESCATE_SIN_COSTO_DESDE).
      */
     costoRescate: number;
-    /** El porcentaje aplicado: 0 o RESCATE_COSTO_PCT. */
+    /** El porcentaje aplicado: 0 o el de los supuestos. */
     costoRescatePct: number;
+    /** El piso vigente, para poder explicar por qué hubo (o no) costo. */
+    sinCostoDesde: number;
     /** true cuando la cuenta individual no alcanza la mínima y el gobierno completa. */
     enPmg: boolean;
     /** Lo que completa el gobierno para llegar al piso. 0 si no aplica. */

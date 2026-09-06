@@ -110,7 +110,7 @@ const DESTINO_PDF: Record<string, string> = {
 function notaRescate(d: ReturnType<typeof computeLey97>["detalle"]): string | null {
   if (d.destinoInfonavit !== "rescate") return null
   return d.costoRescate > 0
-    ? `El rescate de este saldo lleva un costo del ${Math.round(d.costoRescatePct * 100)}% (${fmt(d.costoRescate)}), ya descontado del monto que sale: por debajo de ${fmt(RESCATE_SIN_COSTO_DESDE)} no alcanza para armar el plan que normalmente lo cubre. Aparte del dinero, todo rescate cuesta trámite y confianza.`
+    ? `El rescate de este saldo lleva un costo del ${Math.round(d.costoRescatePct * 100)}% (${fmt(d.costoRescate)}), ya descontado del monto que sale: por debajo de ${fmt(d.sinCostoDesde)} no alcanza para armar el plan que normalmente lo cubre. Aparte del dinero, todo rescate cuesta trámite y confianza.`
     : `El rescate no le cuesta nada al cliente: el beneficio lo paga la constructora y el plan se diseña para que salga sin costo y con riesgo bajo. Lo que sí cuesta es trámite y confianza.`
 }
 
@@ -302,6 +302,7 @@ export function CalculadoraClient({
   calculoPensional = null,
   saldosCorregidos = null,
   guardarScope = null,
+  rescate = null,
   serieINPC,
 }: {
   consultaId: string
@@ -330,6 +331,12 @@ export function CalculadoraClient({
   saldosCorregidos?: SaldosCorregidos | null
   /** Dónde guarda el botón de saldos ('consulta' | 'cliente'); null lo oculta. */
   guardarScope?: "consulta" | "cliente" | "consulta_aliado" | null
+  /**
+   * Términos comerciales del Rescate Infonavit, de `trol3.infonavit_supuestos`
+   * (112). Sin ellos el motor usa sus defaults, así que la calculadora sigue
+   * funcionando si la pantalla que la monta no los trae.
+   */
+  rescate?: { sinCostoDesde?: number; costoPct?: number } | null
 }) {
   const { perfil } = semilla
   const tabDefault = perfil.ley === "Ley97" ? "c97" : "c73"
@@ -473,6 +480,7 @@ export function CalculadoraClient({
         <TabsContent value="c97" className="mt-3 w-full">
           <Calc97Panel
             semilla={semilla}
+            rescate={rescate}
             datos={datos}
             setValor={setValor}
             onGuardar={guardarScope ? guardarDatos : undefined}
@@ -1012,6 +1020,7 @@ function Calc73Panel({
 
 function Calc97Panel({
   semilla,
+  rescate,
   datos,
   setValor,
   onGuardar,
@@ -1020,6 +1029,7 @@ function Calc97Panel({
   pdfCtx,
 }: {
   semilla: SemillaV2
+  rescate?: { sinCostoDesde?: number; costoPct?: number } | null
   datos: DatosAUtilizar
   setValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
   onGuardar?: (campos: (keyof DatosAUtilizar)[]) => void
@@ -1057,6 +1067,7 @@ function Calc97Panel({
       // Los tres destinos de la vivienda viajan al motor como dos banderas.
       usaCreditoInfonavit: destinoInfonavit === "vivienda",
       rescatarInfonavit: destinoInfonavit === "rescate",
+      rescate: rescate ?? undefined,
       ahorroVoluntarioMensual: datos.ahorro_voluntario_mensual ?? 0,
       planCorporativoMensual: datos.plan_corporativo_mensual ?? 0,
       otrosPlanesMensual: datos.otros_planes_mensual ?? 0,
@@ -1070,7 +1081,7 @@ function Calc97Panel({
         otrosPlanes: datos.otros_planes,
       },
     }),
-    [palancas, datos, incluir, destinoInfonavit],
+    [palancas, datos, incluir, destinoInfonavit, rescate],
   )
 
   const entrada = useMemo(
@@ -1093,10 +1104,15 @@ function Calc97Panel({
         })
         return {
           edad,
-          // Pensión total (incluye Infonavit, ahorro voluntario y planes
-          // privados) para que los datos capturados se vean también aquí.
-          pension: res.pensionTotal,
-          saldo: res.detalle.saldoAforeProyectado,
+          // Las mismas tres piezas de la tabla de fuentes: lo que da la cuenta
+          // individual (topada por la mínima) y lo que va encima. Verlas juntas
+          // por edad es lo que enseña dónde deja de morder el piso.
+          cuentaIndividual: res.pensionAforeInfonavit,
+          encima:
+            res.pensionTotal === null || res.pensionAforeInfonavit === null
+              ? null
+              : res.pensionTotal - res.pensionAforeInfonavit,
+          total: res.pensionTotal,
         }
       }),
     [edades, entrada, palancasConDatos],
@@ -1188,13 +1204,15 @@ function Calc97Panel({
       titulo: "Pensión por edad de retiro (con las palancas del escenario)",
       columnas: [
         "Edad",
-        "Pensión mensual total",
-        "Saldo AFORE al retiro",
+        "Cuenta individual",
+        "Ahorro encima",
+        "Pensión total",
       ],
       filas: barrido.map((b) => [
         `${b.edad}`,
-        b.pension === null ? "Negativa" : fmt(b.pension),
-        fmt(b.saldo),
+        b.total === null ? "Negativa" : fmt(b.cuentaIndividual),
+        b.total === null ? "—" : fmt(b.encima),
+        b.total === null ? "—" : fmt(b.total),
       ]),
       resaltada: barrido.findIndex((b) => b.edad === palancas.edadRetiro),
     },
@@ -1246,6 +1264,7 @@ function Calc97Panel({
             onIncluir={setIncluirClave}
             destinoInfonavit={destinoInfonavit}
             onDestinoInfonavit={setDestinoInfonavit}
+            rescateSinCostoDesde={rescate?.sinCostoDesde ?? RESCATE_SIN_COSTO_DESDE}
             onGuardar={onGuardar ? () => onGuardar(camposDe(VEHICULOS_97)) : undefined}
             guardando={guardando}
             guardadoAt={guardadoAt}
@@ -1304,11 +1323,12 @@ function Calc97Panel({
 
       <TablaBarrido
         titulo="Pensión por edad de retiro (con las palancas actuales)"
-        columnas={["Edad", "Pensión mensual total", "Saldo AFORE al retiro"]}
+        columnas={["Edad", "Cuenta individual", "Ahorro encima", "Pensión total"]}
         filas={barrido.map((b) => [
           `${b.edad}`,
-          b.pension === null ? "Negativa" : fmt(b.pension),
-          fmt(b.saldo),
+          b.total === null ? "Negativa" : fmt(b.cuentaIndividual),
+          b.total === null ? "—" : fmt(b.encima),
+          b.total === null ? "—" : fmt(b.total),
         ])}
         resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
       />

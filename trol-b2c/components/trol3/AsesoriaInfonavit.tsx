@@ -34,6 +34,9 @@ export interface SupuestosGlobales {
   /** Mínimo para entrar como cotitular. Más bajo que el de asesoría a
    *  propósito: en conyugal Infonavit suma el monto máximo de cada titular. */
   saldo_min_cotitular: number;
+  /** Términos comerciales del Rescate Infonavit (112). */
+  rescate_sin_costo_desde: number;
+  rescate_costo_pct: number;
   credito_minimo: number;
 }
 

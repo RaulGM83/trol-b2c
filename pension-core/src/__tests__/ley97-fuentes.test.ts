@@ -398,6 +398,28 @@ describe('el costo del rescate', () => {
     expect(chico(true, 60).pensionTotal!).toBeLessThanOrEqual(chico(false, 60).pensionTotal!);
   });
 
+  // Los términos son comerciales y viven en trol3.infonavit_supuestos (112).
+  // Lo que llega en las palancas tiene que ganarle al default del motor, o
+  // editarlos en /trabajo/proyectos no serviría de nada.
+  it('lo que venga de los supuestos manda sobre el default', () => {
+    const conSupuestos = (sinCostoDesde: number, costoPct: number) =>
+      computeLey97({
+        ...base,
+        palancas: {
+          ...palancas,
+          rescatarInfonavit: true,
+          rescate: { sinCostoDesde, costoPct },
+          overrides: { infonavit: 200_000 },
+        },
+      });
+    // Con el default ($169k) estos $200k salían gratis; subiendo el piso, no.
+    const conPiso = conSupuestos(300_000, 0.15);
+    expect(conPiso.detalle.costoRescatePct).toBe(0.15);
+    expect(conPiso.detalle.costoRescate).toBeGreaterThan(0);
+    // Y bajando el piso vuelve a ser gratis.
+    expect(conSupuestos(100_000, 0.15).detalle.costoRescatePct).toBe(0);
+  });
+
   it('y el desglose sigue cuadrando con costo de por medio', () => {
     const r = rescatando(100_000);
     expect(suma(r)).toBeCloseTo(r.pensionTotal!, 2);
