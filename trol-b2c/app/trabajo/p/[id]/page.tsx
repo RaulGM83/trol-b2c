@@ -17,6 +17,7 @@ import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
+import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -223,6 +224,16 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // debe mandarse al WhatsApp del propio cliente (poseerlo = teléfono validado).
   const { data: miLink } = await db.rpc('mi_link_asesor', { p_persona: e.persona_id });
   const urlReferido = codigoReferido ? `${SITE}/i/${codigoReferido}` : null;
+  // Los compromisos con este cliente (114). Van en el Resumen, no escondidos
+  // en una pestaña: si alguien le prometió algo, es lo primero que hay que ver
+  // al abrir su expediente.
+  const { data: tareasCliente } = await db
+    .from('v_tareas')
+    .select('id,persona_id,persona_nombre,titulo,detalle,responsable_id,responsable_nombre,vence_el,estado,origen,vencida,dias_para_vencer,hecha_en,nota_cierre')
+    .eq('persona_id', params.id)
+    .order('vence_el', { ascending: true, nullsFirst: false })
+    .limit(50);
+
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
   // Los datos a utilizar viven en dos lados: el jsonb que escribe la
@@ -347,6 +358,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
               <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'edad_actual', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente', 'ahorro_voluntario', 'ahorro_voluntario_mensual', 'plan_corporativo', 'plan_corporativo_mensual', 'otros_planes', 'otros_planes_mensual'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado']} fechas={{ imss: e.ley_en }} />
               <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
             </section>
+
+            <TareasPanel
+              tareas={(tareasCliente ?? []) as Tarea[]}
+              miembros={((miembros ?? []) as Any[]).map((m) => ({ id: m.id, nombre: m.nombre, email: m.email }))}
+              personaId={e.persona_id}
+              yoId={m.id}
+              compacto
+            />
 
             <HistorialLaboral historial={historialLaboral} />
           </div>

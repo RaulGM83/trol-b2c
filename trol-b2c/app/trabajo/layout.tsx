@@ -21,6 +21,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
             <Link href="/trabajo/hoy" className="rounded-lg px-2 py-1 font-semibold hover:bg-cream">Hoy</Link>
             <Link href="/trabajo" className="rounded-lg px-2 py-1 hover:bg-cream">Clientes</Link>
             <Link href="/trabajo/lista" className="rounded-lg px-2 py-1 hover:bg-cream">Lista de trabajo</Link>
+            <Link href="/trabajo/tareas" className="rounded-lg px-2 py-1 hover:bg-cream">Tareas</Link>
             <Link href="/trabajo/embudo" className="rounded-lg px-2 py-1 hover:bg-cream">Embudo</Link>
             <Link href="/trabajo/eventos" className="rounded-lg px-2 py-1 hover:bg-cream">Actividad</Link>
             <Link href="/trabajo/aliados" className="rounded-lg px-2 py-1 hover:bg-cream">Aliados</Link>

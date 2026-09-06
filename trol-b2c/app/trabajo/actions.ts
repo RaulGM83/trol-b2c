@@ -549,3 +549,77 @@ export async function archivarAsesoria(id: string, personaId: string, archivar =
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
+
+// ---------------------------------------------------------------------------
+// Tareas — los compromisos del equipo (114).
+//
+// Salió de leer los diagnósticos reales: "Vamos a revisar tu cuenta del IMSS
+// por si aparecen otros NSS" estaba escrito dentro de un párrafo de un PDF.
+// Un compromiso que nadie persigue es peor que no haberlo escrito, así que
+// ahora es un objeto con dueño y fecha que vive en un solo lugar.
+// ---------------------------------------------------------------------------
+
+export async function crearTarea(input: {
+  titulo: string;
+  personaId?: string | null;
+  responsableId?: string | null;
+  venceEl?: string | null;
+  detalle?: string | null;
+  origen?: string;
+  origenId?: string | null;
+}) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('crear_tarea', {
+    p_titulo: input.titulo,
+    p_persona: input.personaId ?? null,
+    p_responsable: input.responsableId ?? null,
+    p_vence_el: input.venceEl || null,
+    p_detalle: input.detalle?.trim() || null,
+    p_origen: input.origen ?? 'manual',
+    p_origen_id: input.origenId ?? null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/tareas');
+  if (input.personaId) revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok({ id: data });
+}
+
+/** Hecha, cancelada o de vuelta a pendiente. El quién y el cuándo los pone SQL. */
+export async function cerrarTarea(
+  tareaId: string,
+  estado: 'hecha' | 'cancelada' | 'pendiente' = 'hecha',
+  nota?: string,
+  personaId?: string | null,
+) {
+  await requireMiembro();
+  const { error } = await t3().rpc('cerrar_tarea', {
+    p_tarea: tareaId,
+    p_estado: estado,
+    p_nota: nota?.trim() || null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/tareas');
+  if (personaId) revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/** Reasignar o mover la fecha: lo que de verdad se edita de una tarea viva. */
+export async function actualizarTarea(input: {
+  tareaId: string;
+  responsableId?: string | null;
+  venceEl?: string | null;
+  limpiarVence?: boolean;
+  personaId?: string | null;
+}) {
+  await requireMiembro();
+  const { error } = await t3().rpc('actualizar_tarea', {
+    p_tarea: input.tareaId,
+    p_responsable: input.responsableId ?? null,
+    p_vence_el: input.venceEl || null,
+    p_limpiar_vence: input.limpiarVence ?? false,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/tareas');
+  if (input.personaId) revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok();
+}
