@@ -37,7 +37,20 @@
 // baja a esa fecha y la cotización futura corre de ahí al retiro, así que el
 // hueco entre hoy y la inscripción ya no puede contarse dos veces. Omitirla
 // deja el cálculo idéntico: los goldens no se movieron.
-export const ENGINE_VERSION = '2026.09.02.3';
+// 2026.09.06.1 — cuatro días de cambios que SÍ mueven números y que se
+// quedaron sin subir la versión (se corrige aquí, al empezar a usar los
+// snapshots de escenario en serio):
+//   · Infonavit 0% real hacia adelante (antes 1% de premio).
+//   · Cinco fuentes de ahorro con su propia tasa: AFORE 3%, plan corporativo
+//     2%, otros planes 1%, vivienda 0%.
+//   · El castigo del seguro de sobrevivencia (0.81) aplica SÓLO al RCV; antes
+//     castigaba también a la subcuenta de vivienda.
+//   · Rescate Infonavit: la vivienda puede salir de la cuenta individual al 3%
+//     real, sin castigo y por encima de la mínima, con su costo cuando el saldo
+//     de hoy no llega al piso sin costo.
+//   · Mod 40 sin baja: el proyecto asume que deja de cotizar hoy.
+// Un snapshot anterior a esta versión NO es comparable con uno de hoy.
+export const ENGINE_VERSION = '2026.09.06.1';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { createClient } from "@/lib/supabase/client"
 import { computeLey73 } from "@trol/pension-core/ley73"
+import { MOTOR_VERSION } from "@trol/pension-core/version"
 import { computeLey97, RESCATE_SIN_COSTO_DESDE } from "@trol/pension-core/ley97"
 import type { SerieINPC } from "@trol/pension-core/inpc"
 import { computeProyectoMod40 } from "@trol/pension-core/mod40-proyecto"
@@ -32,6 +33,7 @@ import {
   ResumenCliente,
   type ResumenClienteData,
 } from "@/components/resumen-cliente"
+import { EscenariosCerrados } from "@/components/portal/escenarios-cerrados"
 import {
   camposDe,
   PanelDatosAUtilizar,
@@ -334,6 +336,29 @@ function slugEscenario(nombre: string): string {
   )
 }
 
+/**
+ * A quién se le cierra el escenario. Exactamente uno de los dos, como exige
+ * `trol3.escenarios`: un expediente o una consulta de aliado.
+ */
+export type CerrarEscenarioCtx = {
+  personaId?: string
+  consultaAliadoId?: string
+}
+
+/**
+ * Lo que se congela al cerrar un escenario.
+ *
+ * `inputs` tiene que bastar para releerlo sin volver a calcular: la semilla,
+ * las palancas y la versión del motor. `resumen` es lo que la lista puede
+ * enseñar sin abrir el snapshot entero.
+ */
+export type SnapshotEscenario = {
+  tipo: "calc_ley73" | "calc_ley97" | "calc_mod40"
+  inputs: Record<string, unknown>
+  resultado: Record<string, unknown>
+  ventana?: Record<string, unknown>
+}
+
 /** Contexto compartido para la descarga de PDF en los 3 paneles. */
 type PdfCtx = {
   curp: string
@@ -366,6 +391,7 @@ export function CalculadoraClient({
   saldosCorregidos = null,
   guardarScope = null,
   rescate = null,
+  cerrarEscenario = null,
   serieINPC,
 }: {
   consultaId: string
@@ -400,6 +426,12 @@ export function CalculadoraClient({
    * funcionando si la pantalla que la monta no los trae.
    */
   rescate?: { sinCostoDesde?: number; costoPct?: number } | null
+  /**
+   * Presente = se puede cerrar el escenario desde aquí. Ausente = la pantalla
+   * que monta la calculadora no sabe a quién se lo cerraría, así que el botón
+   * no aparece.
+   */
+  cerrarEscenario?: CerrarEscenarioCtx | null
 }) {
   const { perfil } = semilla
   const tabDefault = perfil.ley === "Ley97" ? "c97" : "c73"
@@ -416,6 +448,9 @@ export function CalculadoraClient({
   const [guardadoAt, setGuardadoAt] = useState<string | null>(
     saldosCorregidos?.actualizado_at ?? null,
   )
+  // Sube cada vez que se cierra un escenario: es la señal para que la lista
+  // se vuelva a leer sin recargar la página.
+  const [escenariosCerrados, setEscenariosCerrados] = useState(0)
   const setValor = (campo: keyof DatosAUtilizar, v: number | undefined) =>
     setDatos((d) => ({ ...d, [campo]: v }))
 
@@ -538,12 +573,19 @@ export function CalculadoraClient({
         </TabsList>
 
         <TabsContent value="c73" className="mt-3 w-full">
-          <Calc73Panel semilla={semilla} pdfCtx={pdfCtx} />
+          <Calc73Panel
+            semilla={semilla}
+            pdfCtx={pdfCtx}
+            cerrar={cerrarEscenario}
+            onCerrado={() => setEscenariosCerrados((n) => n + 1)}
+          />
         </TabsContent>
         <TabsContent value="c97" className="mt-3 w-full">
           <Calc97Panel
             semilla={semilla}
             rescate={rescate}
+            cerrar={cerrarEscenario}
+            onCerrado={() => setEscenariosCerrados((n) => n + 1)}
             datos={datos}
             setValor={setValor}
             onGuardar={guardarScope ? guardarDatos : undefined}
@@ -556,6 +598,8 @@ export function CalculadoraClient({
           <TabsContent value="m40" className="mt-3 w-full">
             <Mod40Panel
               semilla={semilla}
+              cerrar={cerrarEscenario}
+              onCerrado={() => setEscenariosCerrados((n) => n + 1)}
               datos={datos}
               setValor={setValor}
               onGuardar={guardarScope ? guardarDatos : undefined}
@@ -576,6 +620,14 @@ export function CalculadoraClient({
         </TabsContent>
       </Tabs>
 
+      {cerrarEscenario && (
+        <EscenariosCerrados
+          personaId={cerrarEscenario.personaId}
+          consultaAliadoId={cerrarEscenario.consultaAliadoId}
+          refrescar={escenariosCerrados}
+        />
+      )}
+
       <p className="text-xs text-muted-foreground">
         Estimaciones con base en el historial IMSS del cliente y parámetros vigentes
         ({ANIO}). No constituyen una resolución del IMSS ni una promesa de pensión.
@@ -591,9 +643,13 @@ export function CalculadoraClient({
 function Calc73Panel({
   semilla,
   pdfCtx,
+  cerrar,
+  onCerrado,
 }: {
   semilla: SemillaV2
   pdfCtx: PdfCtx
+  cerrar?: CerrarEscenarioCtx | null
+  onCerrado?: () => void
 }) {
   const { perfil, saldos, salario_60m } = semilla
   const edadActual = edadActualDe(perfil.fecha_nacimiento)
@@ -903,7 +959,28 @@ function Calc73Panel({
               )}
             </div>
           )}
-          <DescargarEscenario pdfCtx={pdfCtx} idSuffix="73" buildPayload={buildPdf} />
+          <DescargarEscenario
+            pdfCtx={pdfCtx}
+            idSuffix="73"
+            buildPayload={buildPdf}
+            cerrar={cerrar}
+            onCerrado={onCerrado}
+            buildSnapshot={(etiqueta) => ({
+              tipo: "calc_ley73" as const,
+              inputs: {
+                motor_version: MOTOR_VERSION,
+                resumen: {
+                  etiqueta,
+                  pension_mensual: aCentenas(r.pensionMensual),
+                  edad_retiro: palancas.edadRetiro,
+                },
+                semilla,
+                palancas,
+                cerrado_en: new Date().toISOString(),
+              },
+              resultado: r as unknown as Record<string, unknown>,
+            })}
+          />
         </>
       }
     >
@@ -1084,6 +1161,8 @@ function Calc73Panel({
 function Calc97Panel({
   semilla,
   rescate,
+  cerrar,
+  onCerrado,
   datos,
   setValor,
   onGuardar,
@@ -1093,6 +1172,8 @@ function Calc97Panel({
 }: {
   semilla: SemillaV2
   rescate?: { sinCostoDesde?: number; costoPct?: number } | null
+  cerrar?: CerrarEscenarioCtx | null
+  onCerrado?: () => void
   datos: DatosAUtilizar
   setValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
   onGuardar?: (campos: (keyof DatosAUtilizar)[]) => void
@@ -1360,7 +1441,36 @@ function Calc97Panel({
             guardando={guardando}
             guardadoAt={guardadoAt}
           />
-          <DescargarEscenario pdfCtx={pdfCtx} idSuffix="97" buildPayload={buildPdf} />
+          <DescargarEscenario
+            pdfCtx={pdfCtx}
+            idSuffix="97"
+            buildPayload={buildPdf}
+            cerrar={cerrar}
+            onCerrado={onCerrado}
+            buildSnapshot={(etiqueta) => ({
+              tipo: "calc_ley97" as const,
+              inputs: {
+                motor_version: MOTOR_VERSION,
+                // Lo que la lista enseña sin abrir el snapshot. El destino de
+                // la vivienda va aquí porque es la decisión que más mueve el
+                // resultado y la que más se va a querer comparar después.
+                resumen: {
+                  etiqueta,
+                  pension_mensual: aCentenas(r.pensionTotal),
+                  edad_retiro: palancas.edadRetiro,
+                  destino_infonavit: destinoInfonavit,
+                  en_pmg: d.enPmg,
+                },
+                semilla,
+                palancas: palancasConDatos,
+                datos,
+                incluir,
+                destino_infonavit: destinoInfonavit,
+                cerrado_en: new Date().toISOString(),
+              },
+              resultado: r as unknown as Record<string, unknown>,
+            })}
+          />
         </>
       }
     >
@@ -1443,6 +1553,8 @@ function Calc97Panel({
 
 function Mod40Panel({
   semilla,
+  cerrar,
+  onCerrado,
   datos,
   setValor,
   onGuardar,
@@ -1454,6 +1566,8 @@ function Mod40Panel({
   pdfCtx,
 }: {
   semilla: SemillaV2
+  cerrar?: CerrarEscenarioCtx | null
+  onCerrado?: () => void
   datos: DatosAUtilizar
   setValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
   onGuardar?: (campos: (keyof DatosAUtilizar)[]) => void
@@ -1824,7 +1938,36 @@ function Mod40Panel({
             guardando={guardando}
             guardadoAt={guardadoAt}
           />
-          <DescargarEscenario pdfCtx={pdfCtx} idSuffix="m40" buildPayload={buildPdf} />
+          <DescargarEscenario
+            pdfCtx={pdfCtx}
+            idSuffix="m40"
+            buildPayload={buildPdf}
+            cerrar={cerrar}
+            onCerrado={onCerrado}
+            buildSnapshot={(etiqueta) => ({
+              tipo: "calc_mod40" as const,
+              inputs: {
+                motor_version: MOTOR_VERSION,
+                resumen: {
+                  etiqueta,
+                  pension_mensual: aCentenas(r.conProyecto.pensionMensual),
+                  fecha_tramite: fechaTramiteIso,
+                  umas: umas,
+                },
+                semilla,
+                fecha_tramite: fechaTramiteIso,
+                umas,
+                semanas_extra: semanasExtra,
+                recuperar_descontadas: recuperarDesc,
+                datos,
+                limite_inscripcion_mod40: limiteInscripcionMod40 ?? null,
+                cerrado_en: new Date().toISOString(),
+              },
+              resultado: r as unknown as Record<string, unknown>,
+              // La única calculadora con ventana del art. 219/220.
+              ventana: r.ventana as unknown as Record<string, unknown>,
+            })}
+          />
         </>
       }
     >
@@ -2576,14 +2719,51 @@ function DescargarEscenario({
   pdfCtx,
   idSuffix,
   buildPayload,
+  cerrar,
+  buildSnapshot,
+  onCerrado,
 }: {
   pdfCtx: PdfCtx
   idSuffix: string
   buildPayload: () => PdfEscenarioData
+  /** Sin esto no se puede cerrar: no sabemos a quién. */
+  cerrar?: CerrarEscenarioCtx | null
+  buildSnapshot?: (etiqueta: string) => SnapshotEscenario
+  onCerrado?: () => void
 }) {
   const [nombre, setNombre] = useState("")
   const [generando, setGenerando] = useState<PdfModo | null>(null)
+  const [cerrando, setCerrando] = useState(false)
+  const [cerrado, setCerrado] = useState<string | null>(null)
   const nombreEfectivo = nombre.trim() || `Escenario ${pdfCtx.numero}`
+
+  /**
+   * Congela el escenario. Lo que se guarda deja de moverse: si mañana llega un
+   * SISEC nuevo, este snapshot sigue diciendo lo que se le presentó al cliente
+   * hoy — que es exactamente para lo que sirve.
+   */
+  async function cerrarEscenarioAhora() {
+    if (!cerrar || !buildSnapshot) return
+    setCerrando(true)
+    const snap = buildSnapshot(nombreEfectivo)
+    const supabase = createClient()
+    const { data, error } = await supabase.schema("trol3").rpc("cerrar_escenario", {
+      p_persona: cerrar.personaId ?? null,
+      p_consulta_aliado: cerrar.consultaAliadoId ?? null,
+      p_tipo: snap.tipo,
+      p_inputs: snap.inputs,
+      p_resultado: snap.resultado,
+      p_ventana: snap.ventana ?? {},
+    })
+    setCerrando(false)
+    if (error) {
+      toast.error(`No se pudo cerrar el escenario: ${error.message}`)
+      return
+    }
+    setCerrado(String(data))
+    onCerrado?.()
+    toast.success(`Escenario cerrado: ${nombreEfectivo}`)
+  }
 
   async function descargar(modo: PdfModo) {
     setGenerando(modo)
@@ -2645,6 +2825,25 @@ function DescargarEscenario({
       <p className="text-xs text-muted-foreground break-all">
         {pdfCtx.curp}_{slugEscenario(nombreEfectivo)}.pdf
       </p>
+
+      {cerrar && buildSnapshot && (
+        <div className="mt-1 flex flex-col gap-1 border-t pt-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={cerrando}
+            onClick={cerrarEscenarioAhora}
+          >
+            {cerrando ? "Cerrando…" : "Cerrar escenario"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {cerrado
+              ? "Cerrado. Queda en el expediente con los datos de hoy y ya no cambia."
+              : "Guarda este escenario tal como está para el diagnóstico. Queda congelado con los datos de hoy y no se puede editar; cerrar otro no pisa éste."}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

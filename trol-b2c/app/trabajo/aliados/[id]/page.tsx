@@ -176,6 +176,7 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
                 saldosCorregidos={corr}
                 guardarScope="consulta_aliado"
                 rescate={rescateSupuestos}
+                cerrarEscenario={{ consultaAliadoId: c.id }}
               />
               <p className="mt-2 px-3 text-xs text-muted">Los ajustes (semanas ±, saldos reales) son escenarios de esta consulta del aliado; no cambian los datos del aliado. Los saldos guardados se usan al prellenar la mesa Viraal.</p>
             </>

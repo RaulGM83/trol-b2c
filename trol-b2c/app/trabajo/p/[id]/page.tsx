@@ -400,6 +400,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 saldosCorregidos={saldosCorregidos}
                 guardarScope={e.legacy_cliente_id ? 'cliente' : null}
                 rescate={rescateSupuestos}
+                cerrarEscenario={{ personaId: e.persona_id }}
               />
               <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
             </>
