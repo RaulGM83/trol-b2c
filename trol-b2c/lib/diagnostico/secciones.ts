@@ -50,8 +50,14 @@ export const MODELO_REDACTOR = 'gpt-5.5'
  * 2026.09.06.2 — la sección de Infonavit narra el plan de vivienda concreto
  *                cuando lo hay, encadenado con la pensión, y tiene prohibido
  *                proponer otro plazo o hablar de costos.
+ * 2026.09.06.3 — sólo se habla de lo que aplica (nada de explicar una regla
+ *                para descartarla); en Ley 97 se prohíbe conservación de
+ *                derechos y Modalidad 40; gestorías sin hallazgos se cierra en
+ *                dos líneas; el rescate se argumenta por liquidez —el 4%
+ *                nominal del instituto es ~0% real— y no por pensión extra;
+ *                y con cotitular los montos no deben cuadrar con el escenario.
  */
-export const PROMPT_VERSION = '2026.09.06.2'
+export const PROMPT_VERSION = '2026.09.06.3'
 
 /**
  * Cómo se le pegan los ajustes al prompt base.

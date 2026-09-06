@@ -48,6 +48,7 @@ export type FeedbackFila = {
   instruccion: string | null;
   estado: 'abierto' | 'probado' | 'promovido' | 'descartado';
   promovida_version: number | null;
+  promovida_prompt_version: string | null;
   creado_en: string;
   persona_id: string | null;
   persona_nombre: string | null;
@@ -336,6 +337,7 @@ export function RedactorPanel({
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ESTADO_TONO[f.estado]}`}>
                     {f.estado}
                     {f.promovida_version ? ` · v${f.promovida_version}` : ''}
+                    {f.promovida_prompt_version ? ` · prompt ${f.promovida_prompt_version}` : ''}
                   </span>
                 </div>
 
@@ -377,6 +379,26 @@ export function RedactorPanel({
                       className="underline disabled:opacity-50"
                     >
                       Ya quedó en v{vigente.version}
+                    </button>
+                  ) : null}
+                  {f.estado !== 'promovido' ? (
+                    <button
+                      disabled={pending}
+                      onClick={() =>
+                        correr(
+                          () =>
+                            actualizarFeedback({
+                              id: f.id,
+                              personaId: f.persona_id ?? '',
+                              estado: 'promovido',
+                              promptVersion,
+                            }) as Promise<R>,
+                          `Anotado en el prompt base ${promptVersion}`,
+                        )
+                      }
+                      className="underline disabled:opacity-50"
+                    >
+                      Ya quedó en el prompt base
                     </button>
                   ) : null}
                   {f.estado === 'abierto' ? (

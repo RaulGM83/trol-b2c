@@ -44,7 +44,7 @@ export default async function RedactorPage() {
     db
       .from('v_redactor_feedback')
       .select(
-        'id,diagnostico_id,seccion,comentario,instruccion,estado,promovida_version,creado_en,persona_id,persona_nombre,prompt_version,instrucciones_version',
+        'id,diagnostico_id,seccion,comentario,instruccion,estado,promovida_version,promovida_prompt_version,creado_en,persona_id,persona_nombre,prompt_version,instrucciones_version',
       )
       .order('creado_en', { ascending: false })
       .limit(300),

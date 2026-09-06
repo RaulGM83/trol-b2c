@@ -924,7 +924,10 @@ export async function actualizarFeedback(input: {
   estado?: 'abierto' | 'probado' | 'promovido' | 'descartado' | null;
   instruccion?: string | null;
   comentario?: string | null;
+  /** Si acabó en el bloque vigente, su versión. */
   version?: number | null;
+  /** Si acabó consolidado en el prompt base del repo, su versión (120). */
+  promptVersion?: string | null;
 }) {
   await requireMiembro();
   const { error } = await t3().rpc('actualizar_feedback', {
@@ -933,6 +936,7 @@ export async function actualizarFeedback(input: {
     p_instruccion: input.instruccion ?? null,
     p_comentario: input.comentario ?? null,
     p_version: input.version ?? null,
+    p_prompt_version: input.promptVersion ?? null,
   });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${input.personaId}`);

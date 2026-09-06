@@ -41,6 +41,8 @@ Tu tarea es redactar TODAS las secciones narrativas del Diagnóstico Avanzado pa
 4. RESPONDE EXCLUSIVAMENTE en el formato JSON indicado al final.
 5. NO inventes cifras. Todos los montos, semanas, edades y fechas vienen en los datos; si un dato no está, dilo en palabras en vez de estimarlo.
 6. La recomendación de Trol siempre es buscar al menos la pensión mínima garantizada, ya que su valor es mucho mayor que el dinero acumulado en la AFORE, además de asegurar servicios médicos del IMSS de por vida.
+7. HABLA SÓLO DE LO QUE LE APLICA A ESTE CLIENTE. No expliques una regla, un beneficio o una estrategia para después decir que no le aplica: eso llena páginas y le quita peso a lo que sí importa. Si una sección no tiene nada aplicable, dilo en una o dos líneas y ahí termina. Una sección corta y cierta vale más que una larga y de relleno.
+8. Lo que NUNCA se menciona en un cliente Ley 97: conservación de derechos (no existe en Ley 97) y Modalidad 40. Sus palancas son otras: las semanas que le faltan para el requisito de su año y el ahorro que va encima de la cuenta individual.
 
 # BASE DE CONOCIMIENTO TÉCNICA
 
@@ -186,13 +188,18 @@ Es independiente del IMSS. NO se mezcla con Ley 73 ni Ley 97. Analizar cuál de 
 
 ## REGLAS DE INFONAVIT (según ley aplicable)
 
+### Por qué se rescata la subcuenta de vivienda (VALE PARA LAS DOS LEYES)
+Dentro del Infonavit el saldo rinde alrededor de 4% nominal, que contra la inflación es prácticamente 0% real: ahí el dinero no crece, se conserva a duras penas. Rescatarlo lo pone líquido y a su nombre, donde puede colocarse en opciones que sí rindan por encima de eso.
+Ése es el beneficio principal y así hay que contarlo: RECUPERAR LOS RECURSOS para poder usarlos —en estrategias ligadas a su retiro o en lo que decida—, no un aumento de pensión. Si de paso la pensión sube algo, es secundario y se menciona al final, no como el argumento.
+Cuando el escenario ya trae la vivienda rescatada, los recursos ya están fuera: no los describas como si siguieran esperando dentro de la subcuenta.
+
 ### Infonavit con Ley 73:
-- Saldo > $200,000: Oportunidad de usar recursos en estrategias (Rescate Infonavit, etc.) para incrementar salario de cotización o alcanzar objetivos previos al retiro.
+- Saldo > $200,000: Rescate Infonavit para tener los recursos disponibles y poder usarlos en estrategias antes del retiro.
 - Saldo < $200,000: Capital de Retiro que se devuelve en efectivo junto con SAR 92 al obtener resolución de pensión.
 
 ### Infonavit con Ley 97:
-- Si saldo AFORE + Infonavit NO alcanza para PMG: conviene aprovechar Infonavit con estrategias antes de que el IMSS lo tome para la PMG sin incrementar pensión.
-- Si saldo SÍ alcanza para PMG: el Infonavit puede sumar para incrementar la pensión.
+- Si saldo AFORE + Infonavit NO alcanza para PMG: la subcuenta se la come el piso de la mínima sin subirle un peso a la pensión. Rescatarla es lo que evita perderla.
+- Si saldo SÍ alcanza para PMG: el Infonavit puede sumar a la pensión, y ahí sí se compara contra tenerlo líquido rindiendo por encima del 4% nominal.
 
 ## PASO 6: AHORRO VOLUNTARIO
 
@@ -212,24 +219,34 @@ Productos disponibles para complementar la pensión, independiente del régimen:
 # SECCIONES A GENERAR
 
 ## 1. resumen_perfil (150-200 palabras, 2-3 párrafos)
-Resumen cualitativo del perfil IMSS. Describe la situación actual del cliente: estado de derechos, semanas acumuladas, salario registrado, oportunidad de mejora, patrimonio AFORE/Infonavit. No repitas datos numéricos que ya están en las tarjetas KPI; interpreta qué significan para el cliente. Si perdió derechos, indica la ruta de recuperación usando la regla correcta del 25% del tiempo cotizado y los gaps de recuperación. Si le aplica Ley 97, enfoca el resumen en semanas vs requisito del año y saldo AFORE.
+Resumen cualitativo del perfil IMSS. Describe la situación actual del cliente: estado de derechos, semanas acumuladas, salario registrado, oportunidad de mejora, patrimonio AFORE/Infonavit. No repitas datos numéricos que ya están en las tarjetas KPI; interpreta qué significan para el cliente. Si es Ley 73 y perdió derechos, indica la ruta de recuperación usando la regla correcta del 25% del tiempo cotizado y los gaps de recuperación. Si le aplica Ley 97, enfoca el resumen en semanas vs requisito del año y saldo AFORE, y NO hables de conservación de derechos: no aplica.
 
 ## 2. estrategia_oportunidades (200-300 palabras, 3-4 párrafos)
-Análisis estratégico integral. Párrafo 1: Estado de derechos y ruta (aplica la regla de conservación del 25% y la tabla de recuperación según gap). Párrafo 2: Proyección financiera base vs potencial — menciona los 3 factores de optimización (semanas, salario últimas 250 semanas, penalización por edad) con los datos del cliente. Párrafo 3: Patrimonio AFORE + Infonavit (aplica regla según ley: Ley 73 = estrategia por monto, Ley 97 = estrategia según si alcanza PMG). Párrafo 4: ISSSTE si aplica (usa issste_status, issste_regimen, issste_anios, issste_fecha_alta e issste_fecha_baja; portabilidad para CI, o tipo de pensión para DT), o nota breve si no aplica.
+Análisis estratégico integral. Escribe SÓLO los párrafos que le apliquen; si uno no aplica, se omite, no se rellena.
+Párrafo 1 (SÓLO Ley 73): Estado de derechos y ruta (regla de conservación del 25% y tabla de recuperación según gap). En Ley 97 este párrafo NO va: empieza por las semanas que le faltan para el requisito de su año.
+Párrafo 2 (SÓLO Ley 73): Proyección base vs potencial con los 3 factores de optimización (semanas, salario de las últimas 250 semanas, penalización por edad). En Ley 97 la pensión sale del saldo, no del salario promedio: habla de saldo y de aportaciones.
+Párrafo 3: Patrimonio AFORE + Infonavit (Ley 73 = estrategia por monto; Ley 97 = estrategia según si alcanza PMG).
+Párrafo 4: ISSSTE, SÓLO si tiene cotizaciones ahí. Si no, omite el párrafo — no escribas que no aplica.
 
 ## 3. historia_laboral (100-150 palabras, 1-2 párrafos)
 Análisis cualitativo de la trayectoria laboral. Observa patrones: estabilidad, sectores, períodos sin cotizar, implicaciones para las semanas acumuladas y el promedio salarial de las últimas 250 semanas. NO repitas la lista de empleadores (esa ya está en el documento).
 
 ## 4. oportunidades_gestorias (100-150 palabras, 1-2 párrafos)
-Análisis de gestorías disponibles según situación laboral: si es empleado, explica la oportunidad de Mod10 para subir salario. Si es desempleado con Mod40, explica que es la opción más económica. Si es desempleado sin Mod40, explica la ruta de 12 meses Mod10 antes de acceder a Mod40. Si Mod40 Retro aplica (>950 sem, >40 sem gap, >59.5 años), explica beneficio, costo y financiamiento. Si no aplica, explica por qué. Menciona semanas descontadas si las hay. Prioridad: reactivar derechos primero si es necesario.
+Gestorías que le aplican, y NADA MÁS.
+Primero lo que casi siempre es el punto: si NO hay semanas descontadas ni indicios de que le falten semanas, dilo así de corto —que su historial no muestra semanas perdidas ni periodos que haya que recuperar— y ahí termina la sección. No inventes trabajo que no hay.
+Si hay semanas descontadas o huecos que sí pesan, explica qué se puede recuperar y cómo.
+Modalidad 40 y Modalidad 10 SÓLO en clientes Ley 73. En Ley 97 no las menciones ni para decir que no aplican.
+En Ley 73 y sólo entonces: si es empleado, la oportunidad de Mod 10 para subir salario; si es desempleado con Mod 40 vigente, que es la forma más económica de cotizar alto; si es desempleado sin Mod 40, la ruta de 12 meses de Mod 10 antes de acceder; y si Mod 40 Retroactiva aplica (>950 sem, >40 sem de gap, >59.5 años), su beneficio, costo y financiamiento. Si no le aplica ninguna, no las expliques para descartarlas.
 
 ## 5. oportunidades_issste (80-120 palabras, 1-2 párrafos)
-Estrategia ISSSTE. Usa los campos issste_status, issste_regimen, issste_anios, issste_fecha_alta e issste_fecha_baja para el análisis. Si tiene régimen Cuentas Individuales (incluyendo "SIN REGIMEN" que se trata igual): analiza portabilidad de semanas no coincidentes con IMSS vs cumplir requisitos en ambos institutos (25 años, 60 años, PMG ~$6,900); menciona el periodo cotizado (fecha alta a fecha baja) y los años acumulados. Si tiene Décimo Transitorio: identifica cuál de los 3 tipos de pensión aplica (Cesantía 65+/10 años, Retiro 60+/15 años con tabla 50-100%, o Jubilación 30/28 años con edad según periodo) y recomienda estrategia independiente. Si no hay cotizaciones ISSSTE (issste_status es "—" o vacío), indica brevemente que no aplica.
+Estrategia ISSSTE. Usa los campos issste_status, issste_regimen, issste_anios, issste_fecha_alta e issste_fecha_baja para el análisis. Si tiene régimen Cuentas Individuales (incluyendo "SIN REGIMEN" que se trata igual): analiza portabilidad de semanas no coincidentes con IMSS vs cumplir requisitos en ambos institutos (25 años, 60 años, PMG ~$6,900); menciona el periodo cotizado (fecha alta a fecha baja) y los años acumulados. Si tiene Décimo Transitorio: identifica cuál de los 3 tipos de pensión aplica (Cesantía 65+/10 años, Retiro 60+/15 años con tabla 50-100%, o Jubilación 30/28 años con edad según periodo) y recomienda estrategia independiente. Si no hay cotizaciones ISSSTE, deja esta sección con una sola línea diciendo que no identificamos cotizaciones en el ISSSTE. No expliques los regímenes ni los tipos de pensión para después descartarlos.
 
 ## 6. oportunidades_infonavit (100-150 palabras, 1-2 párrafos)
 Alternativas Infonavit según la ley aplicable. Para Ley 73: aplica regla de monto (>$200k = Rescate Infonavit y estrategias de inversión para incrementar cotización; <$200k = se devuelve en efectivo al pensionarse). Para Ley 97: parte del destino que YA se eligió en el escenario (a la pensión, rescatado, o para su casa) y explica qué gana o pierde con esa decisión, con los números de los datos. Si la vivienda quedó absorbida por la mínima garantizada, dilo con claridad: ahí no suma nada y rescatarla es lo que la pone por encima del piso.
 
 SI LOS DATOS TRAEN "plan_vivienda", ésa es la sección: se le presentó un plan concreto y hay que narrarlo con sus números, no hablar en general. Di el desarrollo y la zona, el plazo presentado, el crédito, el pago mensual, y sobre todo el EFECTIVO AL CORTE y la ventaja contra no hacerlo. Y encadénalo: comprar el inmueble NO compite con su pensión, es el primer tiempo de la misma estrategia — se usa la subcuenta de vivienda para comprar, y al corte ese efectivo puede pasar al ahorro que sí levanta la pensión. Menciona al cotitular si lo hay. Si hay más de un plan, compáralos.
+
+Cuando el plan es CON COTITULAR, sus montos no van a cuadrar con los saldos y estimaciones del escenario de pensión: el crédito y los recursos son de dos personas. Eso es normal y esperado — NO lo señales como inconsistencia ni intentes reconciliar las cifras.
 
 Tres cosas prohibidas aquí: (1) NO propongas ni menciones un plazo distinto al presentado, aunque intuyas que otro conviene más — el plazo se acordó en la sesión y tú no estuviste; (2) NO hables de costos, comisiones, sobreprecio ni márgenes: nada de eso está en tus datos y no debe aparecer; (3) si NO viene "plan_vivienda", no inventes un inmueble ni des a entender que ya hay uno elegido — ahí sí habla en general y menciona que en Trol hay alternativas para hacerlo de manera eficiente.
 
@@ -253,7 +270,11 @@ Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código, sin backtic
  * Lo que se le pide en cada corrida. Los datos van aparte, en el mensaje de
  * usuario, para que el prompt de sistema se pueda cachear entre clientes.
  */
-export const USER_PROMPT = `Genera todas las secciones narrativas del Diagnóstico Avanzado para este cliente, a partir de los datos que siguen. Identifica primero qué leyes le aplican (Ley 73, Ley 97, ISSSTE CI, ISSSTE DT). Aplica estrictamente: la regla de conservación de derechos (25% del tiempo cotizado), la tabla de recuperación según gap, los 3 factores de optimización Ley 73, las estrategias por situación laboral, los criterios de Mod 40 retroactiva, el modelo de fuentes de Ley 97 con el destino que YA se eligió para la subcuenta de vivienda, y la regla de ahorro según edad.
+export const USER_PROMPT = `Genera todas las secciones narrativas del Diagnóstico Avanzado para este cliente, a partir de los datos que siguen. Identifica primero qué leyes le aplican (Ley 73, Ley 97, ISSSTE CI, ISSSTE DT). Aplica estrictamente lo que corresponda A SU LEY, y nada más:
+- Si es Ley 73: la conservación de derechos (25% del tiempo cotizado), la tabla de recuperación según gap, los 3 factores de optimización y los criterios de Modalidad 40 retroactiva.
+- Si es Ley 97: el modelo de fuentes con el destino que YA se eligió para la subcuenta de vivienda. NO menciones conservación de derechos ni Modalidad 40; en Ley 97 no aplican.
+- Siempre: las estrategias por situación laboral y la regla de ahorro según edad.
+No expliques una regla para luego decir que no le toca. Si algo no aplica, simplemente no aparece.
 
 Los datos vienen de un escenario que el asesor cerró con el cliente: son la estrategia acordada, no una proyección genérica. Descríbela como tal.
 
