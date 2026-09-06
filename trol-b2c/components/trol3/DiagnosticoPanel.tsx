@@ -27,6 +27,7 @@ import {
   cambiarEstadoDiagnostico,
   generarBorradorDiagnostico,
   guardarDiagnostico,
+  ligarAsesorias,
   refrescarHechosDiagnostico,
   regenerarNarrativa,
 } from '@/app/trabajo/actions';
@@ -54,10 +55,23 @@ export type EscenarioCerradoOpcion = {
   resumen: Record<string, any> | null;
 };
 
+/** Un plan de vivienda guardado, como se ofrece para elegir. */
+export type AsesoriaOpcion = {
+  id: string;
+  nombre: string | null;
+  desarrollo: string | null;
+  horizonte: number | null;
+  efectivo: number | null;
+  ventaja_corte: number | null;
+  cotitular_nombre: string | null;
+  created_at: string;
+};
+
 export type DiagnosticoRow = {
   id: string;
   estado: 'borrador' | 'revisado' | 'entregado';
   escenario_ids: string[];
+  asesoria_ids: string[] | null;
   redactor: string | null;
   motor_version: string | null;
   prompt_version: string | null;
@@ -262,6 +276,7 @@ export function DiagnosticoPanel({
   personaId,
   diagnostico,
   escenarios,
+  asesorias,
   tareas,
   miembros,
   yoId,
@@ -272,6 +287,7 @@ export function DiagnosticoPanel({
   personaId: string;
   diagnostico: DiagnosticoRow | null;
   escenarios: EscenarioCerradoOpcion[];
+  asesorias: AsesoriaOpcion[];
   tareas: Tarea[];
   miembros: MiembroOpcion[];
   yoId: string;
@@ -284,6 +300,16 @@ export function DiagnosticoPanel({
   // Por default se marcan todos: el asesor cerró uno por calculadora y el
   // documento los junta, que es justo lo que pidió el rediseño.
   const [elegidos, setElegidos] = useState<string[]>(escenarios.map((e) => e.id));
+  // El plan de vivienda NO viene todo marcado como los escenarios: hay quien
+  // guarda tres tanteando, y ninguna debe colarse sola al documento. Se marca
+  // la más reciente, que es la que casi siempre se acaba de presentar.
+  const [planes, setPlanes] = useState<string[]>(
+    diagnostico?.asesoria_ids?.length
+      ? diagnostico.asesoria_ids
+      : asesorias.length
+        ? [asesorias[0].id]
+        : [],
+  );
 
   const correr = (fn: () => Promise<R>, exito: string) =>
     start(async () => {
@@ -358,11 +384,50 @@ export function DiagnosticoPanel({
                 ))}
               </ul>
 
+              {asesorias.length ? (
+                <div className="mt-5">
+                  <h3 className="text-sm font-bold">Plan de vivienda</h3>
+                  <p className="mb-2 text-xs text-muted">
+                    Comprar el inmueble no compite con la pensión: es el primer tiempo de la misma
+                    estrategia, y al corte el efectivo puede pasar al ahorro. Marca el que le
+                    presentaste — si no marcas ninguno, el documento habla de Infonavit en general.
+                  </p>
+                  <ul className="space-y-2">
+                    {asesorias.map((a) => (
+                      <li key={a.id} className="flex items-start gap-2 rounded-xl border border-line p-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={planes.includes(a.id)}
+                          onChange={() =>
+                            setPlanes((v) => (v.includes(a.id) ? v.filter((x) => x !== a.id) : [...v, a.id]))
+                          }
+                        />
+                        <div className="text-sm">
+                          <div className="font-semibold">
+                            {a.desarrollo ?? a.nombre ?? 'Plan sin nombre'}
+                            {a.horizonte ? <span className="font-normal text-muted"> · {a.horizonte} meses</span> : null}
+                          </div>
+                          <div className="text-xs text-muted">
+                            {fechaHora(a.created_at)}
+                            {a.efectivo != null ? ` · ${mxn.format(Number(a.efectivo))} al corte` : ''}
+                            {a.ventaja_corte != null
+                              ? ` · ventaja ${mxn.format(Number(a.ventaja_corte))}`
+                              : ''}
+                            {a.cotitular_nombre ? ` · con ${a.cotitular_nombre}` : ''}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <button
                 disabled={pending || elegidos.length === 0}
                 onClick={() =>
                   correr(
-                    () => generarBorradorDiagnostico(personaId, elegidos) as Promise<R>,
+                    () => generarBorradorDiagnostico(personaId, elegidos, planes) as Promise<R>,
                     'Borrador listo',
                   )
                 }
@@ -452,6 +517,55 @@ export function DiagnosticoPanel({
           </button>
         </div>
         <Hechos h={diagnostico.contenido?.hechos} />
+
+        {asesorias.length ? (
+          <div className="mt-4 border-t border-line pt-3">
+            <h3 className="mb-1 text-sm font-bold">Plan de vivienda</h3>
+            <ul className="space-y-1 text-sm">
+              {asesorias.map((a) => (
+                <li key={a.id} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    disabled={bloqueado}
+                    checked={planes.includes(a.id)}
+                    onChange={() =>
+                      setPlanes((v) => (v.includes(a.id) ? v.filter((x) => x !== a.id) : [...v, a.id]))
+                    }
+                  />
+                  <span>
+                    {a.desarrollo ?? a.nombre ?? 'Plan sin nombre'}
+                    <span className="text-xs text-muted">
+                      {a.horizonte ? ` · ${a.horizonte} meses` : ''}
+                      {a.efectivo != null ? ` · ${mxn.format(Number(a.efectivo))} al corte` : ''}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {/* Cambiar la liga no reescribe el texto: primero se ve qué entró. */}
+            <button
+              disabled={pending || bloqueado}
+              onClick={() =>
+                start(async () => {
+                  const l = (await ligarAsesorias(diagnostico.id, personaId, planes)) as R;
+                  if (!l.ok) {
+                    toast.error(l.error ?? 'No se pudo');
+                    return;
+                  }
+                  const r = (await refrescarHechosDiagnostico(
+                    diagnostico.id, personaId, diagnostico.escenario_ids,
+                  )) as R;
+                  if (r.ok) toast.success('Hechos al día con estos planes');
+                  else toast.error(r.error ?? 'No se pudo');
+                })
+              }
+              className="mt-2 text-xs underline text-muted disabled:opacity-50"
+            >
+              Guardar y refrescar los hechos
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-line bg-white p-5">

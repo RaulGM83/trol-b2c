@@ -149,6 +149,30 @@ export function resumenHistorial(historial: Periodo[]) {
   };
 }
 
+/**
+ * Un plan de vivienda tal como lo necesita el documento (119).
+ *
+ * La lista es BLANCA a propósito, no un recorte de lo que sobraba: el resultado
+ * de la asesoría trae `sobreprecio` y el proyecto trae `costo_aliado` y
+ * `comision_desarrollador`. Volcar el bloque completo al prompt termina con el
+ * margen impreso en el documento del cliente. Lo que no está aquí, no viaja.
+ */
+export type AsesoriaVivienda = {
+  id: string;
+  desarrollo?: string | null;
+  zona?: string | null;
+  m2?: number | null;
+  avaluo?: number | string | null;
+  horizonte?: number | null;
+  credito?: number | string | null;
+  pmt?: number | string | null;
+  efectivo?: number | string | null;
+  ventaja_corte?: number | string | null;
+  renta_estimada?: number | string | null;
+  cotitular_nombre?: string | null;
+  lectura_salida?: string | null;
+};
+
 export type EscenarioCerrado = {
   id: string;
   tipo: string;
@@ -176,6 +200,7 @@ export function construirHechos({
   historial,
   escenarios,
   issste,
+  vivienda,
 }: {
   expediente: Record<string, any>;
   /** `v_mejor_dato` de esta persona. Varios campos que el documento cita viven
@@ -186,6 +211,8 @@ export function construirHechos({
   historial: Periodo[];
   escenarios: EscenarioCerrado[];
   issste?: Record<string, any> | null;
+  /** Los planes de vivienda que el asesor eligió incluir. Ya en lista blanca. */
+  vivienda?: AsesoriaVivienda[] | null;
 }) {
   const e = expediente;
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
@@ -256,6 +283,34 @@ export function construirHechos({
     },
 
     issste: issste ?? null,
+
+    // El plan de vivienda, cuando el asesor eligió incluirlo (119).
+    //
+    // Comprar la casa NO compite con la pensión: es el primer tiempo de la
+    // misma estrategia. Al corte sale el efectivo, y ese efectivo es el que
+    // puede irse al ahorro que sí levanta la pensión. Por eso los plazos del
+    // plan no tienen que cuadrar con la edad de retiro del escenario — son dos
+    // tramos, no dos versiones de lo mismo, y el redactor tiene que contarlo
+    // encadenado y no como dos oportunidades sueltas.
+    plan_vivienda: (vivienda ?? []).length
+      ? {
+          nota: 'Primer tiempo de la estrategia: se compra el inmueble usando la subcuenta de vivienda, y al corte el efectivo que sale puede pasar al ahorro que levanta la pensión. Narra SÓLO el plazo presentado; no sugieras otro.',
+          planes: (vivienda ?? []).map((v) => ({
+            desarrollo: v.desarrollo ?? null,
+            zona: v.zona ?? null,
+            m2: num(v.m2),
+            avaluo: num(v.avaluo),
+            plazo_meses: num(v.horizonte),
+            credito: num(v.credito),
+            pago_mensual: num(v.pmt),
+            efectivo_al_corte: num(v.efectivo),
+            ventaja_contra_no_hacerlo: num(v.ventaja_corte),
+            renta_estimada_mensual: num(v.renta_estimada),
+            cotitular: v.cotitular_nombre ?? null,
+            lectura: v.lectura_salida ?? null,
+          })),
+        }
+      : null,
 
     historia_laboral: resumenHistorial(historial),
 

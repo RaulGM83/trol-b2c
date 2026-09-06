@@ -18,7 +18,7 @@ import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/ca
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
-import { DiagnosticoPanel, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
+import { DiagnosticoPanel, type AsesoriaOpcion, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
 import type { Feedback, InstruccionesVigentes } from '@/components/trol3/AfinarRedactor';
 
 export const dynamic = 'force-dynamic';
@@ -241,7 +241,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // porque la pestaña lo edita; la vista sólo sirve para listar.
   const [{ data: diagRow }, { data: escsCerrados }] = await Promise.all([
     db.from('diagnosticos')
-      .select('id,estado,escenario_ids,redactor,motor_version,prompt_version,instrucciones_version,ensayo,creado_en,actualizado_en,entregado_en,contenido,creado_por')
+      .select('id,estado,escenario_ids,asesoria_ids,redactor,motor_version,prompt_version,instrucciones_version,ensayo,creado_en,actualizado_en,entregado_en,contenido,creado_por')
       .eq('persona_id', params.id)
       .order('creado_en', { ascending: false })
       .limit(1)
@@ -472,6 +472,13 @@ export default async function Expediente({ params, searchParams }: { params: { i
           personaId={e.persona_id}
           diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por) } as DiagnosticoRow) : null}
           escenarios={(escsCerrados ?? []) as EscenarioCerradoOpcion[]}
+          asesorias={historialInf.map((a) => ({
+            id: a.id, nombre: a.nombre ?? null, desarrollo: a.desarrollo ?? null,
+            horizonte: a.horizonte ?? null,
+            efectivo: a.efectivo == null ? null : Number(a.efectivo),
+            ventaja_corte: a.ventaja_corte == null ? null : Number(a.ventaja_corte),
+            cotitular_nombre: a.cotitular_nombre ?? null, created_at: a.created_at,
+          })) as AsesoriaOpcion[]}
           tareas={((tareasCliente ?? []) as Any[]).filter((t) => t.origen === 'diagnostico' && (!diagRow || t.origen_id === (diagRow as Any).id)) as Tarea[]}
           miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre, email: x.email }))}
           yoId={m.id}

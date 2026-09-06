@@ -47,8 +47,11 @@ export const MODELO_REDACTOR = 'gpt-5.5'
  * 2026.09.06.1 — portado de n8n con las cuatro correcciones (Rescate
  *                Infonavit, PMG desde los datos, Ley 97 con el modelo de
  *                fuentes, prohibido inventar cifras).
+ * 2026.09.06.2 — la sección de Infonavit narra el plan de vivienda concreto
+ *                cuando lo hay, encadenado con la pensión, y tiene prohibido
+ *                proponer otro plazo o hablar de costos.
  */
-export const PROMPT_VERSION = '2026.09.06.1'
+export const PROMPT_VERSION = '2026.09.06.2'
 
 /**
  * Cómo se le pegan los ajustes al prompt base.

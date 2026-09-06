@@ -645,7 +645,11 @@ const CAMPOS_ISSSTE = [
  * Junta lo que el redactor necesita ver. Se aísla porque lo usan dos caminos:
  * abrir el diagnóstico y regenerar la narrativa de uno ya abierto.
  */
-async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
+async function hechosDeDiagnostico(
+  personaId: string,
+  escenarioIds: string[],
+  asesoriaIds: string[] = [],
+) {
   const { construirHechos } = await import('@/lib/diagnostico/hechos');
   const db = t3();
   const [{ data: e }, { data: datos }, { data: escs }] = await Promise.all([
@@ -679,12 +683,61 @@ async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
   const porId = new Map(((escs ?? []) as Any[]).map((s) => [s.id, s]));
   const escenarios = escenarioIds.map((id) => porId.get(id)).filter(Boolean) as Any[];
 
+  // El plan de vivienda, en LISTA BLANCA. El resultado de la asesoría trae
+  // `sobreprecio` y el proyecto trae `costo_aliado` y `comision_desarrollador`:
+  // volcarlo entero al prompt acaba con el margen impreso en el documento del
+  // cliente. Sólo pasa lo que se nombra aquí.
+  let vivienda: Any[] = [];
+  if (asesoriaIds.length) {
+    const { data: ases } = await db
+      .from('infonavit_asesorias')
+      .select('id,proyecto_id,persona_id,cotitular_persona_id,horizonte,credito,pmt,efectivo,ventaja_corte,resultado')
+      .in('id', asesoriaIds);
+    const filas = (ases ?? []) as Any[];
+    const proyIds = [...new Set(filas.map((a) => a.proyecto_id).filter(Boolean))];
+    const otrasPersonas = [...new Set(
+      filas.map((a) => (a.persona_id === personaId ? a.cotitular_persona_id : a.persona_id)).filter(Boolean),
+    )];
+    const [{ data: proys }, { data: pers }] = await Promise.all([
+      proyIds.length
+        ? db.from('proyectos_inmobiliarios').select('id,desarrollo,zona,m2,avaluo,renta_estimada').in('id', proyIds)
+        : Promise.resolve({ data: [] as Any[] }),
+      otrasPersonas.length
+        ? db.from('personas').select('id,nombre,apellidos').in('id', otrasPersonas)
+        : Promise.resolve({ data: [] as Any[] }),
+    ]);
+    const proy = new Map(((proys ?? []) as Any[]).map((x) => [x.id, x]));
+    const nom = new Map(((pers ?? []) as Any[]).map((x) => [x.id, [x.nombre, x.apellidos].filter(Boolean).join(' ').trim()]));
+    // Se respeta el orden en que el asesor las eligió.
+    const porId = new Map(filas.map((a) => [a.id, a]));
+    vivienda = asesoriaIds.map((id) => porId.get(id)).filter(Boolean).map((a: Any) => {
+      const pr = proy.get(a.proyecto_id) ?? {};
+      const otro = a.persona_id === personaId ? a.cotitular_persona_id : a.persona_id;
+      return {
+        id: a.id,
+        desarrollo: pr.desarrollo ?? null,
+        zona: pr.zona ?? null,
+        m2: pr.m2 ?? null,
+        avaluo: pr.avaluo ?? null,
+        renta_estimada: pr.renta_estimada ?? null,
+        horizonte: a.horizonte ?? null,
+        credito: a.credito ?? null,
+        pmt: a.pmt ?? null,
+        efectivo: a.efectivo ?? null,
+        ventaja_corte: a.ventaja_corte ?? null,
+        cotitular_nombre: otro ? (nom.get(otro) ?? null) : null,
+        lectura_salida: (a.resultado as Any)?.veredicto?.lectura_salida ?? null,
+      };
+    });
+  }
+
   return construirHechos({
     expediente: e as Record<string, Any>,
     datos: (datos ?? []) as Any[],
     historial,
     escenarios,
     issste: Object.keys(issste).length ? issste : null,
+    vivienda,
   });
 }
 
@@ -708,13 +761,17 @@ async function instruccionesVigentes(): Promise<{ version: number; texto: string
  * devuelve el aviso: el asesor puede escribirlo a mano o reintentar. Lo que no
  * puede pasar es que un fallo se vea como un documento en blanco.
  */
-export async function generarBorradorDiagnostico(personaId: string, escenarioIds: string[]) {
+export async function generarBorradorDiagnostico(
+  personaId: string,
+  escenarioIds: string[],
+  asesoriaIds: string[] = [],
+) {
   await requireMiembro();
   if (!escenarioIds?.length) return fail(new Error('Elige al menos un escenario cerrado.'));
   try {
     const { MOTOR_VERSION } = await import('@trol/pension-core/version');
     const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
-    const hechos = await hechosDeDiagnostico(personaId, escenarioIds);
+    const hechos = await hechosDeDiagnostico(personaId, escenarioIds, asesoriaIds);
 
     const { data: id, error } = await t3().rpc('abrir_diagnostico', {
       p_persona: personaId,
@@ -723,6 +780,12 @@ export async function generarBorradorDiagnostico(personaId: string, escenarioIds
       p_motor_version: MOTOR_VERSION,
     });
     if (error) return fail(error);
+    if (asesoriaIds.length) {
+      const { error: eL } = await t3().rpc('ligar_asesorias', {
+        p_diagnostico: id, p_asesorias: asesoriaIds,
+      });
+      if (eL) return fail(eL);
+    }
 
     const vigentes = await instruccionesVigentes();
     const r = await redactarDiagnostico(hechos, { ajustes: { vigentes: vigentes?.texto } });
@@ -780,7 +843,13 @@ export async function regenerarNarrativa(diagnosticoId: string, personaId: strin
 export async function refrescarHechosDiagnostico(diagnosticoId: string, personaId: string, escenarioIds: string[]) {
   await requireMiembro();
   try {
-    const hechos = await hechosDeDiagnostico(personaId, escenarioIds);
+    // Las asesorías ligadas se leen del documento: son parte de lo que el
+    // asesor ya decidió incluir, no algo que la pantalla tenga que reenviar.
+    const { data: d } = await t3()
+      .from('diagnosticos').select('asesoria_ids').eq('id', diagnosticoId).maybeSingle();
+    const hechos = await hechosDeDiagnostico(
+      personaId, escenarioIds, ((d as Any)?.asesoria_ids ?? []) as string[],
+    );
     const { error } = await t3().rpc('guardar_diagnostico', {
       p_diagnostico: diagnosticoId, p_narrativa: null, p_acuerdos: null,
       p_hechos: hechos, p_redactor: null,
@@ -1002,4 +1071,21 @@ export async function correrCasoPrueba(corridaId: string, casoId: string) {
     // El caso corrió aunque el modelo fallara: eso ya quedó escrito como fallo.
     return ok({ escribio: r.ok, error: r.ok ? null : r.error });
   } catch (e) { return fail(e); }
+}
+
+/**
+ * Cambia qué planes de vivienda entran al diagnóstico (119).
+ *
+ * Sólo mueve la liga. Los hechos se rehacen aparte, a propósito: así se ve qué
+ * se agregó antes de que el texto cambie debajo.
+ */
+export async function ligarAsesorias(diagnosticoId: string, personaId: string, asesoriaIds: string[]) {
+  await requireMiembro();
+  const { error } = await t3().rpc('ligar_asesorias', {
+    p_diagnostico: diagnosticoId,
+    p_asesorias: asesoriaIds,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
 }
