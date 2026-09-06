@@ -10,10 +10,23 @@
 //  · Se habla sólo de lo que aplica: si no hay crédito, no se explica el crédito.
 //  · La plusvalía NUNCA lleva cifra en la narrativa: la tasa va como nota al pie y los montos
 //    solo en el detalle. No se promete renta inmediata: "se pone en renta".
-import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { derivar } from '@/lib/infonavit/derivar';
 import type { Any } from '@/lib/trol3/server';
 import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
+
+// Dos cosas distintas, las dos meten guiones donde no van:
+//
+// 1. La partición de palabras al final del renglón ("crédi-to"). Se apaga aquí.
+// 2. La COSTURA entre dos pedazos contiguos de texto dentro de un mismo <Text>.
+//    react-pdf tokeniza por pedazo, así que si la costura no tiene espacio
+//    —"$343,374" pegado a ")" o a ","— la trata como un punto de partición
+//    válido y puede imprimir el guion ahí. Sobre una cifra eso se lee como un
+//    signo de menos, en el documento de un cliente. El callback NO lo evita:
+//    el corte no lo decide el hyphenador, lo decide el límite entre pedazos.
+//    Por eso, donde una cifra queda pegada a un paréntesis o a una coma, la
+//    frase se arma completa en JS y se pasa como UN solo hijo.
+Font.registerHyphenationCallback((palabra) => [palabra]);
 
 const DARK = '#26282B', LIME = '#D1F069', GRAY = '#8A8D91', CREAM = '#F4F4F2', RED = '#B0532F', NEG = '#D9A08C';
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -156,8 +169,8 @@ function PaginaNarrativa({ a, d, extendido }: { a: Any; d: ReturnType<typeof der
         <View style={{ height: 11 }} />
         <Sec t="La propuesta" />
         <Text style={s.actoTxt}>
-          Comprar un inmueble de <Text style={{ fontWeight: 700 }}>{mxMiles(d.op.esc)}</Text> en {d.desarrollo}{d.zona ? ` (${d.zona})` : ''},
-          usando tu ahorro como enganche. Se pone en renta; tú no lo habitas: es una inversión, y tú decides cuándo venderla y cobrar.
+          Comprar un inmueble de <Text style={{ fontWeight: 700 }}>{mxMiles(d.op.esc)}</Text>
+          {` en ${d.desarrollo}${d.zona ? ` (${d.zona})` : ''}, usando tu ahorro como enganche.`} Se pone en renta; tú no lo habitas: es una inversión, y tú decides cuándo venderla y cobrar.
         </Text>
 
         <View style={{ height: 11 }} />
@@ -291,7 +304,9 @@ function SecOperacion({ d }: { d: ReturnType<typeof derivar> }) {
             </Text>
           ) : null}
           {Number(op.remanente ?? 0) > 0 ? (
-            <Text style={[s.sup, { marginTop: 4 }]}>En tu subcuenta quedan {mx(op.remanente)}, que siguen siendo tuyos.</Text>
+            <Text style={[s.sup, { marginTop: 4 }]}>
+              {`En tu subcuenta quedan ${mx(op.remanente)}, que siguen siendo tuyos.`}
+            </Text>
           ) : null}
           <Text style={[s.sup, { marginTop: 4 }]}>
             Gastos de una sola vez: {hayCredito ? `los ${mx(op.not_credito)} del crédito van dentro del crédito, no salen de tu bolsa. ` : ''}
@@ -358,8 +373,13 @@ function SecVentaDia({ d }: { d: ReturnType<typeof derivar> }) {
         <Text style={s.cajaNota}>en tu mano, ya liquidado el crédito y pagada la comisión</Text>
       </View>
       <Text style={[s.sup, { marginTop: 5 }]}>
-        Aparte, en el camino ya recibiste mes a mes: {d.rentaAcumFlujo >= 0 ? `~${mx(d.rentaAcumFlujo)} de rentas netas` : `(aportaste ~${mx(-d.rentaAcumFlujo)} a la retención)`}
-        {d.isrAcum > 1 ? ` y ~${mx(d.isrAcum)} de devolución de ISR` : ''}. Se mencionan aparte a propósito: no inflan el número del día de la venta.
+        {`Aparte, en el camino ya recibiste mes a mes: ${
+          d.rentaAcumFlujo >= 0
+            ? `~${mx(d.rentaAcumFlujo)} de rentas netas`
+            : `(aportaste ~${mx(-d.rentaAcumFlujo)} a la retención)`
+        }${
+          d.isrAcum > 1 ? ` y ~${mx(d.isrAcum)} de devolución de ISR` : ''
+        }. Se mencionan aparte a propósito: no inflan el número del día de la venta.`}
       </Text>
     </View>
   );
@@ -410,12 +430,12 @@ function SecDespues({ d }: { d: ReturnType<typeof derivar> }) {
     <View>
       <Sec t="Y después de vender: su dinero por fin trabaja para usted" />
       <Text style={{ fontSize: 8.8, marginBottom: 3 }}>
-        Hoy su saldo crece a alrededor de {pc(sup.r_ssv ?? 0.04, 0)} anual. Vendiendo, el efectivo puede
-        invertirse a su alternativa realista ({pc(pal.alterno, 0)} anual) o bajar deudas caras.
+        {`Hoy su saldo crece a alrededor de ${pc(sup.r_ssv ?? 0.04, 0)} anual. Vendiendo, el efectivo puede invertirse a su alternativa realista (${pc(pal.alterno, 0)} anual) o bajar deudas caras.`}
       </Text>
       <Text style={{ fontSize: 8.8 }}>
-        Medido a {anios(d.corte)} años: vender a {d.h} meses y reinvertir llega a {mx(d.ventajaCorte + Number(r.contrafactual_corte ?? 0))},
-        contra {mx(r.contrafactual_corte)} si no hace nada.
+        {`Medido a ${anios(d.corte)} años: vender a ${d.h} meses y reinvertir llega a ${mx(
+          d.ventajaCorte + Number(r.contrafactual_corte ?? 0),
+        )}, contra ${mx(r.contrafactual_corte)} si no hace nada.`}
       </Text>
       <View style={s.cajaOscura}>
         <Text style={s.cajaLime}>VENTAJA TOTAL A {anios(d.corte)} AÑOS:  {mx(d.ventajaCorte, true)}</Text>
@@ -431,8 +451,11 @@ function SecSupuestos({ a, d, comoCobramos }: { a: Any; d: ReturnType<typeof der
     <View>
       <Sec t="Supuestos base de esta propuesta" />
       <Text style={s.sup}>
-        Plusvalía de {pc(pal.plusvalia, 0)} anual y renta de {mx(inm.renta)} mensuales ({mx(d.rentaNeta)} netos)
-        {d.rentaEstimada ? ', estimados por nosotros y no observados en el mercado' : ''}.
+        {`Plusvalía de ${pc(pal.plusvalia, 0)} anual y renta de ${mx(inm.renta)} mensuales (${mx(
+          d.rentaNeta,
+        )} netos)${
+          d.rentaEstimada ? ', estimados por nosotros y no observados en el mercado' : ''
+        }.`}
       </Text>
       <Text style={s.sup}>
         Rendimiento de la Subcuenta de Vivienda: alrededor de {pc(sup.r_ssv ?? 0.04, 0)} anual proyectado. Venta libre
