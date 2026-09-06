@@ -63,6 +63,39 @@ const ANIO = new Date().getFullYear()
  * ilegible y nadie compara nada. Dos decimales y no uno porque con uno la
  * diferencia entre dos escenarios cercanos desaparecía en el redondeo.
  */
+/**
+ * Las pensiones se muestran a la centena. Un peso de más o de menos en una
+ * proyección a diez años es precisión inventada, y leerla completa invita a
+ * discutir el dígito en vez del escenario.
+ */
+const aCentenas = (n: number | null | undefined) =>
+  n === null || n === undefined || Number.isNaN(n) ? null : Math.round(n / 100) * 100
+
+/**
+ * Redondea a centenas de forma que las partes **sumen exactamente** su total
+ * redondeado (método del residuo mayor: las centenas que faltan se las llevan
+ * los renglones que más cerca estaban de subir).
+ *
+ * Redondear cada renglón por su cuenta haría que la columna no cuadre —
+ * $40 + $40 se vería como $0 + $0 con un total de $100— y un desglose que no
+ * suma es justo lo que esta tabla vino a arreglar.
+ */
+function centenasQueSuman(partes: number[]): { partes: number[]; total: number } {
+  const total = Math.round(partes.reduce((a, b) => a + b, 0) / 100) * 100
+  const piso = partes.map((x) => Math.floor(x / 100) * 100)
+  let faltan = (total - piso.reduce((a, b) => a + b, 0)) / 100
+  const out = [...piso]
+  const porResiduo = partes
+    .map((x, i) => ({ i, residuo: x - piso[i] }))
+    .sort((a, b) => b.residuo - a.residuo)
+  for (const { i } of porResiduo) {
+    if (faltan <= 0) break
+    out[i] += 100
+    faltan--
+  }
+  return { partes: out, total }
+}
+
 const mdp = (n: number | null | undefined) =>
   n === null || n === undefined || Number.isNaN(n) ? "—" : (n / 1_000_000).toFixed(2)
 
@@ -150,13 +183,26 @@ function filasFuentes(
 ): PdfFila[] {
   if (r.negativa || r.fuentes.length === 0) return []
   const filas: PdfFila[] = []
+  // Cada capa se redondea por dentro, así que sus renglones suman su subtotal;
+  // y como los dos subtotales ya son múltiplos de 100, el total también cuadra.
+  let totalGeneral = 0
   for (const capa of ["cuenta_individual", "encima"] as const) {
     const enCapa = r.fuentes.filter(
       (f) => f.capa === capa && (f.pensionMensual > 0.005 || !f.incluida),
     )
     if (enCapa.length === 0) continue
+    // Se redondea sobre TODAS las fuentes de la capa, no sólo las visibles: así
+    // el subtotal es el mismo que calcula la tabla por edad, que no filtra.
+    const redondeada = centenasQueSuman(
+      r.fuentes.filter((f) => f.capa === capa).map((f) => f.pensionMensual),
+    )
+    const visibles = r.fuentes
+      .filter((f) => f.capa === capa)
+      .map((f, i) => ({ f, monto: redondeada.partes[i] }))
+      .filter(({ f }) => f.pensionMensual > 0.005 || !f.incluida)
+    totalGeneral += redondeada.total
     filas.push({ label: CAPA_TITULO[capa], value: "", tono: "grupo" })
-    for (const f of enCapa) {
+    for (const { f, monto } of visibles) {
       const nombre = FUENTE_NOMBRE[f.id] ?? { titulo: f.id }
       const sub = !f.incluida
         ? "Fuera de este escenario"
@@ -171,7 +217,7 @@ function filasFuentes(
         label: nombre.titulo,
         sub,
         value: f.saldoAlRetiro === null ? "—" : fmtMoneda(f.saldoAlRetiro),
-        value2: fmtMoneda(f.pensionMensual),
+        value2: fmtMoneda(monto),
         tono: f.incluida ? undefined : "apagada",
       })
     }
@@ -179,7 +225,7 @@ function filasFuentes(
       filas.push({
         label: "Pensión de la cuenta individual",
         value: "",
-        value2: fmtMoneda(r.pensionAforeInfonavit),
+        value2: fmtMoneda(redondeada.total),
         tono: "suma",
       })
     }
@@ -187,7 +233,7 @@ function filasFuentes(
   filas.push({
     label: "Pensión mensual total",
     value: "",
-    value2: fmtMoneda(r.pensionTotal),
+    value2: fmtMoneda(totalGeneral),
     tono: "suma",
   })
   return filas
@@ -1128,18 +1174,28 @@ function Calc97Panel({
             .reduce((a, f) => a + (f.saldoAlRetiro ?? 0), 0)
         const saldoCta = saldoDe("cuenta_individual")
         const saldoEncima = saldoDe("encima")
-
+        // Las mismas tres piezas de la tabla de fuentes: lo que da la cuenta
+        // individual (topada por la mínima) y lo que va encima. Verlas juntas
+        // por edad es lo que enseña dónde deja de morder el piso.
+        //
+        // El redondeo se hace POR CAPA, igual que arriba, y el total es la suma
+        // de las dos. Redondear el total por su cuenta lo hacía discrepar en
+        // $100 del de la tabla de fuentes, en la misma pantalla y para el mismo
+        // escenario: dos tablas que se contradicen valen menos que ninguna.
+        const pensionDe = (capa: string) =>
+          aCentenas(
+            res.fuentes
+              .filter((f) => f.capa === capa)
+              .reduce((a, f) => a + f.pensionMensual, 0),
+          ) ?? 0
+        const hayPension = res.pensionTotal !== null
+        const cuentaIndividual = hayPension ? pensionDe("cuenta_individual") : null
+        const encima = hayPension ? pensionDe("encima") : null
         return {
           edad,
-          // Las mismas tres piezas de la tabla de fuentes: lo que da la cuenta
-          // individual (topada por la mínima) y lo que va encima. Verlas juntas
-          // por edad es lo que enseña dónde deja de morder el piso.
-          cuentaIndividual: res.pensionAforeInfonavit,
-          encima:
-            res.pensionTotal === null || res.pensionAforeInfonavit === null
-              ? null
-              : res.pensionTotal - res.pensionAforeInfonavit,
-          total: res.pensionTotal,
+          cuentaIndividual,
+          encima,
+          total: hayPension ? cuentaIndividual! + encima! : null,
           saldoCta,
           saldoEncima,
         }
@@ -1152,7 +1208,7 @@ function Calc97Panel({
     clienteNombre: pdfCtx.clienteNombre,
     hero: {
       etiqueta: "Pensión mensual total estimada",
-      valor: r.negativa ? "Negativa de pensión" : fmt(r.pensionTotal),
+      valor: r.negativa ? "Negativa de pensión" : fmt(aCentenas(r.pensionTotal)),
       sub: `Retiro estimado: ${fmtFecha(d.fechaRetiro)} · ${Math.round(d.semanasRetiro).toLocaleString("es-MX")} semanas al retiro`,
       negativa: r.negativa,
     },
@@ -1206,7 +1262,7 @@ function Calc97Panel({
         ],
         nota: [
           enPMG
-            ? `Su cuenta individual no alcanza la pensión mínima garantizada (${fmt(d.pmg)}), así que el gobierno completa la diferencia. Mientras eso pase, cada peso de la subcuenta de vivienda le quita un peso al complemento y la pensión no se mueve; el ahorro que va encima sí la sube.`
+            ? `Su cuenta individual no alcanza la pensión mínima garantizada (${fmt(aCentenas(d.pmg))}), así que el gobierno completa la diferencia. Mientras eso pase, cada peso de la subcuenta de vivienda le quita un peso al complemento y la pensión no se mueve; el ahorro que va encima sí la sube.`
             : null,
           notaRescate(d),
           NOTA_FACTOR,
@@ -1220,7 +1276,7 @@ function Calc97Panel({
         soloAsesor: true,
         stats: [
           { label: "URV (renta vitalicia)", value: d.urv.toFixed(2) },
-          { label: "PMG aplicable", value: fmt(d.pmg) },
+          { label: "PMG aplicable", value: fmt(aCentenas(d.pmg)) },
           { label: "Semanas mínimas PMG", value: `${d.semanasMinimasPMG}` },
           { label: "Aportaciones futuras al RCV", value: fmt(d.aportacionesFuturas) },
           {
@@ -1309,10 +1365,10 @@ function Calc97Panel({
       }
     >
       <HeroPension
-        pension={r.pensionTotal}
+        pension={aCentenas(r.pensionTotal)}
         negativa={r.negativa}
         etiquetaDelta="pensión de la cuenta individual"
-        referencia={r.pensionAforeInfonavit}
+        referencia={aCentenas(r.pensionAforeInfonavit)}
         delta={null}
         stats={[
           { label: "Retiro estimado", value: fmtFecha(d.fechaRetiro) },
@@ -1332,7 +1388,7 @@ function Calc97Panel({
       {enPMG && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">
-            Está en la pensión mínima garantizada ({fmt(d.pmg)} al mes).
+            Está en la pensión mínima garantizada ({fmt(aCentenas(d.pmg))} al mes).
           </p>
           <p className="mt-1">
             Su cuenta individual no alcanza ese piso y el gobierno completa la
@@ -1352,7 +1408,7 @@ function Calc97Panel({
           <Stat label="Saldo AFORE al retiro" value={fmt(d.saldoAforeProyectado)} />
           <Stat label="Aportaciones futuras" value={fmt(d.aportacionesFuturas)} />
           <Stat label="URV (renta vitalicia)" value={d.urv.toFixed(2)} />
-          <Stat label="PMG aplicable" value={fmt(d.pmg)} />
+          <Stat label="PMG aplicable" value={fmt(aCentenas(d.pmg))} />
         </CardContent>
       </Card>
 
@@ -2387,7 +2443,7 @@ function TablaFuentes({
         <p className="mt-2 text-xs text-muted-foreground">
           {enPMG && (
             <>
-              El piso de la mínima garantizada es {fmt(pmg)} al mes.{" "}
+              El piso de la mínima garantizada es {fmt(aCentenas(pmg))} al mes.{" "}
             </>
           )}
           {NOTA_FACTOR} {NOTA_PESOS}
