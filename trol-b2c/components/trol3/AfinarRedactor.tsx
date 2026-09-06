@@ -20,8 +20,11 @@
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import Link from 'next/link';
+
 import {
   actualizarFeedback,
+  congelarCasoPrueba,
   crearFeedback,
   guardarEnsayo,
   promoverInstrucciones,
@@ -76,6 +79,7 @@ export function AfinarRedactor({
   const [comentario, setComentario] = useState('');
   const [instruccion, setInstruccion] = useState('');
   const [ensayo, setEnsayo] = useState(ensayoGuardado ?? '');
+  const [etiquetaCaso, setEtiquetaCaso] = useState('');
 
   const correr = (fn: () => Promise<R>, exito: string) =>
     start(async () => {
@@ -343,6 +347,44 @@ export function AfinarRedactor({
             >
               Publicar el ensayo como vigente
             </button>
+            <p className="mt-2 text-xs text-muted">
+              Antes de publicar conviene correrlo contra los casos congelados en{' '}
+              <Link href="/trabajo/redactor" className="underline">
+                el taller del redactor
+              </Link>
+              : ahí se ve si la regla nueva mejoró este caso rompiendo otros tres.
+            </p>
+          </div>
+
+          {/* ---- Congelar este caso ---- */}
+          <div className="border-t border-line pt-4">
+            <h3 className="mb-1 text-sm font-bold">Congelar como caso de prueba</h3>
+            <p className="mb-2 text-xs text-muted">
+              Guarda los hechos de este documento —tal como están hoy— para volver a escribirlos con
+              cada ajuste futuro y comparar. <b>No se refrescan nunca</b>: eso es lo que hace que la
+              diferencia entre dos corridas hable del prompt y no de que cambió un dato.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={etiquetaCaso}
+                onChange={(e) => setEtiquetaCaso(e.target.value)}
+                placeholder="Cómo llamarlo (ej.: Ley 97 con rescate)"
+                className="min-w-[16rem] flex-1 rounded-lg border border-line px-2 py-1.5 text-sm"
+              />
+              <button
+                disabled={pending || etiquetaCaso.trim().length < 3}
+                onClick={() =>
+                  correr(async () => {
+                    const r = (await congelarCasoPrueba(diagnosticoId, etiquetaCaso)) as R;
+                    if (r.ok) setEtiquetaCaso('');
+                    return r;
+                  }, 'Congelado — ya entra en las corridas')
+                }
+                className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-cream disabled:opacity-50"
+              >
+                Congelar
+              </button>
+            </div>
           </div>
         </div>
       )}

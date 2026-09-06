@@ -24,6 +24,12 @@ import { toast } from 'sonner';
 
 import { actualizarFeedback, activarInstrucciones, promoverInstrucciones } from '@/app/trabajo/actions';
 import { TITULO_SECCION, type SeccionNarrativa } from '@/lib/diagnostico/secciones';
+import {
+  CasosPrueba,
+  type CasoPrueba,
+  type Corrida,
+  type Resultado,
+} from '@/components/trol3/CasosPrueba';
 
 export type Version = {
   version: number;
@@ -88,11 +94,17 @@ export function RedactorPanel({
   versiones,
   feedback,
   promptVersion,
+  casos,
+  corridas,
+  resultados,
 }: {
   versiones: Version[];
   feedback: FeedbackFila[];
   /** La del prompt base, que vive en el repo y sólo cambia con un deploy. */
   promptVersion: string;
+  casos: CasoPrueba[];
+  corridas: Corrida[];
+  resultados: Resultado[];
 }) {
   const vigente = versiones.find((v) => v.activa) ?? null;
 
@@ -204,6 +216,14 @@ export function RedactorPanel({
           )}
         </div>
       </section>
+
+      {/* ---- La puerta: probar antes de publicar ---- */}
+      <CasosPrueba
+        casos={casos}
+        corridas={corridas}
+        resultados={resultados}
+        textoEnEditor={texto}
+      />
 
       {/* ---- La historia ---- */}
       <section className="rounded-2xl border border-line bg-white p-5">

@@ -902,3 +902,104 @@ export async function activarInstrucciones(version: number) {
   revalidatePath('/trabajo');
   return ok();
 }
+
+// ---------------------------------------------------------------------------
+// Casos congelados (118)
+//
+// La puerta antes de publicar un ajuste. Un caso es un juego de hechos que NO
+// se refresca: es lo que hace que la diferencia entre dos corridas hable sólo
+// del prompt y no de que cambió un dato del expediente.
+//
+// Los casos se corren de uno en uno desde el navegador, no todos en una
+// llamada: cada uno es una llamada a OpenAI y un lote entero no cabe en el
+// tiempo de una server action. De paso, el que falla no tumba a los demás.
+// ---------------------------------------------------------------------------
+
+/**
+ * Congela como caso los hechos de un diagnóstico ya escrito.
+ *
+ * Se toman los hechos GUARDADOS en el documento, no se vuelven a construir: son
+ * exactamente los que produjeron el borrador que se acaba de revisar, y
+ * reconstruirlos los movería.
+ */
+export async function congelarCasoPrueba(diagnosticoId: string, etiqueta: string, nota?: string | null) {
+  await requireMiembro();
+  const { data: d, error } = await t3()
+    .from('diagnosticos').select('contenido,persona_id,escenario_ids')
+    .eq('id', diagnosticoId).maybeSingle();
+  if (error) return fail(error);
+  const hechos = (d?.contenido as Any)?.hechos;
+  if (!hechos) return fail(new Error('El diagnóstico no tiene hechos guardados.'));
+
+  const { data, error: e2 } = await t3().rpc('crear_caso_prueba', {
+    p_etiqueta: etiqueta,
+    p_hechos: hechos,
+    p_escenario: ((d as Any)?.escenario_ids ?? [])[0] ?? null,
+    p_persona: (d as Any)?.persona_id ?? null,
+    p_nota: nota ?? null,
+  });
+  if (e2) return fail(e2);
+  revalidatePath('/trabajo/redactor');
+  return ok({ id: data });
+}
+
+export async function archivarCasoPrueba(casoId: string, activo: boolean) {
+  await requireMiembro();
+  const { error } = await t3().rpc('archivar_caso_prueba', { p_caso: casoId, p_activo: activo });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/redactor');
+  return ok();
+}
+
+/** Abre la pasada y devuelve qué casos hay que correr. */
+export async function abrirCorrida(texto: string | null, etiqueta?: string | null) {
+  await requireMiembro();
+  const { PROMPT_VERSION } = await import('@/lib/diagnostico/secciones');
+  const vigentes = await instruccionesVigentes();
+  // Si el texto es idéntico al publicado, se anota la versión; si no, se corre
+  // sin versión — que es el caso normal: probar ANTES de publicar.
+  const mismaQueVigente = !!vigentes && (texto ?? '').trim() === vigentes.texto.trim();
+
+  const { data: id, error } = await t3().rpc('abrir_corrida', {
+    p_texto: texto,
+    p_prompt_version: PROMPT_VERSION,
+    p_instrucciones_version: mismaQueVigente ? vigentes.version : null,
+    p_etiqueta: etiqueta ?? null,
+  });
+  if (error) return fail(error);
+
+  const { data: casos } = await t3()
+    .from('prueba_casos').select('id,etiqueta').eq('activo', true).order('orden');
+  return ok({ id, casos: (casos ?? []) as Any[] });
+}
+
+/** Corre UN caso. El que falla se guarda como fallo y no tumba a los demás. */
+export async function correrCasoPrueba(corridaId: string, casoId: string) {
+  await requireMiembro();
+  try {
+    const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
+    const db = t3();
+    const [{ data: corr }, { data: caso }] = await Promise.all([
+      db.from('prueba_corridas').select('instrucciones_texto').eq('id', corridaId).maybeSingle(),
+      db.from('prueba_casos').select('hechos,etiqueta').eq('id', casoId).maybeSingle(),
+    ]);
+    if (!caso) return fail(new Error('No se encontró el caso.'));
+
+    const r = await redactarDiagnostico((caso as Any).hechos, {
+      ajustes: { vigentes: (corr as Any)?.instrucciones_texto ?? null },
+    });
+
+    const { error } = await db.rpc('guardar_resultado', {
+      p_corrida: corridaId,
+      p_caso: casoId,
+      p_narrativa: r.ok ? r.narrativa : null,
+      p_error: r.ok ? null : r.error,
+      p_modelo: r.ok ? r.modelo : null,
+    });
+    if (error) return fail(error);
+
+    revalidatePath('/trabajo/redactor');
+    // El caso corrió aunque el modelo fallara: eso ya quedó escrito como fallo.
+    return ok({ escribio: r.ok, error: r.ok ? null : r.error });
+  } catch (e) { return fail(e); }
+}

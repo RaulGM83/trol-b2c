@@ -1,8 +1,12 @@
 import { requireMiembro, t3, type Any } from '@/lib/trol3/server';
 import { PROMPT_VERSION } from '@/lib/diagnostico/secciones';
 import { RedactorPanel, type FeedbackFila, type Version } from '@/components/trol3/RedactorPanel';
+import type { CasoPrueba, Corrida, Resultado } from '@/components/trol3/CasosPrueba';
 
 export const dynamic = 'force-dynamic';
+// Correr los casos son llamadas a OpenAI, una por caso. Van de una en una desde
+// el navegador, pero cada una tiene que caber: el default de 10s no alcanza.
+export const maxDuration = 120;
 export const metadata = { title: 'Redactor · Trol' };
 
 // ---------------------------------------------------------------------------
@@ -47,6 +51,25 @@ export default async function RedactorPage() {
     db.from('miembros').select('id,nombre').eq('activo', true),
   ]);
 
+  // Los casos congelados y las últimas corridas, para el diff.
+  const [{ data: casos }, { data: corridas }] = await Promise.all([
+    db.from('prueba_casos').select('id,etiqueta,nota,persona_id,activo,creado_en').order('orden'),
+    db
+      .from('v_prueba_corridas')
+      .select('id,etiqueta,prompt_version,instrucciones_version,instrucciones_texto,creado_en,creado_por_nombre,casos,fallidos')
+      .order('creado_en', { ascending: false })
+      .limit(12),
+  ]);
+  // Sólo los resultados de las corridas que se pueden elegir: traer todos sería
+  // arrastrar cada narrativa que se ha generado desde que existe la pantalla.
+  const idsCorridas = ((corridas ?? []) as Any[]).map((c) => c.id);
+  const { data: resultados } = idsCorridas.length
+    ? await db
+        .from('prueba_resultados')
+        .select('corrida_id,caso_id,narrativa,error')
+        .in('corrida_id', idsCorridas)
+    : { data: [] as Any[] };
+
   const nombre = new Map(((equipo ?? []) as Any[]).map((m) => [m.id, m.nombre]));
   const versiones: Version[] = ((vers ?? []) as Any[]).map((v) => ({
     version: Number(v.version),
@@ -78,6 +101,9 @@ export default async function RedactorPage() {
         versiones={versiones}
         feedback={(fb ?? []) as FeedbackFila[]}
         promptVersion={PROMPT_VERSION}
+        casos={(casos ?? []) as CasoPrueba[]}
+        corridas={(corridas ?? []) as Corrida[]}
+        resultados={(resultados ?? []) as Resultado[]}
       />
     </div>
   );
