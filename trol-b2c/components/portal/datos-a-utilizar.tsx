@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { RESCATE_SIN_COSTO_DESDE } from "@trol/pension-core/ley97"
 
 /** Lo que viaja a Supabase: montos, nada de interruptores. */
 export type DatosAUtilizar = {
@@ -235,7 +236,13 @@ export function PanelDatosAUtilizar({
               {v.nota && <p className="text-xs text-muted-foreground">{v.nota}</p>}
 
               {esInfonavit && onDestinoInfonavit && (
-                <SelectorDestino valor={destinoInfonavit} onChange={onDestinoInfonavit} />
+                <SelectorDestino
+                  valor={destinoInfonavit}
+                  onChange={onDestinoInfonavit}
+                  saldoConCosto={
+                    (valores.infonavit ?? estimados.infonavit ?? 0) < RESCATE_SIN_COSTO_DESDE
+                  }
+                />
               )}
 
               {!esInfonavit && clave && onIncluir && (
@@ -292,7 +299,7 @@ const DESTINO_INFONAVIT: Record<
   rescate: {
     titulo: "Rescatarlo",
     detalle:
-      "Sale de la cuenta individual y se invierte al 3% real, igual que la AFORE. No paga el seguro de sobrevivencia y va por encima de la mínima garantizada, así que siempre suma.",
+      "Sale de la cuenta individual y se invierte al 3% real, igual que la AFORE. No paga el seguro de sobrevivencia y va por encima de la mínima garantizada. Sin costo para el cliente: el beneficio lo paga la constructora.",
     rendimiento: "3% real",
   },
   vivienda: {
@@ -306,9 +313,12 @@ const DESTINO_INFONAVIT: Record<
 function SelectorDestino({
   valor,
   onChange,
+  saldoConCosto = false,
 }: {
   valor: DestinoInfonavit
   onChange: (d: DestinoInfonavit) => void
+  /** El saldo de hoy está por debajo del umbral sin costo. */
+  saldoConCosto?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -331,6 +341,13 @@ function SelectorDestino({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">{DESTINO_INFONAVIT[valor].detalle}</p>
+      {valor === "rescate" && saldoConCosto && (
+        <p className="text-xs text-brick">
+          Con menos de {mxn.format(RESCATE_SIN_COSTO_DESDE)} de saldo no alcanza para armar
+          ese plan: el rescate se hace por otra vía que cobra el 20%, ya descontado en el
+          cálculo.
+        </p>
+      )}
     </div>
   )
 }

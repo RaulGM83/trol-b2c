@@ -189,16 +189,26 @@ describe('rescatar la subcuenta de vivienda', () => {
   });
 
   it('el 3% alcanza también a las aportaciones patronales futuras', () => {
-    // Sin saldo de arranque, todo lo proyectado son aportaciones futuras: si
-    // aun así el rescate rinde más, el 3% las está alcanzando.
-    const soloFuturas = (rescatar: boolean) =>
-      computeLey97({
-        ...base,
-        palancas: { ...palancas, rescatarInfonavit: rescatar, overrides: { infonavit: 0 } },
-      });
-    expect(fuente(soloFuturas(true), 'infonavit').saldoAlRetiro!).toBeGreaterThan(
-      fuente(soloFuturas(false), 'infonavit').saldoAlRetiro!,
-    );
+    // Dos clientes con el mismo saldo de hoy (arriba del umbral, para que el
+    // costo no enturbie): el que sigue cotizando gana MÁS al rescatar, porque
+    // el 3% también alcanza a lo que su patrón siga depositando.
+    const gana = (pct: Palancas['pctTiempoCotizando']) => {
+      const con = (rescatar: boolean) =>
+        computeLey97({
+          ...base,
+          palancas: {
+            ...palancas,
+            pctTiempoCotizando: pct,
+            rescatarInfonavit: rescatar,
+            overrides: { infonavit: 300_000 },
+          },
+        });
+      return (
+        fuente(con(true), 'infonavit').saldoAlRetiro! -
+        fuente(con(false), 'infonavit').saldoAlRetiro!
+      );
+    };
+    expect(gana(1)).toBeGreaterThan(gana(0));
   });
 
   it('deja de pagar el seguro de sobrevivencia: rinde más por peso', () => {
@@ -303,6 +313,93 @@ describe('el Infonavit destinado a la casa', () => {
     expect(inf.incluida).toBe(false);
     expect(inf.saldoAlRetiro).toBe(0);
     expect(inf.pensionMensual).toBe(0);
+    expect(suma(r)).toBeCloseTo(r.pensionTotal!, 2);
+  });
+});
+
+// --------------------------------------------------------------------------
+// Lo que cuesta rescatar.
+//
+// En el caso normal, nada para el cliente: el beneficio lo paga la
+// constructora y cada plan se arma para que salga sin costo. Lo que sí cuesta
+// es trámite y confianza, y eso no cabe en un número.
+//
+// La excepción son los saldos chicos: por debajo de $169,000 no alcanza para
+// armar ese plan y el rescate se hace por otra vía que cobra el 20%. El umbral
+// mira el saldo de HOY, que es el tamaño de la transacción que se arma.
+// --------------------------------------------------------------------------
+describe('el costo del rescate', () => {
+  const rescatando = (saldoHoy: number) =>
+    computeLey97({
+      ...base,
+      palancas: { ...palancas, rescatarInfonavit: true, overrides: { infonavit: saldoHoy } },
+    });
+
+  it('arriba del umbral no cuesta nada: lo cubre el plan', () => {
+    const r = rescatando(200_000);
+    expect(r.detalle.costoRescatePct).toBe(0);
+    expect(r.detalle.costoRescate).toBe(0);
+  });
+
+  it('debajo del umbral cobra el 20%', () => {
+    const r = rescatando(100_000);
+    expect(r.detalle.costoRescatePct).toBe(0.2);
+    expect(r.detalle.costoRescate).toBeGreaterThan(0);
+  });
+
+  it('justo en el umbral todavía es gratis', () => {
+    expect(rescatando(169_000).detalle.costoRescatePct).toBe(0);
+    expect(rescatando(168_999).detalle.costoRescatePct).toBe(0.2);
+  });
+
+  it('el costo se descuenta de lo que sale: el saldo queda al 80%', () => {
+    const r = rescatando(100_000);
+    const inf = fuente(r, 'infonavit');
+    const bruto = inf.saldoAlRetiro! + r.detalle.costoRescate;
+    expect(r.detalle.costoRescate).toBeCloseTo(bruto * 0.2, 2);
+    expect(inf.saldoAlRetiro!).toBeCloseTo(bruto * 0.8, 2);
+  });
+
+  it('sin rescate no hay costo, aunque el saldo sea chico', () => {
+    const aLaPension = computeLey97({
+      ...base,
+      palancas: { ...palancas, overrides: { infonavit: 100_000 } },
+    });
+    const aLaCasa = computeLey97({
+      ...base,
+      palancas: { ...palancas, usaCreditoInfonavit: true, overrides: { infonavit: 100_000 } },
+    });
+    expect(aLaPension.detalle.costoRescate).toBe(0);
+    expect(aLaCasa.detalle.costoRescate).toBe(0);
+  });
+
+  // El 20% se paga contra dos cosas que el rescate gana: quitarse el castigo
+  // del 0.81 (19% de una) y capitalizar al 3% en vez del 0%. Lo primero es
+  // inmediato, lo segundo necesita tiempo — así que el costo se justifica casi
+  // siempre, y deja de hacerlo justo cuando ya no queda horizonte.
+  const chico = (rescatar: boolean, edadRetiro: number) =>
+    computeLey97({
+      ...base,
+      palancas: {
+        ...palancas,
+        edadRetiro,
+        rescatarInfonavit: rescatar,
+        overrides: { rcv97: 2_000_000, infonavit: 20_000 },
+      },
+    });
+
+  it('con horizonte, el 20% se paga solo', () => {
+    expect(chico(true, 65).pensionTotal!).toBeGreaterThan(chico(false, 65).pensionTotal!);
+  });
+
+  it('al filo del retiro ya no alcanza a pagarse', () => {
+    // Retirándose en meses, el 3% no tiene dónde trabajar y el 20% se come
+    // justo lo que se ahorró del castigo actuarial.
+    expect(chico(true, 60).pensionTotal!).toBeLessThanOrEqual(chico(false, 60).pensionTotal!);
+  });
+
+  it('y el desglose sigue cuadrando con costo de por medio', () => {
+    const r = rescatando(100_000);
     expect(suma(r)).toBeCloseTo(r.pensionTotal!, 2);
   });
 });

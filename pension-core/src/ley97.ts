@@ -46,7 +46,26 @@ const RENDIMIENTO_REAL_INFONAVIT = 1.0;
 // Vehículos fuera de la AFORE, con rendimiento real propio (regla de negocio,
 // Raúl 5-sep-2026). Fijos a propósito: un solo criterio para toda la empresa.
 const RENDIMIENTO_REAL_CORPORATIVO = 1.02; // plan de retiro de la empresa
-const RENDIMIENTO_REAL_OTROS = 1.01; // PPR de aseguradora, fondos, cajas de ahorro
+const RENDIMIENTO_REAL_OTROS = 1.01;
+
+/**
+ * Rescate Infonavit: cuánto cuesta sacar la subcuenta de vivienda.
+ *
+ * En el caso normal, **cero para el cliente**. El beneficio del rescate lo paga
+ * la constructora, y cada plan se arma para que salga sin costo y con riesgo
+ * bajo. Lo que sí cuesta es trámite y confianza, y eso no cabe en un número.
+ *
+ * La excepción son los saldos chicos: por debajo de este piso no alcanza para
+ * armar ese plan, y el rescate se hace por otra vía que cobra el 20% de lo que
+ * sale. El umbral se mide contra el saldo de HOY, que es el tamaño real de la
+ * transacción que se arma (Raúl, 6-sep-2026).
+ *
+ * Son términos comerciales, no supuestos actuariales: si cambian, cambian aquí
+ * — o se mueven a `trol3.infonavit_supuestos`, que es donde viven los demás
+ * parámetros del producto y ya tiene editor en /trabajo/proyectos.
+ */
+export const RESCATE_SIN_COSTO_DESDE = 169_000;
+export const RESCATE_COSTO_PCT = 0.2; // PPR de aseguradora, fondos, cajas de ahorro
 const MAX_MESES = 716; // filas 5:721
 /**
  * Castigo actuarial al convertir saldo → renta vitalicia del IMSS.
@@ -196,11 +215,19 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       ? 'rescate'
       : 'pension';
   const rescataInfonavit = destinoInfonavit === 'rescate';
+  // El costo se decide por el saldo de HOY —el tamaño de la transacción que se
+  // arma— y se descuenta de todo lo que sale, incluidas las aportaciones que
+  // se vayan rescatando después: si el cliente está en el tramo chico, lo está
+  // para todo el plan.
+  const costoRescatePct =
+    rescataInfonavit && infBase < RESCATE_SIN_COSTO_DESDE ? RESCATE_COSTO_PCT : 0;
+  const rescateBruto = infBase * fvHoy + infonavitRescatadoFV;
+  const costoRescate = rescateBruto * costoRescatePct;
   const saldoInfonavit =
     destinoInfonavit === 'vivienda'
       ? 0
       : rescataInfonavit
-        ? infBase * fvHoy + infonavitRescatadoFV // fuera de la cuenta individual, al 3%
+        ? rescateBruto - costoRescate // fuera de la cuenta individual, al 3%, ya neto
         : infBase * fvHoyInf + infonavitFV; // K20 (0% real)
   const saldoAV =
     (avBase * fvHoy + ahorroVoluntarioFV) * ((inc.ahorroVoluntario ?? true) ? 1 : 0); // K21
@@ -346,6 +373,8 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       pmg,
       aportacionesFuturas: aportacionesFV,
       destinoInfonavit,
+      costoRescate,
+      costoRescatePct,
       enPmg,
       complementoPmg,
     },

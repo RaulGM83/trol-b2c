@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { createClient } from "@/lib/supabase/client"
 import { computeLey73 } from "@trol/pension-core/ley73"
-import { computeLey97 } from "@trol/pension-core/ley97"
+import { computeLey97, RESCATE_SIN_COSTO_DESDE } from "@trol/pension-core/ley97"
 import type { SerieINPC } from "@trol/pension-core/inpc"
 import { computeProyectoMod40 } from "@trol/pension-core/mod40-proyecto"
 import type { RegistroHistorialMod40 } from "@trol/pension-core/mod40-ventana"
@@ -79,16 +79,39 @@ const FUENTE_NOMBRE: Record<string, { titulo: string; sub?: string }> = {
 
 // Lo que hay que saber del renglón de vivienda según lo que se decidió hacer
 // con ella. Es la única fuente cuyo comportamiento cambia con el escenario.
-const SUB_INFONAVIT: Record<string, string> = {
-  pension: "Compra la renta del IMSS: 0% real y paga el seguro de sobrevivencia",
-  rescate: "Rescatada: 3% real, sin seguro de sobrevivencia y encima de la mínima",
-  vivienda: "La destina a su casa",
+function subInfonavit(
+  d: ReturnType<typeof computeLey97>["detalle"],
+  fmtMoneda: (n: number | null | undefined) => string,
+): string {
+  if (d.destinoInfonavit === "vivienda") return "La destina a su casa"
+  if (d.destinoInfonavit === "pension")
+    return "Compra la renta del IMSS: 0% real y paga el seguro de sobrevivencia"
+  const comun = "Rescatada: 3% real, sin seguro de sobrevivencia y encima de la mínima"
+  // El costo no se esconde: si el saldo es chico y el plan no lo cubre, el
+  // renglón dice cuánto se fue en el trámite y por qué.
+  return d.costoRescate > 0
+    ? `${comun}. Saldo chico: ${fmtMoneda(d.costoRescate)} se van en el trámite (${Math.round(d.costoRescatePct * 100)}%)`
+    : `${comun}. Sin costo para el cliente: lo cubre el plan`
 }
 
 const DESTINO_PDF: Record<string, string> = {
   pension: "A la pensión — 0% real, paga seguro de sobrevivencia",
   rescate: "Rescatada — 3% real, por encima de la mínima",
   vivienda: "La usa para su casa — fuera del cálculo",
+}
+
+/**
+ * Lo que el rescate cuesta de verdad.
+ *
+ * En dinero, casi siempre nada: el beneficio lo paga la constructora y el plan
+ * se arma para que salga sin costo. Lo que cuesta es trámite y confianza, y eso
+ * no aparece en ninguna columna — por eso se dice con palabras.
+ */
+function notaRescate(d: ReturnType<typeof computeLey97>["detalle"]): string | null {
+  if (d.destinoInfonavit !== "rescate") return null
+  return d.costoRescate > 0
+    ? `El rescate de este saldo lleva un costo del ${Math.round(d.costoRescatePct * 100)}% (${fmt(d.costoRescate)}), ya descontado del monto que sale: por debajo de ${fmt(RESCATE_SIN_COSTO_DESDE)} no alcanza para armar el plan que normalmente lo cubre. Aparte del dinero, todo rescate cuesta trámite y confianza.`
+    : `El rescate no le cuesta nada al cliente: el beneficio lo paga la constructora y el plan se diseña para que salga sin costo y con riesgo bajo. Lo que sí cuesta es trámite y confianza.`
 }
 
 const CAPA_TITULO: Record<string, string> = {
@@ -125,7 +148,7 @@ function filasFuentes(
             // es exactamente lo que la despega del piso.
             "Se lo descuenta al complemento: no cambia la pensión. Rescatarla la pondría por encima del piso."
           : f.id === "infonavit"
-            ? SUB_INFONAVIT[r.detalle.destinoInfonavit]
+            ? subInfonavit(r.detalle, fmtMoneda)
             : nombre.sub
       filas.push({
         label: nombre.titulo,
@@ -1136,9 +1159,15 @@ function Calc97Panel({
           { label: "Concepto", value: "Saldo al retiro", value2: "Al mes" },
           ...filasFuentes(r, fmt),
         ],
-        nota: enPMG
-          ? `Su cuenta individual no alcanza la pensión mínima garantizada (${fmt(d.pmg)}), así que el gobierno completa la diferencia. Mientras eso pase, cada peso de la subcuenta de vivienda le quita un peso al complemento y la pensión no se mueve; el ahorro que va encima sí la sube. ${NOTA_FACTOR}`
-          : NOTA_FACTOR,
+        nota: [
+          enPMG
+            ? `Su cuenta individual no alcanza la pensión mínima garantizada (${fmt(d.pmg)}), así que el gobierno completa la diferencia. Mientras eso pase, cada peso de la subcuenta de vivienda le quita un peso al complemento y la pensión no se mueve; el ahorro que va encima sí la sube.`
+            : null,
+          notaRescate(d),
+          NOTA_FACTOR,
+        ]
+          .filter(Boolean)
+          .join(" "),
       },
       {
         titulo: "Detalle técnico",
@@ -2280,7 +2309,10 @@ function TablaFuentes({
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
+        {notaRescate(r.detalle) && (
+          <p className="mt-3 text-xs text-muted-foreground">{notaRescate(r.detalle)}</p>
+        )}
+        <p className="mt-2 text-xs text-muted-foreground">
           {enPMG && (
             <>
               El piso de la mínima garantizada es {fmt(pmg)} al mes.{" "}

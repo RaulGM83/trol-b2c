@@ -402,6 +402,15 @@ export interface ResultadoLey97 {
     aportacionesFuturas: number;
     /** Qué destino tiene la subcuenta de vivienda en este escenario. */
     destinoInfonavit: DestinoInfonavit;
+    /**
+     * Lo que cuesta el rescate, en pesos de hoy descontados del monto que sale.
+     * 0 en el caso normal: el plan se diseña para que lo cubra la constructora.
+     * Sólo hay costo cuando el saldo de hoy es tan chico que no alcanza para
+     * armar ese plan (ver RESCATE_SIN_COSTO_DESDE).
+     */
+    costoRescate: number;
+    /** El porcentaje aplicado: 0 o RESCATE_COSTO_PCT. */
+    costoRescatePct: number;
     /** true cuando la cuenta individual no alcanza la mínima y el gobierno completa. */
     enPmg: boolean;
     /** Lo que completa el gobierno para llegar al piso. 0 si no aplica. */
