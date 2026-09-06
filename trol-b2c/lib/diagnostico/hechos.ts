@@ -185,6 +185,76 @@ export type EscenarioCerrado = {
 /** Un renglón de `v_mejor_dato`: el mejor valor de un campo, con su capa. */
 export type MejorDato = { campo: string; valor: unknown; capa?: string | null };
 
+/**
+ * Lo que el redactor necesita de un escenario cerrado, según su ley.
+ *
+ * Las dos leyes producen resultados con FORMA DISTINTA y confundirlas se ve
+ * como un documento honesto lleno de guiones: Ley 97 devuelve `pensionTotal` y
+ * un desglose por fuentes; Ley 73 devuelve `pensionMensual`, el ajuste por edad
+ * y el costo de la estrategia. Leer el campo de una en la otra da null, y un
+ * null aquí es un renglón vacío en el PDF del cliente.
+ *
+ * Se omite lo que no aplica en vez de mandarlo en null: la regla de "sólo
+ * habla de lo que aplica" empieza en los datos, no en el prompt.
+ */
+function escenarioNarrable(s: EscenarioCerrado, num: (v: unknown) => number | null) {
+  const r = (s.resultado ?? {}) as any;
+  const d = r.detalle ?? {};
+  const ley = r.ley ?? (s.tipo.includes('97') ? 'Ley97' : 'Ley73');
+  const resumen = (s.resumen ?? {}) as any;
+
+  const base = {
+    id: s.id,
+    calculadora: s.tipo.replace('calc_', ''),
+    ley,
+    cerrado_en: s.creado_en,
+    etiqueta: resumen.etiqueta ?? null,
+    edad_retiro: num(resumen.edad_retiro),
+    // El nombre es el mismo en las dos leyes a propósito: es la cifra que el
+    // cliente recuerda, y el documento no debería llamarla distinto según su
+    // régimen.
+    pension_mensual: num(ley === 'Ley73' ? r.pensionMensual : r.pensionTotal),
+    viable: r.status !== 'negativa' && r.negativa !== true,
+    motivo_no_viable: r.razon ?? null,
+  };
+
+  if (ley === 'Ley73') {
+    return {
+      ...base,
+      salario_promedio_250: num(d.salarioCot250),
+      semanas_al_retiro: num(d.semanasRetiro),
+      // 0.75 a los 60, 1 a partir de 64.5: es el factor que más sorprende al
+      // cliente y el que justifica esperar.
+      ajuste_por_edad: num(d.ajusteEdad),
+      pension_maxima_posible: num(d.pensionMaxima),
+      pension_minima: num(d.pensionMinima),
+      // Lo que el cliente pagaría por la estrategia (cuotas al IMSS), no un
+      // costo interno nuestro.
+      costo_estrategia: num(r.costoTotal),
+      costo_mensual_primer_mes: num(r.costoMensualPrimerMes),
+      modalidad: num(r.modalidadPrimerMes),
+      fecha_tramite: d.fechaTramite ?? null,
+    };
+  }
+
+  return {
+    ...base,
+    pension_cuenta_individual: num(r.pensionAforeInfonavit),
+    en_pmg: d.enPmg ?? null,
+    pmg: num(d.pmg),
+    destino_infonavit: d.destinoInfonavit ?? null,
+    costo_rescate: num(d.costoRescate),
+    fuentes: (r.fuentes ?? []).map((f: any) => ({
+      fuente: f.id,
+      capa: f.capa,
+      saldo_al_retiro: f.saldoAlRetiro,
+      aporta_al_mes: f.pensionMensual,
+      absorbida_por_pmg: f.absorbidaPorPmg,
+      incluida: f.incluida,
+    })),
+  };
+}
+
 export type HechosDiagnostico = ReturnType<typeof construirHechos>;
 
 /**
@@ -316,27 +386,6 @@ export function construirHechos({
 
     // Lo que el asesor CERRÓ con el cliente. Es la diferencia entre este
     // documento y el que se generaba solo desde la semilla.
-    escenarios: escenarios.map((s) => ({
-      id: s.id,
-      calculadora: s.tipo.replace('calc_', ''),
-      cerrado_en: s.creado_en,
-      resumen: s.resumen ?? {},
-      // Del resultado sólo lo que el redactor necesita para narrar; el bloque
-      // completo se queda guardado en el escenario, no en el prompt.
-      pension_total: num((s.resultado as any)?.pensionTotal),
-      pension_cuenta_individual: num((s.resultado as any)?.pensionAforeInfonavit),
-      en_pmg: (s.resultado as any)?.detalle?.enPmg ?? null,
-      pmg: num((s.resultado as any)?.detalle?.pmg),
-      destino_infonavit: (s.resultado as any)?.detalle?.destinoInfonavit ?? null,
-      costo_rescate: num((s.resultado as any)?.detalle?.costoRescate),
-      fuentes: ((s.resultado as any)?.fuentes ?? []).map((f: any) => ({
-        fuente: f.id,
-        capa: f.capa,
-        saldo_al_retiro: f.saldoAlRetiro,
-        aporta_al_mes: f.pensionMensual,
-        absorbida_por_pmg: f.absorbidaPorPmg,
-        incluida: f.incluida,
-      })),
-    })),
+    escenarios: escenarios.map((s) => escenarioNarrable(s, num)),
   };
 }

@@ -318,9 +318,11 @@ export function DiagnosticoPanel({
         toast.error(r.error ?? 'No se pudo');
         return;
       }
-      // El borrador puede abrirse aunque la IA falle: hay que decirlo, no
-      // dejar siete campos vacíos que parezcan un modelo callado.
-      if (r.aviso) toast.warning(`Diagnóstico abierto, pero sin borrador: ${r.aviso}`);
+      // Hay acciones que salen a medias: el borrador se abre pero la IA falla,
+      // o el documento queda entregado pero el PDF no se guarda. El aviso trae
+      // la frase completa y se muestra tal cual — media victoria no se cuenta
+      // como victoria ni como error.
+      if (r.aviso) toast.warning(r.aviso);
       else toast.success(exito);
     });
 
@@ -488,6 +490,15 @@ export function DiagnosticoPanel({
           {diagnostico.redactor ? ` · borrador de ${diagnostico.redactor}` : ' · sin borrador de IA'}
           {diagnostico.motor_version ? ` · motor ${diagnostico.motor_version}` : ''}
         </p>
+        <a
+          href={`/trabajo/diagnostico/pdf/${diagnostico.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-block rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-cream"
+        >
+          Ver el PDF{bloqueado ? '' : ' (con marca de borrador)'}
+        </a>
+
         {bloqueado ? (
           <p className="mt-3 rounded-xl bg-cream px-3 py-2 text-xs">
             Entregado el {fecha(diagnostico.entregado_en)}. Para cambiarlo, regrésalo a borrador.

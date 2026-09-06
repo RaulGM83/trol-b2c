@@ -129,3 +129,47 @@ export async function notificarSisecPdf(personaId: string, documentoId: string, 
     return { enviado: false, motivo: e instanceof Error ? e.message : 'error' };
   }
 }
+
+/**
+ * Guarda en el expediente un PDF que generamos nosotros (no que alguien subió).
+ *
+ * Existe aparte de `subirDocumentoExpediente` porque aquella exige que el tipo
+ * tenga `sube_asesor`, y los documentos generados —el diagnóstico avanzado, el
+ * escenario— tienen esa bandera en `false` A PROPÓSITO: nadie debe poder subir
+ * a mano un PDF cualquiera y que quede registrado como "Diagnóstico avanzado".
+ * Aquí el archivo lo produjo el sistema a partir de lo guardado, así que el
+ * actor es `sistema` y la validación que se conserva es la del formato.
+ */
+export async function guardarPdfGenerado(args: {
+  personaId: string;
+  tipo: string;
+  buffer: Buffer;
+  nombreArchivo: string;
+  actorId?: string | null;
+}) {
+  const { personaId, tipo, buffer, nombreArchivo, actorId } = args;
+  if (!buffer?.length) throw new Error('El PDF salió vacío.');
+  if (buffer.length > MAX_BYTES) throw new Error('El PDF pesa más de 15 MB.');
+
+  const admin = createAdminClient();
+  const { data: cat } = await admin.schema('trol3').from('catalogo_documentos')
+    .select('tipo,nombre,formatos').eq('tipo', tipo).maybeSingle();
+  if (!cat) throw new Error('Tipo de documento desconocido.');
+  if (!(cat.formatos as string[]).includes('pdf')) throw new Error(`${cat.nombre} no acepta PDF.`);
+
+  const path = `${personaId}/${tipo}/${Date.now()}-${limpiarNombre(nombreArchivo)}`;
+  const up = await admin.storage.from(BUCKET_EXPEDIENTE)
+    .upload(path, buffer, { contentType: 'application/pdf', upsert: false });
+  if (up.error) throw new Error(`No se pudo guardar el archivo: ${up.error.message}`);
+
+  const { data: docId, error } = await admin.schema('trol3').rpc('registrar_documento', {
+    p_persona: personaId, p_tipo: tipo, p_storage_path: path,
+    p_nombre: cat.nombre, p_actor: 'sistema', p_actor_id: actorId ?? null,
+  });
+  if (error) {
+    // Si no quedó registrado, el archivo no debe quedar huérfano en la bóveda.
+    await admin.storage.from(BUCKET_EXPEDIENTE).remove([path]);
+    throw new Error(error.message);
+  }
+  return { documentoId: docId as string, path };
+}

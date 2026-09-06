@@ -804,7 +804,10 @@ export async function generarBorradorDiagnostico(
       });
     }
     revalidatePath(`/trabajo/p/${personaId}`);
-    return ok({ id, aviso: r.ok ? null : r.error });
+    return ok({
+      id,
+      aviso: r.ok ? null : `El diagnóstico quedó abierto con sus hechos, pero la IA no escribió: ${r.error}`,
+    });
   } catch (e) { return fail(e); }
 }
 
@@ -883,11 +886,36 @@ export async function guardarDiagnostico(input: {
 export async function cambiarEstadoDiagnostico(
   diagnosticoId: string, personaId: string, estado: 'borrador' | 'revisado' | 'entregado',
 ) {
-  await requireMiembro();
+  const m = await requireMiembro();
   const { error } = await t3().rpc('estado_diagnostico', { p_diagnostico: diagnosticoId, p_estado: estado });
   if (error) return fail(error);
+
+  // Al ENTREGAR se congela una copia en el expediente. Es lo que contesta,
+  // dentro de seis meses, "¿qué exactamente le entregamos ese día?" — el
+  // documento en trol3 se sigue editando, el PDF guardado no. Sólo al
+  // entregar: guardar cada borrador llenaría el expediente de versiones.
+  let aviso: string | null = null;
+  if (estado === 'entregado') {
+    try {
+      const { construirPdfDiagnostico } = await import('@/lib/diagnostico/pdf');
+      const { guardarPdfGenerado } = await import('@/lib/trol3/documentos');
+      const r = await construirPdfDiagnostico(diagnosticoId);
+      if (!r) throw new Error('No se encontró el diagnóstico.');
+      await guardarPdfGenerado({
+        personaId, tipo: 'diagnostico_avanzado', buffer: r.buf,
+        nombreArchivo: `diagnostico-${r.slug}.pdf`, actorId: m.id,
+      });
+    } catch (e) {
+      // El documento YA quedó entregado: eso no se deshace porque falló el
+      // archivo. Se dice lo que pasó en vez de fingir que todo salió bien.
+      aviso = `Quedó entregado, pero no se pudo guardar el PDF en el expediente: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+    }
+  }
+
   revalidatePath(`/trabajo/p/${personaId}`);
-  return ok();
+  return ok({ aviso });
 }
 
 // ---------------------------------------------------------------------------
