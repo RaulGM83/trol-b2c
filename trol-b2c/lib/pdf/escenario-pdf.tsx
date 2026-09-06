@@ -58,6 +58,8 @@ export type PdfTabla = {
   columnas: string[]
   filas: string[][]
   resaltada?: number
+  /** Pie de la tabla: la unidad, el año de los pesos, lo que haga falta. */
+  nota?: string
 }
 
 export type PdfEscenarioData = {
@@ -430,6 +432,7 @@ function EscenarioDoc({
                 ))}
               </View>
             ))}
+            {input.tabla.nota ? <Text style={s.nota}>{input.tabla.nota}</Text> : null}
           </View>
         ) : null}
 

@@ -56,6 +56,22 @@ const fmtFecha = (d: Date) =>
   new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(d)
 
 const ANIO = new Date().getFullYear()
+
+/**
+ * Millones de pesos con un decimal. Los saldos al retiro son números de siete
+ * cifras: puestos completos junto a las pensiones, la tabla se vuelve ilegible
+ * y nadie compara nada.
+ */
+const mdp = (n: number | null | undefined) =>
+  n === null || n === undefined || Number.isNaN(n) ? "—" : (n / 1_000_000).toFixed(1)
+
+/**
+ * Todo el motor trabaja en términos reales: los rendimientos son reales, la
+ * PMG se reexpresa a la UMA de hoy, y las aportaciones futuras se descuentan.
+ * Así que cada peso que sale de aquí es un peso de hoy — decirlo evita que
+ * alguien lea $15,505 al año 2038 como si fueran pesos de 2038.
+ */
+const NOTA_PESOS = `Todas las cifras están en pesos de ${ANIO}: es lo que esa pensión compraría hoy, no el número nominal que verá en su estado de cuenta.`
 const SAL_MIN = SALARIO_MINIMO[ANIO] ?? 315.04
 const SAL_TOPE = (UMA[ANIO] ?? 117.35) * 25
 const PCTS = [0, 0.25, 0.5, 0.75, 1] as const
@@ -1102,6 +1118,15 @@ function Calc97Panel({
           ...entrada,
           palancas: { ...palancasConDatos, edadRetiro: edad },
         })
+        // El saldo de cada capa sale de las mismas fuentes que la pensión, así
+        // que las dos mitades de la tabla no se pueden contradecir. El
+        // complemento del gobierno no tiene saldo y se cae solo del `??`.
+        const saldoDe = (capa: string) =>
+          res.fuentes
+            .filter((f) => f.capa === capa)
+            .reduce((a, f) => a + (f.saldoAlRetiro ?? 0), 0)
+        const saldoCta = saldoDe("cuenta_individual")
+        const saldoEncima = saldoDe("encima")
         return {
           edad,
           // Las mismas tres piezas de la tabla de fuentes: lo que da la cuenta
@@ -1113,6 +1138,9 @@ function Calc97Panel({
               ? null
               : res.pensionTotal - res.pensionAforeInfonavit,
           total: res.pensionTotal,
+          saldoCta,
+          saldoEncima,
+          saldoTotal: saldoCta + saldoEncima,
         }
       }),
     [edades, entrada, palancasConDatos],
@@ -1181,6 +1209,7 @@ function Calc97Panel({
             : null,
           notaRescate(d),
           NOTA_FACTOR,
+          NOTA_PESOS,
         ]
           .filter(Boolean)
           .join(" "),
@@ -1204,17 +1233,24 @@ function Calc97Panel({
       titulo: "Pensión por edad de retiro (con las palancas del escenario)",
       columnas: [
         "Edad",
-        "Cuenta individual",
-        "Ahorro encima",
+        "Pensión cta. individual",
+        "Pensión encima",
         "Pensión total",
+        "Saldo cta. indiv. (mdp)",
+        "Saldo encima (mdp)",
+        "Saldo total (mdp)",
       ],
       filas: barrido.map((b) => [
         `${b.edad}`,
         b.total === null ? "Negativa" : fmt(b.cuentaIndividual),
         b.total === null ? "—" : fmt(b.encima),
         b.total === null ? "—" : fmt(b.total),
+        mdp(b.saldoCta),
+        mdp(b.saldoEncima),
+        mdp(b.saldoTotal),
       ]),
       resaltada: barrido.findIndex((b) => b.edad === palancas.edadRetiro),
+      nota: `Saldos en millones de pesos. ${NOTA_PESOS}`,
     },
     datosCliente: filasDatosCliente(semilla),
     advertencias: r.negativa
@@ -1323,14 +1359,26 @@ function Calc97Panel({
 
       <TablaBarrido
         titulo="Pensión por edad de retiro (con las palancas actuales)"
-        columnas={["Edad", "Cuenta individual", "Ahorro encima", "Pensión total"]}
+        columnas={[
+          "Edad",
+          "Pensión cta. individual",
+          "Pensión encima",
+          "Pensión total",
+          "Saldo cta. indiv. (mdp)",
+          "Saldo encima (mdp)",
+          "Saldo total (mdp)",
+        ]}
         filas={barrido.map((b) => [
           `${b.edad}`,
           b.total === null ? "Negativa" : fmt(b.cuentaIndividual),
           b.total === null ? "—" : fmt(b.encima),
           b.total === null ? "—" : fmt(b.total),
+          mdp(b.saldoCta),
+          mdp(b.saldoEncima),
+          mdp(b.saldoTotal),
         ])}
         resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
+        nota={`Saldos en millones de pesos. ${NOTA_PESOS}`}
       />
     </PanelLayout>
   )
@@ -2095,11 +2143,14 @@ function TablaBarrido({
   columnas,
   filas,
   resaltada,
+  nota,
 }: {
   titulo: string
   columnas: string[]
   filas: string[][]
   resaltada: number
+  /** Pie de la tabla: la unidad, el año de los pesos, lo que haga falta. */
+  nota?: string
 }) {
   return (
     <Card>
@@ -2107,7 +2158,9 @@ function TablaBarrido({
         <CardTitle className="text-base">{titulo}</CardTitle>
       </CardHeader>
       <CardContent>
-        <table className="w-full text-sm">
+        {/* Siete columnas no caben en un teléfono: que ruede la tabla, no la página. */}
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="text-left text-xs text-muted-foreground border-b">
               {columnas.map((c) => (
@@ -2134,6 +2187,8 @@ function TablaBarrido({
             ))}
           </tbody>
         </table>
+        </div>
+        {nota && <p className="mt-2 text-xs text-muted-foreground">{nota}</p>}
       </CardContent>
     </Card>
   )
@@ -2338,7 +2393,7 @@ function TablaFuentes({
               El piso de la mínima garantizada es {fmt(pmg)} al mes.{" "}
             </>
           )}
-          {NOTA_FACTOR}
+          {NOTA_FACTOR} {NOTA_PESOS}
         </p>
       </CardContent>
     </Card>
