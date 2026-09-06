@@ -41,6 +41,9 @@ export type EscenarioCerrado = {
   resultado: Record<string, unknown> | null;
 };
 
+/** Un renglón de `v_mejor_dato`: el mejor valor de un campo, con su capa. */
+export type MejorDato = { campo: string; valor: unknown; capa?: string | null };
+
 export type HechosDiagnostico = ReturnType<typeof construirHechos>;
 
 /**
@@ -52,17 +55,34 @@ export type HechosDiagnostico = ReturnType<typeof construirHechos>;
  */
 export function construirHechos({
   expediente,
+  datos = [],
   historial,
   escenarios,
   issste,
 }: {
   expediente: Record<string, any>;
+  /** `v_mejor_dato` de esta persona. Varios campos que el documento cita viven
+   *  SÓLO aquí y no en `v_expediente` — la última cotización, el salario
+   *  promedio de 250 semanas, las semanas descontadas. Leerlos del expediente
+   *  los mandaba al documento como null. */
+  datos?: MejorDato[];
   historial: Array<{ desde?: string | null; hasta?: string | null; patron?: string | null }>;
   escenarios: EscenarioCerrado[];
   issste?: Record<string, any> | null;
 }) {
   const e = expediente;
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+
+  const porCampo = new Map(datos.map((d) => [d.campo, d]));
+  /** Un campo del expediente con la capa que trae, no una capa inventada. */
+  const d = (campo: string): Dato => {
+    const r = porCampo.get(campo);
+    return { valor: (r?.valor as Dato['valor']) ?? null, capa: capaDe(r?.capa) };
+  };
+  const dNum = (campo: string): Dato => {
+    const r = d(campo);
+    return { valor: num(r.valor), capa: r.capa };
+  };
 
   return {
     generado_en: new Date().toISOString(),
@@ -87,19 +107,35 @@ export function construirHechos({
 
     imss: {
       semanas_cotizadas: dato(num(e.semanas)),
+      semanas_descontadas: dNum('semanas_descontadas'),
+      semanas_recuperadas: dNum('semanas_recuperadas'),
+      primera_cotizacion: d('primera_cotizacion'),
+      ultima_cotizacion: d('ultima_cotizacion'),
+      ultima_modalidad: d('ultima_modalidad'),
+      meses_sin_cotizar: dNum('gap_meses'),
+      salario_diario: dNum('salario_diario'),
+      salario_promedio_250: dNum('salario_promedio_250'),
       conserva_derechos: dato(e.conserva_derechos ?? null),
       fin_conservacion: dato(e.fin_conservacion ?? null),
-      ultima_cotizacion: dato(e.ultima_cotizacion ?? null),
       pension_base: dato(num(e.pension_base), 'estimado'),
       mod40_aplica: dato(e.mod40_retro_aplica ?? null),
-      limite_mod40: dato(e.limite_mod40 ?? null),
+      // La ventana del art. 220 la corrige trol3 en el dato; `v_expediente`
+      // todavía trae la del 219. Una sola verdad, y es la del dato.
+      limite_mod40: d('limite_inscripcion_mod40').valor
+        ? d('limite_inscripcion_mod40')
+        : dato(e.limite_mod40 ?? null),
       pension_mod40_retro: dato(num(e.pension_mod40_retro), 'estimado'),
     },
 
     saldos: {
+      afore: d('afore_actual'),
       afore_rcv97: dato(num(e.saldo_rcv97), 'oficial'),
+      sar92: dNum('saldo_sar92'),
       infonavit: dato(num(e.saldo_infonavit), capaDe(e.saldo_infonavit_capa)),
       credito_infonavit_vigente: dato(e.credito_infonavit ?? null),
+      ahorro_voluntario: dNum('ahorro_voluntario'),
+      plan_corporativo: dNum('plan_corporativo'),
+      otros_planes: dNum('otros_planes'),
     },
 
     issste: issste ?? null,

@@ -650,7 +650,7 @@ async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
   const db = t3();
   const [{ data: e }, { data: datos }, { data: escs }] = await Promise.all([
     db.from('v_expediente').select('*').eq('persona_id', personaId).maybeSingle(),
-    db.from('v_mejor_dato').select('campo,valor').eq('persona_id', personaId),
+    db.from('v_mejor_dato').select('campo,valor,capa').eq('persona_id', personaId),
     db.from('escenarios').select('id,tipo,creado_en,inputs,resultado').in('id', escenarioIds),
   ]);
   if (!e) throw new Error('La persona no existe o no tienes acceso a su expediente.');
@@ -681,6 +681,7 @@ async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
 
   return construirHechos({
     expediente: e as Record<string, Any>,
+    datos: (datos ?? []) as Any[],
     historial,
     escenarios,
     issste: Object.keys(issste).length ? issste : null,
