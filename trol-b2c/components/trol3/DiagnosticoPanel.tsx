@@ -35,7 +35,7 @@ import {
   TITULO_SECCION,
   type Narrativa,
   type SeccionNarrativa,
-} from '@/lib/diagnostico/prompt';
+} from '@/lib/diagnostico/secciones';
 import { TareasPanel, type MiembroOpcion, type Tarea } from '@/components/trol3/TareasPanel';
 import {
   AfinarRedactor,

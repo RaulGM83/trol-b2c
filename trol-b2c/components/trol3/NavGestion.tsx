@@ -11,11 +11,17 @@ const ITEMS: [string, string][] = [
   ['/trabajo/atribucion', 'Atribución'],
 ];
 
-export function NavGestion() {
+// El taller del redactor le cambia el texto a todos los diagnósticos que se
+// generen después, así que sólo lo ve quien puede entrar (117). El RLS ya lo
+// impide en la base; esto es para no enseñar una puerta que no abre.
+const ITEMS_ADMIN: [string, string][] = [['/trabajo/redactor', 'Redactor']];
+
+export function NavGestion({ admin = false }: { admin?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const activa = ITEMS.some(([h]) => pathname?.startsWith(h));
+  const items = admin ? [...ITEMS, ...ITEMS_ADMIN] : ITEMS;
+  const activa = items.some(([h]) => pathname?.startsWith(h));
 
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
@@ -30,7 +36,7 @@ export function NavGestion() {
       <button onClick={() => setOpen((v) => !v)} className={`rounded-lg px-2 py-1 hover:bg-cream ${activa ? 'font-semibold' : ''}`}>Gestión ▾</button>
       {open && (
         <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-xl border border-line bg-white p-1 shadow-lg">
-          {ITEMS.map(([h, l]) => <Link key={h} href={h} className="block rounded-lg px-2 py-1 hover:bg-cream" onClick={() => setOpen(false)}>{l}</Link>)}
+          {items.map(([h, l]) => <Link key={h} href={h} className="block rounded-lg px-2 py-1 hover:bg-cream" onClick={() => setOpen(false)}>{l}</Link>)}
         </div>
       )}
     </div>

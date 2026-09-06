@@ -27,7 +27,7 @@ import {
   promoverInstrucciones,
   regenerarNarrativa,
 } from '@/app/trabajo/actions';
-import { SECCIONES_NARRATIVA, TITULO_SECCION, type SeccionNarrativa } from '@/lib/diagnostico/prompt';
+import { SECCIONES_NARRATIVA, TITULO_SECCION, type SeccionNarrativa } from '@/lib/diagnostico/secciones';
 
 export type Feedback = {
   id: string;
