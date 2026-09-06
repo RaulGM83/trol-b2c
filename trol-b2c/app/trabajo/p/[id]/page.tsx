@@ -18,6 +18,7 @@ import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/ca
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
+import { DiagnosticoPanel, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -229,10 +230,27 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // al abrir su expediente.
   const { data: tareasCliente } = await db
     .from('v_tareas')
-    .select('id,persona_id,persona_nombre,titulo,detalle,responsable_id,responsable_nombre,vence_el,estado,origen,vencida,dias_para_vencer,hecha_en,nota_cierre')
+    .select('id,persona_id,persona_nombre,titulo,detalle,responsable_id,responsable_nombre,vence_el,estado,origen,origen_id,vencida,dias_para_vencer,hecha_en,nota_cierre')
     .eq('persona_id', params.id)
     .order('vence_el', { ascending: true, nullsFirst: false })
     .limit(50);
+
+  // El diagnóstico avanzado (115): el último de esta persona y los escenarios
+  // cerrados sobre los que puede escribirse. Se trae el contenido completo
+  // porque la pestaña lo edita; la vista sólo sirve para listar.
+  const [{ data: diagRow }, { data: escsCerrados }] = await Promise.all([
+    db.from('diagnosticos')
+      .select('id,estado,escenario_ids,redactor,motor_version,creado_en,actualizado_en,entregado_en,contenido,creado_por')
+      .eq('persona_id', params.id)
+      .order('creado_en', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from('v_escenarios_cerrados')
+      .select('id,tipo,creado_en,creado_por_nombre,motor_actual,resumen')
+      .eq('persona_id', params.id)
+      .order('creado_en', { ascending: false })
+      .limit(20),
+  ]);
 
   const { data: viraalAut } = await db.from('viraal_autorizaciones').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(50);
   const viraalHist = (viraalAut ?? []).map((a: Any) => ({ ...a, miembro: (miembros ?? []).find((x: Any) => x.id === a.miembro_id)?.nombre ?? null }));
@@ -427,6 +445,17 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
           )}
         </section>
+      )}
+
+      {tab === 'diagnostico' && (
+        <DiagnosticoPanel
+          personaId={e.persona_id}
+          diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por) } as DiagnosticoRow) : null}
+          escenarios={(escsCerrados ?? []) as EscenarioCerradoOpcion[]}
+          tareas={((tareasCliente ?? []) as Any[]).filter((t) => t.origen === 'diagnostico' && (!diagRow || t.origen_id === (diagRow as Any).id)) as Tarea[]}
+          miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre, email: x.email }))}
+          yoId={m.id}
+        />
       )}
 
       {tab === 'infonavit' && (

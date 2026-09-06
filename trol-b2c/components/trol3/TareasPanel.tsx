@@ -59,6 +59,8 @@ export function TareasPanel({
   titulo = 'Pendientes',
   mostrarCliente = false,
   compacto = false,
+  origen = 'manual',
+  origenId = null,
 }: {
   tareas: Tarea[];
   miembros: MiembroOpcion[];
@@ -68,6 +70,9 @@ export function TareasPanel({
   titulo?: string;
   mostrarCliente?: boolean;
   compacto?: boolean;
+  /** De dónde nace lo que se dé de alta aquí: 'manual' o 'diagnostico'. */
+  origen?: string;
+  origenId?: string | null;
 }) {
   const [pending, start] = useTransition();
   const [nuevo, setNuevo] = useState('');
@@ -129,6 +134,8 @@ export function TareasPanel({
                       personaId,
                       responsableId: responsable,
                       venceEl: vence || null,
+                      origen,
+                      origenId,
                     }) as Promise<R>,
                   'Tarea creada',
                 );
@@ -172,6 +179,8 @@ export function TareasPanel({
                     personaId,
                     responsableId: responsable,
                     venceEl: vence || null,
+                    origen,
+                    origenId,
                   }) as Promise<R>,
                 'Tarea creada',
               );

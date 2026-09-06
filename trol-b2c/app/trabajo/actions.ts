@@ -7,6 +7,7 @@ import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/escenario';
 import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -621,5 +622,171 @@ export async function actualizarTarea(input: {
   if (error) return fail(error);
   revalidatePath('/trabajo/tareas');
   if (input.personaId) revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Diagnóstico avanzado (115 · claude/48)
+//
+// El documento se arma DESPUÉS de la sesión, sobre el escenario que el asesor
+// cerró con el cliente enfrente — no desde la semilla. Tres capas con reglas
+// distintas: los hechos salen de la base y no se editan, la narrativa la
+// escribe la IA y el asesor la reescribe, los acuerdos son sólo del asesor.
+// ---------------------------------------------------------------------------
+
+/** Los campos ISSSTE del expediente, tal como el prompt espera verlos. */
+const CAMPOS_ISSSTE = [
+  'cotiza_issste', 'status_issste', 'tipo_derechohabiente_issste', 'regimen_issste',
+  'fecha_ingreso_gobierno_issste', 'antiguedad_issste_anios', 'fecha_alta_issste',
+  'fecha_baja_issste', 'ramo_issste', 'sueldo_basico_issste', 'sueldo_issste',
+];
+
+/**
+ * Junta lo que el redactor necesita ver. Se aísla porque lo usan dos caminos:
+ * abrir el diagnóstico y regenerar la narrativa de uno ya abierto.
+ */
+async function hechosDeDiagnostico(personaId: string, escenarioIds: string[]) {
+  const { construirHechos } = await import('@/lib/diagnostico/hechos');
+  const db = t3();
+  const [{ data: e }, { data: datos }, { data: escs }] = await Promise.all([
+    db.from('v_expediente').select('*').eq('persona_id', personaId).maybeSingle(),
+    db.from('v_mejor_dato').select('campo,valor').eq('persona_id', personaId),
+    db.from('escenarios').select('id,tipo,creado_en,inputs,resultado').in('id', escenarioIds),
+  ]);
+  if (!e) throw new Error('La persona no existe o no tienes acceso a su expediente.');
+  if (!escs?.length) throw new Error('No se encontraron los escenarios cerrados.');
+
+  const valorDe = new Map(((datos ?? []) as Any[]).map((d) => [d.campo, d.valor]));
+
+  // ISSSTE sólo si hay algo que decir: un bloque de nulos invita al modelo a
+  // rellenarlo, y tiene prohibido inventar.
+  const issste: Record<string, unknown> = {};
+  for (const c of CAMPOS_ISSSTE) { const v = valorDe.get(c); if (v != null && v !== '') issste[c] = v; }
+
+  // La historia laboral vive en el espejo legacy o, si no hay, en la semilla.
+  let historial: Any[] = [];
+  if (e.legacy_cliente_id) {
+    const { data: cl } = await createAdminClient()
+      .from('clientes').select('calculo_pensional').eq('id', e.legacy_cliente_id).maybeSingle();
+    historial = ((cl?.calculo_pensional as { historial?: Any[] } | null)?.historial as Any[]) ?? [];
+  }
+  if (!historial.length) {
+    const h = (valorDe.get('semilla') as { historial?: Any[] } | undefined)?.historial;
+    if (Array.isArray(h)) historial = h;
+  }
+
+  // Se respeta el orden en que el asesor los eligió, no el que devolvió la base.
+  const porId = new Map(((escs ?? []) as Any[]).map((s) => [s.id, s]));
+  const escenarios = escenarioIds.map((id) => porId.get(id)).filter(Boolean) as Any[];
+
+  return construirHechos({
+    expediente: e as Record<string, Any>,
+    historial,
+    escenarios,
+    issste: Object.keys(issste).length ? issste : null,
+  });
+}
+
+/**
+ * Abre el borrador y le pide a OpenAI la narrativa.
+ *
+ * Si el redactor falla, el diagnóstico QUEDA ABIERTO con sus hechos y se
+ * devuelve el aviso: el asesor puede escribirlo a mano o reintentar. Lo que no
+ * puede pasar es que un fallo se vea como un documento en blanco.
+ */
+export async function generarBorradorDiagnostico(personaId: string, escenarioIds: string[]) {
+  await requireMiembro();
+  if (!escenarioIds?.length) return fail(new Error('Elige al menos un escenario cerrado.'));
+  try {
+    const { MOTOR_VERSION } = await import('@trol/pension-core/version');
+    const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
+    const hechos = await hechosDeDiagnostico(personaId, escenarioIds);
+
+    const { data: id, error } = await t3().rpc('abrir_diagnostico', {
+      p_persona: personaId,
+      p_escenarios: escenarioIds,
+      p_hechos: hechos,
+      p_motor_version: MOTOR_VERSION,
+    });
+    if (error) return fail(error);
+
+    const r = await redactarDiagnostico(hechos);
+    if (r.ok) {
+      const { error: e2 } = await t3().rpc('guardar_diagnostico', {
+        p_diagnostico: id, p_narrativa: r.narrativa, p_acuerdos: null,
+        p_hechos: null, p_redactor: r.modelo,
+      });
+      if (e2) return fail(e2);
+    }
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ id, aviso: r.ok ? null : r.error });
+  } catch (e) { return fail(e); }
+}
+
+/** Vuelve a pedirle la narrativa al modelo sobre los MISMOS hechos guardados. */
+export async function regenerarNarrativa(diagnosticoId: string, personaId: string) {
+  await requireMiembro();
+  try {
+    const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
+    const { data: d, error } = await t3()
+      .from('diagnosticos').select('contenido').eq('id', diagnosticoId).maybeSingle();
+    if (error) return fail(error);
+    const hechos = (d?.contenido as Any)?.hechos;
+    if (!hechos) return fail(new Error('El diagnóstico no tiene hechos guardados.'));
+
+    const r = await redactarDiagnostico(hechos);
+    if (!r.ok) return fail(new Error(r.error));
+    const { error: e2 } = await t3().rpc('guardar_diagnostico', {
+      p_diagnostico: diagnosticoId, p_narrativa: r.narrativa, p_acuerdos: null,
+      p_hechos: null, p_redactor: r.modelo,
+    });
+    if (e2) return fail(e2);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok();
+  } catch (e) { return fail(e); }
+}
+
+/** Rehace los hechos con los datos de HOY, sin tocar lo que el asesor escribió. */
+export async function refrescarHechosDiagnostico(diagnosticoId: string, personaId: string, escenarioIds: string[]) {
+  await requireMiembro();
+  try {
+    const hechos = await hechosDeDiagnostico(personaId, escenarioIds);
+    const { error } = await t3().rpc('guardar_diagnostico', {
+      p_diagnostico: diagnosticoId, p_narrativa: null, p_acuerdos: null,
+      p_hechos: hechos, p_redactor: null,
+    });
+    if (error) return fail(error);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok();
+  } catch (e) { return fail(e); }
+}
+
+/** Lo que el asesor reescribió. Narrativa y acuerdos se guardan por separado. */
+export async function guardarDiagnostico(input: {
+  diagnosticoId: string;
+  personaId: string;
+  narrativa?: Record<string, string> | null;
+  acuerdos?: string | null;
+}) {
+  await requireMiembro();
+  const { error } = await t3().rpc('guardar_diagnostico', {
+    p_diagnostico: input.diagnosticoId,
+    p_narrativa: input.narrativa ?? null,
+    p_acuerdos: input.acuerdos ?? null,
+    p_hechos: null,
+    p_redactor: null,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${input.personaId}`);
+  return ok();
+}
+
+export async function cambiarEstadoDiagnostico(
+  diagnosticoId: string, personaId: string, estado: 'borrador' | 'revisado' | 'entregado',
+) {
+  await requireMiembro();
+  const { error } = await t3().rpc('estado_diagnostico', { p_diagnostico: diagnosticoId, p_estado: estado });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
