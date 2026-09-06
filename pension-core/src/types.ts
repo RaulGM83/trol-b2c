@@ -81,6 +81,20 @@ export interface Palancas {
    * se expresa al revés en la UI ("lo usa o lo va a usar para otra cosa"),
    * porque ahí lo natural es marcar la exclusión.
    */
+  /**
+   * Rescate Infonavit: sacar la subcuenta de vivienda en vez de dejar que
+   * compre la renta del IMSS.
+   *
+   * Dentro de la cuenta individual ese saldo rinde 0% real, paga el seguro de
+   * sobrevivencia (FACTOR_RETIRO) y se lo puede comer la mínima garantizada.
+   * Rescatado sale a ahorro: 3% real —el mismo de la AFORE, que es donde
+   * naturalmente estaría si la estrategia fuera 100% pensional—, sin castigo
+   * actuarial, y encima del piso, así que siempre suma.
+   *
+   * Se ignora cuando el saldo está destinado a la casa (`usaCreditoInfonavit`):
+   * ahí no hay nada que rescatar.
+   */
+  rescatarInfonavit?: boolean;
   incluir?: {
     afore?: boolean;
     ahorroVoluntario?: boolean;
@@ -320,6 +334,16 @@ export interface SalidaNegativa97 {
  */
 export type CapaFuente = 'cuenta_individual' | 'encima';
 
+/**
+ * Qué hace el cliente con su subcuenta de vivienda.
+ *
+ *   `pension`  se queda y compra la renta del IMSS: 0% real, paga el seguro de
+ *              sobrevivencia, y la mínima garantizada se lo puede comer.
+ *   `rescate`  sale a ahorro: 3% real, sin castigo, encima del piso.
+ *   `vivienda` lo destina a su casa o a un crédito: fuera del cálculo.
+ */
+export type DestinoInfonavit = 'pension' | 'rescate' | 'vivienda';
+
 export type IdFuente =
   | 'rcv'
   | 'infonavit'
@@ -330,6 +354,10 @@ export type IdFuente =
 
 export interface FuentePension {
   id: IdFuente;
+  /**
+   * En qué capa cae. La vivienda es la única que se mueve: a la pensión vive
+   * en `cuenta_individual`; rescatada pasa a `encima`.
+   */
   capa: CapaFuente;
   /** Saldo proyectado al retiro. null en el complemento: no es un saldo. */
   saldoAlRetiro: number | null;
@@ -372,6 +400,8 @@ export interface ResultadoLey97 {
     urv: number;
     pmg: number;
     aportacionesFuturas: number;
+    /** Qué destino tiene la subcuenta de vivienda en este escenario. */
+    destinoInfonavit: DestinoInfonavit;
     /** true cuando la cuenta individual no alcanza la mínima y el gobierno completa. */
     enPmg: boolean;
     /** Lo que completa el gobierno para llegar al piso. 0 si no aplica. */

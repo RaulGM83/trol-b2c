@@ -209,7 +209,7 @@ describe('conservaValorSSV — Ley 97 y la PMG', () => {
       edadActual: 60, fechaRetiro: new Date(0), semanasRetiro: 1250, semanasMinimasPMG: 1250,
       saldoAforeProyectado: afore, saldoInfonavitProyectado: inf, saldoAhorroVoluntario: 0,
       saldoPlanCorporativo: 0, saldoOtrosPlanes: 0, urv, pmg, aportacionesFuturas: 0,
-      enPmg: false, complementoPmg: 0,
+      destinoInfonavit: 'pension' as const, enPmg: false, complementoPmg: 0,
     },
     fuentes: [],
   });

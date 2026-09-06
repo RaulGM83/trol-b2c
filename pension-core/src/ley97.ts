@@ -15,6 +15,8 @@ import {
 } from './tablas';
 import type {
   EntradaCalculo,
+  CapaFuente,
+  DestinoInfonavit,
   EstatusPension97,
   FuentePension,
   RazonNegativa97,
@@ -50,10 +52,13 @@ const MAX_MESES = 716; // filas 5:721
  * Castigo actuarial al convertir saldo → renta vitalicia del IMSS.
  *
  * Sale del Excel validado y representa, a grandes rasgos, lo que se reserva
- * para el seguro de sobrevivencia. Aplica SÓLO al saldo de RCV, que es el que
- * obligatoriamente compra esa renta: la subcuenta de vivienda, el ahorro
- * voluntario y los planes privados no pagan esa cobertura y por eso convierten
- * limpio.
+ * para el seguro de sobrevivencia. Lo paga todo lo que compra la renta del
+ * IMSS: el RCV siempre, y la subcuenta de vivienda cuando se queda para la
+ * pensión. Rescatada ya no lo paga, porque deja de comprar esa renta — y ésa
+ * es una de las tres cosas que hacen valer el rescate, junto con el 3% real y
+ * quedar por encima de la mínima garantizada.
+ *
+ * El ahorro voluntario y los planes privados nunca lo pagan.
  *
  * PENDIENTE (Raúl, 6-sep-2026): 0.81 es un promedio. El factor real depende de
  * si la persona tiene dependientes económicos y de su edad al pensionarse.
@@ -130,6 +135,11 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   const avOtros = palancas.otrosPlanesMensual ?? 0;
   let aportacionesFV = 0; // SUM(Y)
   let infonavitFV = 0; // SUM(AA)
+  // Las mismas aportaciones patronales, capitalizadas al 3%: es lo que valen
+  // si el cliente las va rescatando conforme caen en vez de dejarlas al 0%.
+  // Son más de la mitad del saldo de vivienda proyectado en un cliente que
+  // sigue cotizando, así que no es un detalle.
+  let infonavitRescatadoFV = 0;
   let ahorroVoluntarioFV = 0; // SUM(AC)
   let corporativoFV = 0;
   let otrosFV = 0;
@@ -155,16 +165,16 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     const fvInf = Math.pow(RENDIMIENTO_REAL_INFONAVIT, aniosAlRetiro);
     aportacionesFV += aporte * fv; // Y
     infonavitFV += rMensual * 0.05 * pct * fvInf; // Z→AA (0% real)
+    infonavitRescatadoFV += rMensual * 0.05 * pct * fv; // el mismo flujo, al 3%
     ahorroVoluntarioFV += av * fv; // AB→AC
     corporativoFV += avCorp * Math.pow(RENDIMIENTO_REAL_CORPORATIVO, aniosAlRetiro);
     otrosFV += avOtros * Math.pow(RENDIMIENTO_REAL_OTROS, aniosAlRetiro);
   });
 
-  // ---- Saldos proyectados (K19..K21 + vehículos fuera de la AFORE) ----
-  // Cada vehículo se capitaliza a SU tasa real: AFORE 3%, corporativo 2%, otros
-  // 1%, vivienda 0%. `incluir` es una decisión de la corrida (no se guarda) y
-  // por default todo entra; el de Infonavit se sigue expresando al revés, con
-  // `usaCreditoInfonavit`, porque ahí lo natural es marcar la exclusión.
+  // ---- Saldos proyectados (K19..K21 + fuentes fuera de la AFORE) ----
+  // Cada fuente se capitaliza a SU tasa real: AFORE 3%, corporativo 2%, otros
+  // 1%, vivienda 0% — salvo que se rescate, y entonces también 3%. `incluir` y
+  // el destino de la vivienda son decisiones de la corrida y no se guardan.
   const inc = palancas.incluir ?? {};
   const anios = diasEntre(hoy, fechaRetiro) / DIAS_ANIO;
   const fvHoy = Math.pow(RENDIMIENTO_REAL, anios);
@@ -176,8 +186,22 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
   const otrosBase = palancas.overrides?.otrosPlanes ?? 0;
 
   const saldoAfore = (rcvBase * fvHoy + aportacionesFV) * ((inc.afore ?? true) ? 1 : 0); // K19
+
+  // Los tres destinos de la subcuenta de vivienda. La casa manda sobre todo:
+  // si el saldo está comprometido con un crédito no hay nada que rescatar.
   const usaCredito = palancas.usaCreditoInfonavit || saldos.credito_infonavit_vigente; // C45
-  const saldoInfonavit = (infBase * fvHoyInf + infonavitFV) * (usaCredito ? 0 : 1); // K20 (0% real)
+  const destinoInfonavit: DestinoInfonavit = usaCredito
+    ? 'vivienda'
+    : palancas.rescatarInfonavit
+      ? 'rescate'
+      : 'pension';
+  const rescataInfonavit = destinoInfonavit === 'rescate';
+  const saldoInfonavit =
+    destinoInfonavit === 'vivienda'
+      ? 0
+      : rescataInfonavit
+        ? infBase * fvHoy + infonavitRescatadoFV // fuera de la cuenta individual, al 3%
+        : infBase * fvHoyInf + infonavitFV; // K20 (0% real)
   const saldoAV =
     (avBase * fvHoy + ahorroVoluntarioFV) * ((inc.ahorroVoluntario ?? true) ? 1 : 0); // K21
   const saldoCorporativo =
@@ -188,15 +212,19 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
     ((inc.otrosPlanes ?? true) ? 1 : 0);
 
   // ---- Pensiones (K22..K24) ----
-  // Cada saldo se convierte a renta con la misma URV; sólo el RCV paga el
-  // castigo del seguro de sobrevivencia (ver FACTOR_RETIRO).
+  // Cada saldo se convierte a renta con la misma URV. Paga el castigo del
+  // seguro de sobrevivencia lo que compra la renta del IMSS: el RCV siempre y
+  // la vivienda mientras se quede para la pensión.
   const aRenta = (saldo: number) => saldo / urv / 12;
   const negativa = !(semanasRetiro > semanasMinimasPMG);
 
   const rentaRCV = aRenta(saldoAfore * FACTOR_RETIRO);
-  const rentaInfonavit = aRenta(saldoInfonavit);
-  // Lo que la cuenta individual da por sí sola, antes del piso.
-  const rentaCuentaIndividual = rentaRCV + rentaInfonavit;
+  const rentaInfonavit = aRenta(
+    rescataInfonavit ? saldoInfonavit : saldoInfonavit * FACTOR_RETIRO,
+  );
+  // Lo que la cuenta individual da por sí sola, antes del piso. La vivienda
+  // rescatada ya no está aquí: se fue arriba del piso.
+  const rentaCuentaIndividual = rentaRCV + (rescataInfonavit ? 0 : rentaInfonavit);
   // El gobierno completa hasta la mínima garantizada. Con el piso puesto, cada
   // peso de vivienda le quita un peso al complemento: la pensión no se mueve.
   const complementoPmg = negativa ? 0 : Math.max(0, pmg - rentaCuentaIndividual);
@@ -204,7 +232,11 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
 
   const pensionAfore = negativa ? null : Math.max(rentaRCV, pmg); // K22
   const pensionAforeInfonavit = negativa ? null : rentaCuentaIndividual + complementoPmg; // K23
-  const rentaEncima = aRenta(saldoAV) + aRenta(saldoCorporativo) + aRenta(saldoOtrosPlanes);
+  const rentaEncima =
+    (rescataInfonavit ? rentaInfonavit : 0) +
+    aRenta(saldoAV) +
+    aRenta(saldoCorporativo) +
+    aRenta(saldoOtrosPlanes);
   const pensionTotal = negativa ? null : pensionAforeInfonavit! + rentaEncima; // K24
 
   const fuentes: FuentePension[] = negativa
@@ -220,10 +252,11 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
         },
         {
           id: 'infonavit' as const,
-          capa: 'cuenta_individual' as const,
+          capa: (rescataInfonavit ? 'encima' : 'cuenta_individual') as CapaFuente,
           saldoAlRetiro: saldoInfonavit,
           pensionMensual: rentaInfonavit,
-          absorbidaPorPmg: enPmg && rentaInfonavit > 0,
+          // Rescatada nunca la absorbe el piso: para eso se rescata.
+          absorbidaPorPmg: !rescataInfonavit && enPmg && rentaInfonavit > 0,
           incluida: !usaCredito,
         },
         {
@@ -312,6 +345,7 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
       urv,
       pmg,
       aportacionesFuturas: aportacionesFV,
+      destinoInfonavit,
       enPmg,
       complementoPmg,
     },
@@ -332,12 +366,12 @@ export function computeLey97(entrada: EntradaCalculo): ResultadoLey97 {
 export function conservaValorSSV(r: ResultadoLey97): number {
   const { urv, saldoInfonavitProyectado: inf, saldoAforeProyectado: afore, pmg } = r.detalle;
   if (inf <= 0 || urv <= 0) return 1;
-  // La vivienda no compra el seguro de sobrevivencia, así que convierte limpio;
-  // el castigo es sólo del RCV.
-  const bruto = inf / urv / 12; // lo que aportaría si no hubiera piso
+  // Aquí la vivienda SÍ está comprando la renta del IMSS —es justo el caso que
+  // se está evaluando— así que paga el castigo como el RCV. Si se rescata deja
+  // de pagarlo, pero entonces no hay nada que preguntarle a esta función.
+  const bruto = (inf / urv) * FACTOR_RETIRO / 12; // lo que aportaría si no hubiera piso
   if (bruto <= 0) return 1;
-  const rentaRcv = (afore * FACTOR_RETIRO) / urv / 12;
-  const sinInf = Math.max(rentaRcv, pmg);
-  const conInf = Math.max(rentaRcv + bruto, pmg);
+  const sinInf = Math.max((afore / urv) * FACTOR_RETIRO / 12, pmg);
+  const conInf = Math.max(((afore + inf) / urv) * FACTOR_RETIRO / 12, pmg);
   return Math.min(1, Math.max(0, (conInf - sinInf) / bruto));
 }

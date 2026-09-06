@@ -38,14 +38,19 @@ export type DatosAUtilizar = {
   actualizado_at?: string
 }
 
+/**
+ * Qué hace el cliente con su subcuenta de vivienda. No es un sí/no: son tres
+ * caminos distintos y cada uno cambia el rendimiento, el castigo actuarial y
+ * la capa en que cae ese dinero.
+ */
+export type DestinoInfonavit = "pension" | "rescate" | "vivienda"
+
 /** Qué entra al cálculo. Vive sólo en la sesión. */
 export type Incluir = {
   afore?: boolean
   ahorroVoluntario?: boolean
   planCorporativo?: boolean
   otrosPlanes?: boolean
-  /** Invertido en pantalla: el switch pregunta si lo usa para otra cosa. */
-  infonavit?: boolean
 }
 
 export type VehiculoId =
@@ -86,15 +91,9 @@ const VEHICULOS: Record<VehiculoId, Vehiculo> = {
   infonavit: {
     id: "infonavit",
     etiqueta: "Subcuenta de vivienda (Infonavit)",
-    nota: "Si la destina a su casa o a un crédito, no entra a la pensión.",
-    rendimiento: "0% real",
+    // El rendimiento no es fijo: depende del destino, así que lo pone el
+    // selector y no la ficha.
     campo: "infonavit",
-    incluir: "infonavit",
-    // Es la única fuente cuyo interruptor arranca apagado, pero la pregunta se
-    // hace igual que en las demás: "¿este dinero entra a la pensión?". Antes
-    // preguntaba lo contrario ("lo usa para otra cosa") y rompía la lectura de
-    // la lista, donde todo lo demás se lee como fuente de recursos.
-    etiquetaIncluir: "Incluir en el cálculo de pensión",
   },
   voluntario: {
     id: "voluntario",
@@ -152,6 +151,8 @@ export function PanelDatosAUtilizar({
   onValor,
   incluir,
   onIncluir,
+  destinoInfonavit = "pension",
+  onDestinoInfonavit,
   onGuardar,
   guardando = false,
   guardadoAt = null,
@@ -165,6 +166,9 @@ export function PanelDatosAUtilizar({
   onValor: (campo: keyof DatosAUtilizar, v: number | undefined) => void
   incluir?: Incluir
   onIncluir?: (clave: keyof Incluir, v: boolean) => void
+  /** Destino de la subcuenta de vivienda. Sólo si el panel la muestra. */
+  destinoInfonavit?: DestinoInfonavit
+  onDestinoInfonavit?: (d: DestinoInfonavit) => void
   /** Sin esta prop el panel no muestra botón de guardar (modo sólo escenario). */
   onGuardar?: () => void
   guardando?: boolean
@@ -186,19 +190,26 @@ export function PanelDatosAUtilizar({
         {vehiculos.map((id, i) => {
           const v = VEHICULOS[id]
           const clave = v.incluir
-          // Todos preguntan lo mismo: ¿este dinero entra a la pensión? Por
-          // default sí; el Infonavit es el único que llega apagado, y eso lo
-          // decide quien arma el escenario, no la etiqueta.
-          const dentro = clave ? (incluir?.[clave] ?? true) : true
+          const esInfonavit = id === "infonavit"
+          // Todos preguntan lo mismo: ¿este dinero entra al cálculo? La
+          // vivienda es la excepción, porque no es sí/no sino tres destinos.
+          const dentro = esInfonavit
+            ? destinoInfonavit !== "vivienda"
+            : clave
+              ? (incluir?.[clave] ?? true)
+              : true
+          const rendimiento = esInfonavit
+            ? DESTINO_INFONAVIT[destinoInfonavit].rendimiento
+            : v.rendimiento
 
           return (
             <div key={id} className="flex flex-col gap-2">
               {i > 0 && <Separator className="mb-1" />}
               <div className="flex items-baseline justify-between gap-2">
                 <Label className="text-xs font-medium">{v.etiqueta}</Label>
-                {v.rendimiento && (
+                {rendimiento && (
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground tabular-nums">
-                    {v.rendimiento}
+                    {rendimiento}
                   </span>
                 )}
               </div>
@@ -223,7 +234,11 @@ export function PanelDatosAUtilizar({
 
               {v.nota && <p className="text-xs text-muted-foreground">{v.nota}</p>}
 
-              {clave && onIncluir && (
+              {esInfonavit && onDestinoInfonavit && (
+                <SelectorDestino valor={destinoInfonavit} onChange={onDestinoInfonavit} />
+              )}
+
+              {!esInfonavit && clave && onIncluir && (
                 <InterruptorIncluir
                   etiqueta={v.etiquetaIncluir ?? "Incluir en el cálculo de pensión"}
                   checked={dentro}
@@ -253,6 +268,70 @@ export function PanelDatosAUtilizar({
         </div>
       )}
     </details>
+  )
+}
+
+/**
+ * Los tres destinos de la subcuenta de vivienda, con lo que cambia cada uno.
+ *
+ * Dentro de la cuenta individual ese dinero está en el peor lugar posible:
+ * rinde 0% real, paga un seguro de sobrevivencia que el cliente no eligió, y
+ * si cae en la mínima garantizada no le suma nada. Rescatarlo arregla las tres
+ * cosas — por eso el selector dice qué gana, no sólo qué opción es.
+ */
+const DESTINO_INFONAVIT: Record<
+  DestinoInfonavit,
+  { titulo: string; detalle: string; rendimiento: string }
+> = {
+  pension: {
+    titulo: "A la pensión",
+    detalle:
+      "Se queda en su cuenta individual y compra la renta del IMSS. Rinde 0% real, paga el seguro de sobrevivencia, y si cae en la mínima garantizada no le suma nada.",
+    rendimiento: "0% real",
+  },
+  rescate: {
+    titulo: "Rescatarlo",
+    detalle:
+      "Sale de la cuenta individual y se invierte al 3% real, igual que la AFORE. No paga el seguro de sobrevivencia y va por encima de la mínima garantizada, así que siempre suma.",
+    rendimiento: "3% real",
+  },
+  vivienda: {
+    titulo: "Lo usa para su casa",
+    detalle:
+      "Lo destina a una vivienda o ya tiene un crédito vigente. No entra al cálculo de la pensión.",
+    rendimiento: "",
+  },
+}
+
+function SelectorDestino({
+  valor,
+  onChange,
+}: {
+  valor: DestinoInfonavit
+  onChange: (d: DestinoInfonavit) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs text-muted-foreground">¿Qué hace con este saldo?</Label>
+      <div className="flex flex-wrap gap-1.5">
+        {(Object.keys(DESTINO_INFONAVIT) as DestinoInfonavit[]).map((d) => (
+          <button
+            key={d}
+            type="button"
+            aria-pressed={valor === d}
+            onClick={() => onChange(d)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+              valor === d
+                ? "bg-[var(--brand-primary)] text-white"
+                : "border border-border bg-background hover:bg-muted"
+            }`}
+          >
+            {DESTINO_INFONAVIT[d].titulo}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">{DESTINO_INFONAVIT[valor].detalle}</p>
+    </div>
   )
 }
 

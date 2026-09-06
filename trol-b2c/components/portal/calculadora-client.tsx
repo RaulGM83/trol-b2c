@@ -36,6 +36,7 @@ import {
   camposDe,
   PanelDatosAUtilizar,
   type DatosAUtilizar,
+  type DestinoInfonavit,
   type Incluir,
   type VehiculoId,
 } from "@/components/portal/datos-a-utilizar"
@@ -66,10 +67,7 @@ const FUENTE_NOMBRE: Record<string, { titulo: string; sub?: string }> = {
     titulo: "Ahorro para el retiro (RCV)",
     sub: "Lo que acumuló en su AFORE más lo que siga aportando",
   },
-  infonavit: {
-    titulo: "Subcuenta de vivienda (Infonavit)",
-    sub: "Sólo si no la destina a su casa",
-  },
+  infonavit: { titulo: "Subcuenta de vivienda (Infonavit)" },
   complemento_pmg: {
     titulo: "Complemento del gobierno",
     sub: "Lo que falta para llegar a la pensión mínima garantizada",
@@ -77,6 +75,20 @@ const FUENTE_NOMBRE: Record<string, { titulo: string; sub?: string }> = {
   ahorro_voluntario: { titulo: "Ahorro voluntario en AFORE" },
   plan_corporativo: { titulo: "Plan de retiro de la empresa" },
   otros_planes: { titulo: "Otros planes (PPR, fondos, caja)" },
+}
+
+// Lo que hay que saber del renglón de vivienda según lo que se decidió hacer
+// con ella. Es la única fuente cuyo comportamiento cambia con el escenario.
+const SUB_INFONAVIT: Record<string, string> = {
+  pension: "Compra la renta del IMSS: 0% real y paga el seguro de sobrevivencia",
+  rescate: "Rescatada: 3% real, sin seguro de sobrevivencia y encima de la mínima",
+  vivienda: "La destina a su casa",
+}
+
+const DESTINO_PDF: Record<string, string> = {
+  pension: "A la pensión — 0% real, paga seguro de sobrevivencia",
+  rescate: "Rescatada — 3% real, por encima de la mínima",
+  vivienda: "La usa para su casa — fuera del cálculo",
 }
 
 const CAPA_TITULO: Record<string, string> = {
@@ -109,8 +121,12 @@ function filasFuentes(
       const sub = !f.incluida
         ? "Fuera de este escenario"
         : f.absorbidaPorPmg
-          ? "Se lo descuenta al complemento: no cambia la pensión"
-          : nombre.sub
+          ? // El dato importa poco sin la salida: si está absorbida, rescatarla
+            // es exactamente lo que la despega del piso.
+            "Se lo descuenta al complemento: no cambia la pensión. Rescatarla la pondría por encima del piso."
+          : f.id === "infonavit"
+            ? SUB_INFONAVIT[r.detalle.destinoInfonavit]
+            : nombre.sub
       filas.push({
         label: nombre.titulo,
         sub,
@@ -1001,11 +1017,13 @@ function Calc97Panel({
     setPalancas((p) => ({ ...p, [k]: v }))
 
   // Qué dinero entra al cálculo. Sólo de la sesión: es una pregunta de
-  // escenario, no un dato del cliente. El Infonavit arranca FUERA porque la
-  // mayoría lo tiene comprometido con la casa; el asesor lo mete si aplica.
-  const [incluir, setIncluir] = useState<Incluir>({ infonavit: false })
+  // escenario, no un dato del cliente.
+  const [incluir, setIncluir] = useState<Incluir>({})
   const setIncluirClave = (k: keyof Incluir, v: boolean) =>
     setIncluir((i) => ({ ...i, [k]: v }))
+  // La vivienda no es un sí/no: son tres destinos. Arranca en "a la pensión"
+  // —es lo que pasa si nadie hace nada— y el asesor decide desde ahí.
+  const [destinoInfonavit, setDestinoInfonavit] = useState<DestinoInfonavit>("pension")
 
   // Las palancas que ve el motor: las del escenario más los datos capturados.
   // Los montos no viven en `palancas` porque se comparten con la pestaña de
@@ -1013,9 +1031,9 @@ function Calc97Panel({
   const palancasConDatos = useMemo<Palancas>(
     () => ({
       ...palancas,
-      // El interruptor del Infonavit se expresa en el motor al revés: "lo usa
-      // para otra cosa" es exactamente `usaCreditoInfonavit`.
-      usaCreditoInfonavit: !(incluir.infonavit ?? false),
+      // Los tres destinos de la vivienda viajan al motor como dos banderas.
+      usaCreditoInfonavit: destinoInfonavit === "vivienda",
+      rescatarInfonavit: destinoInfonavit === "rescate",
       ahorroVoluntarioMensual: datos.ahorro_voluntario_mensual ?? 0,
       planCorporativoMensual: datos.plan_corporativo_mensual ?? 0,
       otrosPlanesMensual: datos.otros_planes_mensual ?? 0,
@@ -1029,7 +1047,7 @@ function Calc97Panel({
         otrosPlanes: datos.otros_planes,
       },
     }),
-    [palancas, datos, incluir],
+    [palancas, datos, incluir, destinoInfonavit],
   )
 
   const entrada = useMemo(
@@ -1084,18 +1102,13 @@ function Calc97Panel({
             },
           ]
         : []),
-      {
-        label: "Infonavit",
-        value: incluir.infonavit
-          ? "Entra al cálculo"
-          : "Fuera: lo usa para otra cosa",
-      },
+      { label: "Subcuenta de vivienda", value: DESTINO_PDF[destinoInfonavit] },
       ...filasPdfVehiculo("AFORE (RCV)", datos.rcv97, undefined, incluir.afore),
       ...filasPdfVehiculo(
-        "Infonavit",
+        "Subcuenta de vivienda",
         datos.infonavit,
         undefined,
-        incluir.infonavit ?? false,
+        destinoInfonavit !== "vivienda",
       ),
       ...filasPdfVehiculo(
         "Ahorro voluntario",
@@ -1202,6 +1215,8 @@ function Calc97Panel({
             onValor={setValor}
             incluir={incluir}
             onIncluir={setIncluirClave}
+            destinoInfonavit={destinoInfonavit}
+            onDestinoInfonavit={setDestinoInfonavit}
             onGuardar={onGuardar ? () => onGuardar(camposDe(VEHICULOS_97)) : undefined}
             guardando={guardando}
             guardadoAt={guardadoAt}

@@ -114,34 +114,109 @@ describe('el desglose cuadra con el total', () => {
   });
 });
 
-describe('el castigo de 0.81 vive sólo en el RCV', () => {
-  // Ojo al comparar: el RCV crece al 3% y recibe las aportaciones futuras,
-  // la vivienda al 0%. Dos overrides iguales NO dan dos saldos iguales, así
-  // que la comparación honesta es peso proyectado contra peso proyectado.
-  const porPeso = (r: ResultadoLey97, id: string) => {
-    const f = fuente(r, id);
-    return f.pensionMensual / f.saldoAlRetiro!;
-  };
+// Ojo al comparar saldos: el RCV crece al 3% y recibe las aportaciones
+// futuras, la vivienda al 0% mientras va a la pensión. Dos overrides iguales
+// NO dan dos saldos iguales, así que la comparación honesta es peso proyectado
+// contra peso proyectado.
+const porPeso = (r: ResultadoLey97, id: string) => {
+  const f = fuente(r, id);
+  return f.pensionMensual / f.saldoAlRetiro!;
+};
 
-  it('un peso de vivienda al retiro rinde más que un peso de RCV', () => {
+describe('quién paga el seguro de sobrevivencia', () => {
+  it('lo paga todo lo que compra la renta del IMSS: RCV y vivienda a la pensión', () => {
     const r = correr({ rcv97: 2_000_000, infonavit: 2_000_000 });
-    expect(porPeso(r, 'infonavit')).toBeGreaterThan(porPeso(r, 'rcv'));
+    expect(porPeso(r, 'infonavit')).toBeCloseTo(porPeso(r, 'rcv'), 10);
   });
 
-  it('la vivienda convierte al mismo factor que el ahorro voluntario', () => {
-    const r = correr({ rcv97: 2_000_000, infonavit: 500_000, ahorroVoluntario: 500_000 });
-    expect(porPeso(r, 'infonavit')).toBeCloseTo(porPeso(r, 'ahorro_voluntario'), 10);
+  it('el ahorro voluntario no lo paga, y por eso rinde más por peso', () => {
+    const r = correr({ rcv97: 2_000_000, ahorroVoluntario: 500_000 });
+    expect(porPeso(r, 'ahorro_voluntario')).toBeGreaterThan(porPeso(r, 'rcv'));
+    expect(porPeso(r, 'rcv')).toBeCloseTo(porPeso(r, 'ahorro_voluntario') * 0.81, 10);
   });
 
-  it('los planes privados convierten igual de limpio que la vivienda', () => {
-    const r = correr({ rcv97: 2_000_000, planCorporativo: 400_000, otrosPlanes: 400_000 });
-    expect(porPeso(r, 'plan_corporativo')).toBeCloseTo(porPeso(r, 'infonavit'), 10);
-    expect(porPeso(r, 'otros_planes')).toBeCloseTo(porPeso(r, 'infonavit'), 10);
+  it('los planes privados tampoco lo pagan', () => {
+    const r = correr({
+      rcv97: 2_000_000,
+      ahorroVoluntario: 400_000,
+      planCorporativo: 400_000,
+      otrosPlanes: 400_000,
+    });
+    expect(porPeso(r, 'plan_corporativo')).toBeCloseTo(porPeso(r, 'ahorro_voluntario'), 10);
+    expect(porPeso(r, 'otros_planes')).toBeCloseTo(porPeso(r, 'ahorro_voluntario'), 10);
+  });
+});
+
+// --------------------------------------------------------------------------
+// Rescate Infonavit.
+//
+// Dentro de la cuenta individual la subcuenta de vivienda es el peor lugar
+// donde puede estar ese dinero: rinde 0% real, paga una cobertura que el
+// cliente no eligió, y si cae en la mínima garantizada no aporta nada.
+// Rescatarla arregla las tres cosas de un golpe, y eso es exactamente lo que
+// tienen que demostrar estas pruebas.
+// --------------------------------------------------------------------------
+describe('rescatar la subcuenta de vivienda', () => {
+  const conDestino = (rescatar: boolean, extra?: Partial<Palancas>) =>
+    computeLey97({
+      ...base,
+      palancas: { ...palancas, ...extra, rescatarInfonavit: rescatar, overrides: { rcv97: 2_000_000 } },
+    });
+
+  it('el destino queda registrado en el detalle', () => {
+    expect(conDestino(false).detalle.destinoInfonavit).toBe('pension');
+    expect(conDestino(true).detalle.destinoInfonavit).toBe('rescate');
+    expect(
+      conDestino(true, { usaCreditoInfonavit: true }).detalle.destinoInfonavit,
+    ).toBe('vivienda');
   });
 
-  it('el RCV rinde exactamente el 81% por peso', () => {
-    const r = correr({ rcv97: 2_000_000, infonavit: 2_000_000 });
-    expect(porPeso(r, 'rcv')).toBeCloseTo(porPeso(r, 'infonavit') * 0.81, 10);
+  it('la casa manda: con crédito vigente no hay nada que rescatar', () => {
+    const r = conDestino(true, { usaCreditoInfonavit: true });
+    expect(fuente(r, 'infonavit').saldoAlRetiro).toBe(0);
+    expect(fuente(r, 'infonavit').incluida).toBe(false);
+  });
+
+  it('cambia de capa: deja la cuenta individual y se va encima', () => {
+    expect(fuente(conDestino(false), 'infonavit').capa).toBe('cuenta_individual');
+    expect(fuente(conDestino(true), 'infonavit').capa).toBe('encima');
+  });
+
+  it('capitaliza al 3% en vez de al 0%, así que el saldo al retiro es mayor', () => {
+    expect(fuente(conDestino(true), 'infonavit').saldoAlRetiro!).toBeGreaterThan(
+      fuente(conDestino(false), 'infonavit').saldoAlRetiro!,
+    );
+  });
+
+  it('el 3% alcanza también a las aportaciones patronales futuras', () => {
+    // Sin saldo de arranque, todo lo proyectado son aportaciones futuras: si
+    // aun así el rescate rinde más, el 3% las está alcanzando.
+    const soloFuturas = (rescatar: boolean) =>
+      computeLey97({
+        ...base,
+        palancas: { ...palancas, rescatarInfonavit: rescatar, overrides: { infonavit: 0 } },
+      });
+    expect(fuente(soloFuturas(true), 'infonavit').saldoAlRetiro!).toBeGreaterThan(
+      fuente(soloFuturas(false), 'infonavit').saldoAlRetiro!,
+    );
+  });
+
+  it('deja de pagar el seguro de sobrevivencia: rinde más por peso', () => {
+    expect(porPeso(conDestino(true), 'infonavit')).toBeGreaterThan(
+      porPeso(conDestino(false), 'infonavit'),
+    );
+    expect(porPeso(conDestino(true), 'infonavit')).toBeCloseTo(
+      porPeso(conDestino(true), 'rcv') / 0.81,
+      10,
+    );
+  });
+
+  it('sube la pensión total', () => {
+    expect(conDestino(true).pensionTotal!).toBeGreaterThan(conDestino(false).pensionTotal!);
+  });
+
+  it('y el desglose sigue cuadrando', () => {
+    expect(suma(conDestino(true))).toBeCloseTo(conDestino(true).pensionTotal!, 2);
   });
 });
 
@@ -187,6 +262,23 @@ describe('cuando el gobierno completa hasta la mínima', () => {
       fuente(poco, 'complemento_pmg').pensionMensual -
       fuente(mucho, 'complemento_pmg').pensionMensual;
     expect(baja).toBeCloseTo(sube, 2);
+  });
+
+  it('rescatada, la vivienda escapa del piso y sí suma', () => {
+    const aLaPension = pobre({ infonavit: 400_000 });
+    const rescatada = computeLey97({
+      ...base,
+      palancas: {
+        ...palancas,
+        rescatarInfonavit: true,
+        overrides: { rcv97: 40_000, infonavit: 400_000 },
+      },
+    });
+    expect(fuente(aLaPension, 'infonavit').absorbidaPorPmg).toBe(true);
+    expect(fuente(rescatada, 'infonavit').absorbidaPorPmg).toBe(false);
+    // El cliente sigue en el piso, pero ahora la vivienda va encima de él.
+    expect(rescatada.detalle.enPmg).toBe(true);
+    expect(rescatada.pensionTotal!).toBeGreaterThan(aLaPension.pensionTotal!);
   });
 
   it('arriba del piso no hay complemento ni nada absorbido', () => {
