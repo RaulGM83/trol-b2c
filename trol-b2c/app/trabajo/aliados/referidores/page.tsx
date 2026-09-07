@@ -37,13 +37,13 @@ export default async function AliadosReferidores() {
       .order('referido_en', { ascending: false }),
     db
       .from('comisiones')
-      .select('id,aliado_id,persona_id,base,pct,monto,estado,creado_en,pagada_en')
+      .select('id,aliado_id,persona_id,oportunidad_id,base,pct,monto,estado,creado_en,pagada_en')
       .order('creado_en', { ascending: false }),
     // Ganadas de un referido a las que todavía les falta el honorario: es lo
     // único que separa al aliado de su comisión (123).
     db
       .from('v_ganadas_sin_honorario')
-      .select('oportunidad_id,codigo,persona_id,nombre,apellidos,aliado_id,aliado_nombre,cerrada_en')
+      .select('oportunidad_id,codigo,persona_id,nombre,apellidos,aliado_id,aliado_nombre,cerrada_en,comision_pct_aliado,pct_efectivo')
       .order('cerrada_en', { ascending: false, nullsFirst: false }),
   ]);
 
@@ -100,6 +100,7 @@ export default async function AliadosReferidores() {
     estado: c.estado,
     creado_en: c.creado_en,
     pagada_en: c.pagada_en,
+    oportunidad_id: c.oportunidad_id ?? null,
   }));
 
   const lista: AliadoFila[] = filas.map((a) => {
@@ -130,6 +131,8 @@ export default async function AliadosReferidores() {
     apellidos: o.apellidos,
     aliado_nombre: o.aliado_nombre ?? nombreAliado.get(o.aliado_id) ?? 'Aliado',
     cerrada_en: o.cerrada_en,
+    comision_pct_aliado: o.comision_pct_aliado == null ? null : Number(o.comision_pct_aliado),
+    pct_efectivo: o.pct_efectivo == null ? null : Number(o.pct_efectivo),
   }));
 
   return (

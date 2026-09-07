@@ -1244,18 +1244,40 @@ export async function pagarComisiones(ids: string[], referencia?: string | null)
 }
 
 /**
- * Guarda lo que Trol cobra por una operación ganada (123).
+ * Guarda los términos de comisión de una operación ganada (123, 124).
  *
  * Va aparte del cambio de etapa a propósito: una venta se cierra el día que se
- * cierra, aunque el honorario todavía no esté definido. De este número —no del
- * beneficio del cliente— sale la comisión del aliado que lo refirió, y la
- * pantalla de referidores persigue las ganadas que aún no lo traen.
+ * cierra, aunque el honorario todavía no esté definido. De ese número —no del
+ * beneficio del cliente— sale la comisión del aliado que lo refirió.
+ *
+ * El porcentaje se puede pactar sólo para esta operación. Vacío significa "el
+ * de siempre", el del aliado, y se vuelve a leer cada vez que algo cambia: no
+ * se congela una copia que después nadie sabría que quedó vieja.
+ *
+ * Sólo se escribe lo que venga en `x`. Pasar `null` borra; no pasar la llave
+ * deja el valor como estaba.
  */
-export async function guardarHonorario(opId: string, personaId: string, monto: number | null) {
+export async function guardarTerminosComision(
+  opId: string,
+  personaId: string,
+  x: { honorario?: number | null; pct?: number | null },
+) {
   await requireMiembro();
-  const v = monto == null || Number.isNaN(monto) ? null : Number(monto);
-  if (v != null && v < 0) return fail(new Error('El honorario no puede ser negativo.'));
-  const { error } = await t3().from('oportunidades').update({ honorario_trol: v }).eq('id', opId);
+  const patch: Record<string, number | null> = {};
+
+  if ('honorario' in x) {
+    const v = x.honorario == null || Number.isNaN(x.honorario) ? null : Number(x.honorario);
+    if (v != null && v < 0) return fail(new Error('El honorario no puede ser negativo.'));
+    patch.honorario_trol = v;
+  }
+  if ('pct' in x) {
+    const v = x.pct == null || Number.isNaN(x.pct) ? null : Number(x.pct);
+    if (v != null && (v <= 0 || v > 1)) return fail(new Error('El porcentaje va entre 0 y 100%.'));
+    patch.comision_pct_aliado = v;
+  }
+  if (!Object.keys(patch).length) return ok();
+
+  const { error } = await t3().from('oportunidades').update(patch).eq('id', opId);
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
   revalidatePath('/trabajo/aliados/referidores');

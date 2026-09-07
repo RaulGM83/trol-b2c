@@ -2,7 +2,7 @@
 // Cambio de etapa de una oportunidad (ciclo unificado, migración 084).
 // Se usa en el expediente (/trabajo/p/[id]) y en la lista por línea (/trabajo/embudo).
 import { useState, useTransition } from 'react';
-import { cambiarEstadoOportunidad, asignarEspecialista, guardarHonorario } from '@/app/trabajo/actions';
+import { cambiarEstadoOportunidad, asignarEspecialista, guardarTerminosComision } from '@/app/trabajo/actions';
 
 type R = { ok: boolean; error?: string };
 export type Motivo = { codigo: string; nombre: string };
@@ -12,6 +12,8 @@ export type OpEtapa = {
   motivo_perdida?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota_estado?: string | null;
   /** Lo que Trol cobra por esta operación (123). Base de la comisión del aliado que refirió. */
   honorario_trol?: number | null;
+  /** Porcentaje pactado sólo para esta venta (124). Vacío = el del aliado. */
+  comision_pct_aliado?: number | null;
 };
 
 const ESTADOS: [string, string][] = [
@@ -24,8 +26,10 @@ export const ESTADO_COLOR: Record<string, string> = {
 const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 const sel = 'rounded-lg border border-line bg-white px-2 py-1 text-xs';
 
-export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros, compacto }: {
+export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros, compacto, conAliado }: {
   op: OpEtapa; personaId: string; motivos: Motivo[]; proveedores: ProveedorOp[]; miembros?: { id: string; nombre: string }[]; compacto?: boolean;
+  /** Esta persona llegó referida por un aliado: entonces el % de la venta importa. */
+  conAliado?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [estado, setEstado] = useState(op.estado === 'posible' ? 'detectada' : op.estado);
@@ -34,7 +38,10 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
   const [fecha, setFecha] = useState(op.contactar_despues ?? '');
   const [nota, setNota] = useState('');
   const [honorario, setHonorario] = useState(op.honorario_trol == null ? '' : String(op.honorario_trol));
+  const [pct, setPct] = useState(op.comision_pct_aliado == null ? '' : String(Math.round(Number(op.comision_pct_aliado) * 1000) / 10));
   const [msg, setMsg] = useState<string | null>(null);
+  const honorarioGuardado = op.honorario_trol == null ? '' : String(op.honorario_trol);
+  const pctGuardado = op.comision_pct_aliado == null ? '' : String(Math.round(Number(op.comision_pct_aliado) * 1000) / 10);
   const provs = proveedores.filter((p) => !p.lineas?.length || p.lineas.includes(op.codigo));
   const cambio = estado !== op.estado || motivo !== (op.motivo_perdida ?? '') || prov !== (op.proveedor ?? '') || fecha !== (op.contactar_despues ?? '') || !!nota.trim();
   const guardar = () => start(async () => {
@@ -64,18 +71,29 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={sel} disabled={pending} />
         </label>
       )}
-      {/* El honorario se guarda aparte del cambio de etapa: cerrar la venta no
+      {/* Los términos se guardan aparte del cambio de etapa: cerrar la venta no
           puede quedarse detenido porque todavía no se sepa cuánto se cobra.
-          Cuando entra, de ahí sale la comisión del aliado que la refirió (123). */}
+          Cuando entra el honorario, de ahí sale la comisión del aliado que la
+          refirió (123), con el porcentaje pactado para esta venta si lo hay (124). */}
       {estado === 'ganada' && (
         <label className="flex items-center gap-1 text-[11px] text-muted">honorario Trol $
           <input value={honorario} onChange={(e) => setHonorario(e.target.value)} inputMode="decimal" placeholder="—" className={`${sel} w-24`} disabled={pending} />
+          {conAliado && (
+            <>
+              <span>comisión aliado</span>
+              <input value={pct} onChange={(e) => setPct(e.target.value)} inputMode="decimal" placeholder={'%'} className={`${sel} w-14`} disabled={pending} />
+              <span>%</span>
+            </>
+          )}
           <button
             className="underline disabled:opacity-40"
-            disabled={pending || honorario.trim() === (op.honorario_trol == null ? '' : String(op.honorario_trol))}
+            disabled={pending || (honorario.trim() === honorarioGuardado && pct.trim() === pctGuardado)}
             onClick={() => start(async () => {
               setMsg(null);
-              const r = (await guardarHonorario(op.id, personaId, honorario.trim() === '' ? null : Number(honorario))) as R;
+              const cambios: { honorario?: number | null; pct?: number | null } = {};
+              if (honorario.trim() !== honorarioGuardado) cambios.honorario = honorario.trim() === '' ? null : Number(honorario);
+              if (conAliado && pct.trim() !== pctGuardado) cambios.pct = pct.trim() === '' ? null : Number(pct) / 100;
+              const r = (await guardarTerminosComision(op.id, personaId, cambios)) as R;
               if (!r.ok) setMsg(r.error ?? 'error');
             })}
           >guardar</button>

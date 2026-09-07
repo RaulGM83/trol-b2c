@@ -19,7 +19,7 @@ import {
   altaAliado,
   decidirReferido,
   guardarComisionAliado,
-  guardarHonorario,
+  guardarTerminosComision,
   pagarComisiones,
 } from '@/app/trabajo/actions';
 
@@ -71,6 +71,8 @@ export type ComisionFila = {
   estado: string;
   creado_en: string;
   pagada_en: string | null;
+  /** Para poder mover el % de esa venta desde aquí (124). */
+  oportunidad_id: string | null;
 };
 
 /** Una venta ganada de un referido a la que todavía le falta el honorario (123). */
@@ -82,6 +84,10 @@ export type PendienteHonorario = {
   apellidos: string | null;
   aliado_nombre: string;
   cerrada_en: string | null;
+  /** Lo pactado para esta venta; vacío = el del aliado (124). */
+  comision_pct_aliado: number | null;
+  /** El que se va a aplicar: el de la venta si lo hay, si no el del aliado. */
+  pct_efectivo: number | null;
 };
 
 type R = { ok: boolean; error?: string; id?: string; n?: number };
@@ -97,6 +103,10 @@ const TIPOS: [string, string][] = [
   ['promotor', 'Promotor'],
   ['otro', 'Otro'],
 ];
+
+/** El % como se teclea: 0.20 se ve y se escribe como 20. */
+const pctTexto = (v: number | null | undefined) =>
+  v == null ? '' : String(Math.round(Number(v) * 1000) / 10);
 
 const nombreDe = (r: ReferidoFila) => [r.nombre, r.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre';
 
@@ -124,6 +134,7 @@ export function ReferidoresPanel({
   const [pcts, setPcts] = useState<Record<string, string>>({});
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [honorarios, setHonorarios] = useState<Record<string, string>>({});
+  const [pctsOp, setPctsOp] = useState<Record<string, string>>({});
 
   const correr = (fn: () => Promise<R>, exito: string) =>
     start(async () => {
@@ -226,18 +237,29 @@ export function ReferidoresPanel({
                   placeholder="—"
                   className="w-28 rounded-lg border border-line px-2 py-1 text-sm"
                 />
+                <input
+                  value={pctsOp[o.oportunidad_id] ?? pctTexto(o.pct_efectivo)}
+                  onChange={(e) => setPctsOp({ ...pctsOp, [o.oportunidad_id]: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="%"
+                  className="w-14 rounded-lg border border-line px-2 py-1 text-sm"
+                  title="Porcentaje sólo para esta venta. Vacío toma el del aliado."
+                />
+                <span className="text-xs text-muted">%</span>
                 <button
                   disabled={pending || !(honorarios[o.oportunidad_id] ?? '').trim()}
                   onClick={() =>
-                    correr(
-                      () =>
-                        guardarHonorario(
-                          o.oportunidad_id,
-                          o.persona_id,
-                          Number(honorarios[o.oportunidad_id]),
-                        ) as Promise<R>,
-                      'Honorario guardado; la comisión ya devengó',
-                    )
+                    correr(() => {
+                      const p = pctsOp[o.oportunidad_id];
+                      return guardarTerminosComision(o.oportunidad_id, o.persona_id, {
+                        honorario: Number(honorarios[o.oportunidad_id]),
+                        // El % sólo se toca si lo moviste: si lo dejas como venía,
+                        // sigue siendo el del aliado y no queda pegado a esta venta.
+                        ...(p !== undefined && p.trim() !== pctTexto(o.pct_efectivo)
+                          ? { pct: p.trim() === '' ? null : Number(p) / 100 }
+                          : {}),
+                      }) as Promise<R>;
+                    }, 'Guardado; la comisión ya devengó')
                   }
                   className="text-xs underline text-muted disabled:opacity-40"
                 >
@@ -299,9 +321,40 @@ export function ReferidoresPanel({
                     {' '}· {fecha(c.creado_en)}
                   </span>
                 </span>
-                <span className="text-xs text-muted">
-                  {mxn.format(Number(c.base))} × {Math.round(Number(c.pct) * 100)}%
-                </span>
+                <span className="text-xs text-muted">{mxn.format(Number(c.base))} ×</span>
+                {c.oportunidad_id ? (
+                  <>
+                    <input
+                      value={pctsOp[c.oportunidad_id] ?? pctTexto(c.pct)}
+                      onChange={(e) =>
+                        setPctsOp({ ...pctsOp, [c.oportunidad_id as string]: e.target.value })
+                      }
+                      inputMode="decimal"
+                      className="w-14 rounded-lg border border-line px-2 py-1 text-xs"
+                      title="Porcentaje sólo para esta venta. Vacío vuelve al del aliado."
+                    />
+                    <span className="text-xs text-muted">%</span>
+                    <button
+                      disabled={
+                        pending ||
+                        (pctsOp[c.oportunidad_id] ?? pctTexto(c.pct)).trim() === pctTexto(c.pct)
+                      }
+                      onClick={() =>
+                        correr(() => {
+                          const p = (pctsOp[c.oportunidad_id as string] ?? '').trim();
+                          return guardarTerminosComision(c.oportunidad_id as string, c.persona_id, {
+                            pct: p === '' ? null : Number(p) / 100,
+                          }) as Promise<R>;
+                        }, 'Porcentaje de esta venta actualizado')
+                      }
+                      className="text-xs underline text-muted disabled:opacity-40"
+                    >
+                      guardar
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-xs text-muted">{Math.round(Number(c.pct) * 100)}%</span>
+                )}
                 <span className="font-semibold">{mxn.format(Number(c.monto))}</span>
               </li>
             ))}
