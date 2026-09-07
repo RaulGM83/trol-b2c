@@ -1242,3 +1242,22 @@ export async function pagarComisiones(ids: string[], referencia?: string | null)
   revalidatePath('/trabajo/aliados/referidores');
   return ok({ n: Number(data ?? 0) });
 }
+
+/**
+ * Guarda lo que Trol cobra por una operación ganada (123).
+ *
+ * Va aparte del cambio de etapa a propósito: una venta se cierra el día que se
+ * cierra, aunque el honorario todavía no esté definido. De este número —no del
+ * beneficio del cliente— sale la comisión del aliado que lo refirió, y la
+ * pantalla de referidores persigue las ganadas que aún no lo traen.
+ */
+export async function guardarHonorario(opId: string, personaId: string, monto: number | null) {
+  await requireMiembro();
+  const v = monto == null || Number.isNaN(monto) ? null : Number(monto);
+  if (v != null && v < 0) return fail(new Error('El honorario no puede ser negativo.'));
+  const { error } = await t3().from('oportunidades').update({ honorario_trol: v }).eq('id', opId);
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok();
+}

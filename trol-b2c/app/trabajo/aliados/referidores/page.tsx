@@ -14,6 +14,7 @@ import {
   ReferidoresPanel,
   type AliadoFila,
   type ComisionFila,
+  type PendienteHonorario,
   type ReferidoFila,
 } from '@/components/trol3/ReferidoresPanel';
 
@@ -25,7 +26,7 @@ export default async function AliadosReferidores() {
   const db = t3();
   const sitio = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
 
-  const [{ data: aliados }, { data: codigos }, { data: referidos }, { data: comisiones }] = await Promise.all([
+  const [{ data: aliados }, { data: codigos }, { data: referidos }, { data: comisiones }, { data: pendientes }] = await Promise.all([
     db.from('aliados').select('id,nombre,empresa,email,telefono,tipo,comision_pct,activo,creado_en').order('creado_en'),
     db.from('codigos_invitacion').select('codigo,aliado_id,activo').not('aliado_id', 'is', null),
     db
@@ -38,6 +39,12 @@ export default async function AliadosReferidores() {
       .from('comisiones')
       .select('id,aliado_id,persona_id,base,pct,monto,estado,creado_en,pagada_en')
       .order('creado_en', { ascending: false }),
+    // Ganadas de un referido a las que todavía les falta el honorario: es lo
+    // único que separa al aliado de su comisión (123).
+    db
+      .from('v_ganadas_sin_honorario')
+      .select('oportunidad_id,codigo,persona_id,nombre,apellidos,aliado_id,aliado_nombre,cerrada_en')
+      .order('cerrada_en', { ascending: false, nullsFirst: false }),
   ]);
 
   const filas = (aliados ?? []) as Any[];
@@ -115,6 +122,16 @@ export default async function AliadosReferidores() {
     };
   });
 
+  const faltantes: PendienteHonorario[] = ((pendientes ?? []) as Any[]).map((o) => ({
+    oportunidad_id: o.oportunidad_id,
+    codigo: o.codigo,
+    persona_id: o.persona_id,
+    nombre: o.nombre,
+    apellidos: o.apellidos,
+    aliado_nombre: o.aliado_nombre ?? nombreAliado.get(o.aliado_id) ?? 'Aliado',
+    cerrada_en: o.cerrada_en,
+  }));
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -131,6 +148,7 @@ export default async function AliadosReferidores() {
       <ReferidoresPanel
         aliados={lista}
         porRevisar={refs.filter((r) => r.estado === 'por_revisar')}
+        sinHonorario={faltantes}
         referidos={refs}
         comisiones={coms}
         sitio={sitio}

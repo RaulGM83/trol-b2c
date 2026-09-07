@@ -19,6 +19,7 @@ import {
   altaAliado,
   decidirReferido,
   guardarComisionAliado,
+  guardarHonorario,
   pagarComisiones,
 } from '@/app/trabajo/actions';
 
@@ -72,6 +73,17 @@ export type ComisionFila = {
   pagada_en: string | null;
 };
 
+/** Una venta ganada de un referido a la que todavía le falta el honorario (123). */
+export type PendienteHonorario = {
+  oportunidad_id: string;
+  codigo: string;
+  persona_id: string;
+  nombre: string | null;
+  apellidos: string | null;
+  aliado_nombre: string;
+  cerrada_en: string | null;
+};
+
 type R = { ok: boolean; error?: string; id?: string; n?: number };
 
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -91,6 +103,7 @@ const nombreDe = (r: ReferidoFila) => [r.nombre, r.apellidos].filter(Boolean).jo
 export function ReferidoresPanel({
   aliados,
   porRevisar,
+  sinHonorario,
   referidos,
   comisiones,
   sitio,
@@ -98,6 +111,7 @@ export function ReferidoresPanel({
 }: {
   aliados: AliadoFila[];
   porRevisar: ReferidoFila[];
+  sinHonorario: PendienteHonorario[];
   referidos: ReferidoFila[];
   comisiones: ComisionFila[];
   /** Para armar el link que se le pasa al aliado. */
@@ -109,6 +123,7 @@ export function ReferidoresPanel({
   const [nuevo, setNuevo] = useState({ nombre: '', empresa: '', email: '', telefono: '', tipo: 'asesor_seguros', pct: '' });
   const [pcts, setPcts] = useState<Record<string, string>>({});
   const [seleccion, setSeleccion] = useState<string[]>([]);
+  const [honorarios, setHonorarios] = useState<Record<string, string>>({});
 
   const correr = (fn: () => Promise<R>, exito: string) =>
     start(async () => {
@@ -172,6 +187,62 @@ export function ReferidoresPanel({
                     No cuenta
                   </button>
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* ---- Lo que falta para poder deber ---- */}
+      {sinHonorario.length ? (
+        <section className="rounded-2xl border border-line bg-white p-5">
+          <h2 className="text-sm font-bold">
+            {sinHonorario.length} venta{sinHonorario.length === 1 ? '' : 's'} ganada
+            {sinHonorario.length === 1 ? '' : 's'} sin honorario capturado
+          </h2>
+          <p className="mb-3 text-xs text-muted">
+            La comisión sale de lo que Trol cobra, no del beneficio del cliente. Hasta que pongas
+            el honorario no hay de dónde sacar el porcentaje, y el aliado no cobra.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {sinHonorario.map((o) => (
+              <li
+                key={o.oportunidad_id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2"
+              >
+                <span className="flex-1">
+                  <Link href={`/trabajo/p/${o.persona_id}`} className="font-semibold underline">
+                    {[o.nombre, o.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre'}
+                  </Link>
+                  <span className="text-muted">
+                    {' '}· {o.codigo} · referido por {o.aliado_nombre} · {fecha(o.cerrada_en)}
+                  </span>
+                </span>
+                <span className="text-xs text-muted">honorario $</span>
+                <input
+                  value={honorarios[o.oportunidad_id] ?? ''}
+                  onChange={(e) => setHonorarios({ ...honorarios, [o.oportunidad_id]: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="—"
+                  className="w-28 rounded-lg border border-line px-2 py-1 text-sm"
+                />
+                <button
+                  disabled={pending || !(honorarios[o.oportunidad_id] ?? '').trim()}
+                  onClick={() =>
+                    correr(
+                      () =>
+                        guardarHonorario(
+                          o.oportunidad_id,
+                          o.persona_id,
+                          Number(honorarios[o.oportunidad_id]),
+                        ) as Promise<R>,
+                      'Honorario guardado; la comisión ya devengó',
+                    )
+                  }
+                  className="text-xs underline text-muted disabled:opacity-40"
+                >
+                  guardar
+                </button>
               </li>
             ))}
           </ul>

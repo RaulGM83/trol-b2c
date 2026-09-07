@@ -2,7 +2,7 @@
 // Cambio de etapa de una oportunidad (ciclo unificado, migración 084).
 // Se usa en el expediente (/trabajo/p/[id]) y en la lista por línea (/trabajo/embudo).
 import { useState, useTransition } from 'react';
-import { cambiarEstadoOportunidad, asignarEspecialista } from '@/app/trabajo/actions';
+import { cambiarEstadoOportunidad, asignarEspecialista, guardarHonorario } from '@/app/trabajo/actions';
 
 type R = { ok: boolean; error?: string };
 export type Motivo = { codigo: string; nombre: string };
@@ -10,6 +10,8 @@ export type ProveedorOp = { codigo: string; nombre: string; lineas: string[] };
 export type OpEtapa = {
   id: string; codigo: string; estado: string; especialista_id?: string | null;
   motivo_perdida?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota_estado?: string | null;
+  /** Lo que Trol cobra por esta operación (123). Base de la comisión del aliado que refirió. */
+  honorario_trol?: number | null;
 };
 
 const ESTADOS: [string, string][] = [
@@ -31,6 +33,7 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
   const [prov, setProv] = useState(op.proveedor ?? '');
   const [fecha, setFecha] = useState(op.contactar_despues ?? '');
   const [nota, setNota] = useState('');
+  const [honorario, setHonorario] = useState(op.honorario_trol == null ? '' : String(op.honorario_trol));
   const [msg, setMsg] = useState<string | null>(null);
   const provs = proveedores.filter((p) => !p.lineas?.length || p.lineas.includes(op.codigo));
   const cambio = estado !== op.estado || motivo !== (op.motivo_perdida ?? '') || prov !== (op.proveedor ?? '') || fecha !== (op.contactar_despues ?? '') || !!nota.trim();
@@ -59,6 +62,23 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
       {['detectada', 'presentada', 'interesada', 'en_proceso'].includes(estado) && (
         <label className="flex items-center gap-1 text-[11px] text-muted">contactar después
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={sel} disabled={pending} />
+        </label>
+      )}
+      {/* El honorario se guarda aparte del cambio de etapa: cerrar la venta no
+          puede quedarse detenido porque todavía no se sepa cuánto se cobra.
+          Cuando entra, de ahí sale la comisión del aliado que la refirió (123). */}
+      {estado === 'ganada' && (
+        <label className="flex items-center gap-1 text-[11px] text-muted">honorario Trol $
+          <input value={honorario} onChange={(e) => setHonorario(e.target.value)} inputMode="decimal" placeholder="—" className={`${sel} w-24`} disabled={pending} />
+          <button
+            className="underline disabled:opacity-40"
+            disabled={pending || honorario.trim() === (op.honorario_trol == null ? '' : String(op.honorario_trol))}
+            onClick={() => start(async () => {
+              setMsg(null);
+              const r = (await guardarHonorario(op.id, personaId, honorario.trim() === '' ? null : Number(honorario))) as R;
+              if (!r.ok) setMsg(r.error ?? 'error');
+            })}
+          >guardar</button>
         </label>
       )}
       <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder={compacto ? 'Nota' : 'Nota (queda en bitácora)'} className={`${sel} min-w-[160px] flex-1`} disabled={pending} />
