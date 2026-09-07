@@ -1158,3 +1158,87 @@ export async function ligarEscenarios(diagnosticoId: string, personaId: string, 
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
+
+// ---------------------------------------------------------------------------
+// Aliados que refieren (122). Cuatro acciones, ninguna calcula nada: la SQL
+// pone el código, la visibilidad y el devengo.
+// ---------------------------------------------------------------------------
+
+/**
+ * Da de alta un aliado referidor y le crea su link de una vez.
+ *
+ * La comisión puede quedar vacía a propósito: se registran sus referidos desde
+ * el primer día aunque los términos todavía se estén pactando. Sin porcentaje
+ * no devenga nada, y la pantalla lo avisa.
+ */
+export async function altaAliado(x: {
+  nombre: string;
+  tipo?: string | null;
+  empresa?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  comisionPct?: number | null;
+  comisionNota?: string | null;
+}) {
+  await requireMiembro();
+  const nombre = (x.nombre ?? '').trim();
+  if (nombre.length < 3) return fail(new Error('Falta el nombre del aliado.'));
+  const pct = x.comisionPct == null || Number.isNaN(x.comisionPct) ? null : Number(x.comisionPct);
+  if (pct != null && (pct <= 0 || pct > 1)) return fail(new Error('La comisión va entre 0 y 100%.'));
+
+  const { data, error } = await t3().rpc('alta_aliado', {
+    p_nombre: nombre,
+    p_tipo: x.tipo?.trim() || 'asesor_seguros',
+    p_empresa: x.empresa?.trim() || null,
+    p_email: x.email?.trim().toLowerCase() || null,
+    p_telefono: x.telefono?.trim() || null,
+    p_comision_pct: pct,
+    p_comision_nota: x.comisionNota?.trim() || null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok({ id: data as string });
+}
+
+/**
+ * Resuelve una referencia que llegó de alguien que ya era cliente de Trol.
+ *
+ * Lo decide una persona, nunca la máquina: la fecha de alta no alcanza para
+ * saber quién trajo realmente a ese cliente. Mientras no se decida, el aliado
+ * no la ve y no devenga.
+ */
+export async function decidirReferido(referidoId: string, estado: 'atribuido' | 'rechazado', nota?: string | null) {
+  await requireMiembro();
+  const { error } = await t3().rpc('decidir_referido', {
+    p_referido: referidoId,
+    p_estado: estado,
+    p_nota: nota?.trim() || null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok();
+}
+
+/** Pacta o corrige el porcentaje de un aliado. Sólo aplica de aquí en adelante: lo ya devengado quedó con el porcentaje de su día. */
+export async function guardarComisionAliado(aliadoId: string, pct: number | null) {
+  await requireMiembro();
+  const v = pct == null || Number.isNaN(pct) ? null : Number(pct);
+  if (v != null && (v <= 0 || v > 1)) return fail(new Error('La comisión va entre 0 y 100%.'));
+  const { error } = await t3().from('aliados').update({ comision_pct: v }).eq('id', aliadoId);
+  if (error) return fail(error);
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok();
+}
+
+/** Marca comisiones como pagadas. Es un registro de tesorería, no mueve dinero. */
+export async function pagarComisiones(ids: string[], referencia?: string | null) {
+  await requireMiembro();
+  if (!ids?.length) return fail(new Error('No hay comisiones seleccionadas.'));
+  const { data, error } = await t3().rpc('pagar_comisiones', {
+    p_ids: ids,
+    p_referencia: referencia?.trim() || null,
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok({ n: Number(data ?? 0) });
+}

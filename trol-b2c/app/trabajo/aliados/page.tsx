@@ -85,6 +85,8 @@ export default async function ConsultasAliados({ searchParams }: { searchParams:
       <section>
         <div className="mb-3 flex items-baseline justify-between">
           <h1 className="text-xl font-extrabold">Consultas de aliados</h1>
+          {/* La otra relación con aliados: los que nos refieren clientes que son de Trol (122). */}
+          <Link href="/trabajo/aliados/referidores" className="text-xs text-muted underline">Aliados referidores →</Link>
           <span className="text-xs text-muted">{count ?? 0} consultas · página {page}</span>
         </div>
         <form action="/trabajo/aliados" className="mb-3 flex flex-wrap items-center gap-2">
