@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 
-export function LinkAliado({ link, qr, pct }: { link: string; qr: string | null; pct: number | null }) {
+export function LinkAliado({ link, qr }: { link: string; qr: string | null }) {
   const [copiado, setCopiado] = useState(false);
 
   return (
@@ -15,7 +15,6 @@ export function LinkAliado({ link, qr, pct }: { link: string; qr: string | null;
           <h2 className="mb-1 text-sm font-bold">Tu liga para compartir</h2>
           <p className="mb-3 text-xs text-muted">
             Quien la abra entra por WhatsApp con nosotros y queda registrado como tuyo.
-            {pct != null ? ` Tienes pactado el ${Math.round(Number(pct) * 100)}% de lo que Trol cobre.` : ''}
           </p>
           <div className="flex items-center gap-2">
             <input

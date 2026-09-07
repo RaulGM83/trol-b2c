@@ -12,6 +12,7 @@
 import QRCode from 'qrcode';
 import { requireAliado, t3, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
 import { LinkAliado } from '@/components/trol3/LinkAliado';
+import { AltaPorAliado } from '@/components/trol3/AltaPorAliado';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export default async function EspacioAliado() {
       .from('v_referidos_aliado')
       .select('referido_id,nombre,apellidos,etapa,ultima_cita,diagnostico_entregado_en,pension_estimada,productos_contratados,comision_devengada,referido_en')
       .order('referido_en', { ascending: false }),
-    db.from('v_comisiones_aliado').select('id,cliente,base,pct,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
+    db.from('v_comisiones_aliado').select('id,cliente,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
   ]);
 
   const refs = (referidos ?? []) as Any[];
@@ -74,12 +75,14 @@ export default async function EspacioAliado() {
       </div>
 
       {link ? (
-        <LinkAliado link={link} qr={qr} pct={a.comision_pct} />
+        <LinkAliado link={link} qr={qr} />
       ) : (
         <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
           Todavía no tienes tu liga para compartir. Escríbenos y te la generamos.
         </section>
       )}
+
+      <AltaPorAliado aliado={a.nombre} />
 
       <section className="rounded-2xl border border-line bg-white p-5">
         <h2 className="mb-3 text-sm font-bold">Cómo van</h2>
@@ -126,7 +129,7 @@ export default async function EspacioAliado() {
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-1 text-sm font-bold">Tus comisiones</h2>
           <p className="mb-3 text-xs text-muted">
-            Se calculan sobre lo que Trol cobró por esa operación, con el porcentaje pactado.
+            Se calculan sobre lo que Trol cobró por esa operación, con lo que tenemos pactado.
           </p>
           <ul className="space-y-1 text-sm">
             {coms.map((c) => (
@@ -134,9 +137,6 @@ export default async function EspacioAliado() {
                 <span className="flex-1">
                   <b>{c.cliente || 'Cliente'}</b>
                   <span className="text-muted"> · {fmtFecha(c.creado_en)}</span>
-                </span>
-                <span className="text-xs text-muted">
-                  {fmtMXN(Number(c.base))} × {Math.round(Number(c.pct) * 100)}%
                 </span>
                 <span className="font-semibold">{fmtMXN(Number(c.monto))}</span>
                 <span
