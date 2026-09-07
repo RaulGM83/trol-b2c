@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
   const type = url.searchParams.get('type') as EmailOtpType | null;
   const nextRaw = url.searchParams.get('next') ?? '/trabajo';
   const next = nextRaw.startsWith('/') ? nextRaw : '/trabajo';
-  const loginPath = next.startsWith('/mi') ? '/mi' : '/trabajo/login';
+  // Cada espacio regresa a su propia puerta: mandar a un aliado al login del
+  // equipo lo deja mirando una pantalla que no es suya (126).
+  const loginPath = next.startsWith('/mi') ? '/mi' : next.startsWith('/aliado') ? '/aliado/entrar' : '/trabajo/login';
 
   const supabase = createClient();
   let error: string | null = null;

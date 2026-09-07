@@ -27,7 +27,7 @@ export default async function AliadosReferidores() {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
 
   const [{ data: aliados }, { data: codigos }, { data: referidos }, { data: comisiones }, { data: pendientes }] = await Promise.all([
-    db.from('aliados').select('id,nombre,empresa,email,telefono,tipo,comision_pct,activo,creado_en').order('creado_en'),
+    db.from('aliados').select('id,nombre,empresa,email,telefono,tipo,comision_pct,activo,creado_en,auth_user_id').order('creado_en'),
     db.from('codigos_invitacion').select('codigo,aliado_id,activo').not('aliado_id', 'is', null),
     db
       .from('v_referidos_aliado')
@@ -120,6 +120,7 @@ export default async function AliadosReferidores() {
       atribuidos: mios.filter((r) => r.estado === 'atribuido').length,
       devengado: suyas.filter((c) => c.estado === 'devengada').reduce((s, c) => s + c.monto, 0),
       pagado: suyas.filter((c) => c.estado === 'pagada').reduce((s, c) => s + c.monto, 0),
+      tieneAcceso: !!a.auth_user_id,
     };
   });
 

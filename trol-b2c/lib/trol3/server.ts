@@ -104,3 +104,67 @@ export async function requireMiembro(): Promise<Miembro> {
   if (!m) redirect('/trabajo/sin-acceso');
   return m as Miembro;
 }
+
+// ============================================================================
+// El aliado que refiere (122, 126).
+//
+// Es una tercera clase de sesión, aparte del miembro y del cliente: no ve
+// expedientes ni saldos, sólo el avance de la gente que él nos presentó. Todo
+// lo que puede leer pasa por las vistas `v_*_aliado`, que corren con los
+// permisos del dueño y traen su propio filtro. Nunca se le da acceso directo a
+// una tabla.
+// ============================================================================
+
+export interface Aliado {
+  id: string;
+  nombre: string;
+  empresa: string | null;
+  email: string | null;
+  telefono: string | null;
+  comision_pct: number | null;
+  codigo: string | null;
+}
+
+/** Aliado referidor autenticado, o null. */
+export async function getAliado(): Promise<Aliado | null> {
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data } = await supabase.schema('trol3').from('v_aliado_yo').select('*').maybeSingle();
+    if (data) return data as Aliado;
+
+    // Primer acceso: su ficha existe con el correo pero sin usuario. Se vincula
+    // igual que a un miembro, y una sola vez — si ya tiene otro usuario pegado,
+    // no se le quita: eso sería tomarle la cuenta a alguien por escribir su
+    // correo.
+    if (user.email) {
+      const admin = t3admin();
+      const { data: a } = await admin
+        .from('aliados')
+        .select('id,auth_user_id')
+        .eq('email', user.email.toLowerCase())
+        .eq('activo', true)
+        .maybeSingle();
+      if (a && !(a as Any).auth_user_id) {
+        await admin.from('aliados').update({ auth_user_id: user.id }).eq('id', (a as Any).id);
+        const { data: yo } = await supabase.schema('trol3').from('v_aliado_yo').select('*').maybeSingle();
+        return (yo ?? null) as Aliado | null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function requireAliado(): Promise<Aliado> {
+  const { redirect } = await import('next/navigation');
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/aliado/entrar');
+  const a = await getAliado();
+  if (!a) redirect('/aliado/entrar?error=sin-acceso');
+  return a as Aliado;
+}

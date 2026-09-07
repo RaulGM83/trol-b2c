@@ -39,6 +39,8 @@ export type AliadoFila = {
   atribuidos: number;
   devengado: number;
   pagado: number;
+  /** Ya entró alguna vez a su espacio: su correo quedó pegado a su ficha (126). */
+  tieneAcceso: boolean;
 };
 
 export type ReferidoFila = {
@@ -461,6 +463,16 @@ export function ReferidoresPanel({
                   {a.empresa ? <span className="font-normal text-muted"> · {a.empresa}</span> : null}
                   {!a.activo ? (
                     <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-muted">inactivo</span>
+                  ) : null}
+                  {/* Que se vea quién ya entró: si no, no hay forma de saber si
+                      la liga de acceso llegó o se perdió en su bandeja (126). */}
+                  {a.activo && !a.tieneAcceso ? (
+                    <span
+                      className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-normal text-amber-900"
+                      title={`Todavía no entra a su espacio. Mándale ${sitio}/aliado/entrar y que use ${a.email ?? 'su correo registrado'}.`}
+                    >
+                      sin entrar aún
+                    </span>
                   ) : null}
                 </span>
                 <span className="text-xs text-muted">
