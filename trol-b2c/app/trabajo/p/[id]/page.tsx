@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, fmtHora, fmtFechaHora, CHECK_LABEL, ESTADO_OP_LABEL, type Any } from '@/lib/trol3/server';
 import { OportunidadEtapa, EtapaChip, type Motivo, type ProveedorOp } from '@/components/trol3/OportunidadEtapa';
+import { MarcaReferido, DecisionReferido } from '@/components/trol3/MarcaReferido';
 import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
@@ -55,10 +56,21 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
   ]);
-  // ¿Llegó por un aliado? De eso depende que el % de la venta importe (124).
+  // ¿Quién lo trajo? El % de la venta sólo importa si es de un aliado (124), y
+  // la marca de quién lo refirió va en la cabecera (125). El primero manda: si
+  // alguien más comparte su link después, no le quita el cliente a quien lo
+  // presentó.
   const { data: refAliado } = await db
-    .from('referidos').select('id').eq('persona_id', params.id).eq('estado', 'atribuido').limit(1);
-  const conAliado = !!(refAliado ?? []).length;
+    .from('referidos')
+    .select('id,estado,aliado_id,creado_en')
+    .eq('persona_id', params.id)
+    .order('creado_en', { ascending: true })
+    .limit(1);
+  const referido = ((refAliado ?? []) as Any[])[0] ?? null;
+  const conAliado = referido?.estado === 'atribuido';
+  const { data: aliadoRef } = referido
+    ? await db.from('aliados').select('nombre').eq('id', referido.aliado_id).maybeSingle()
+    : { data: null };
   const [{ data: legacyDocs }, { data: credenciales }, { data: ckOp }, { data: ckCat }] = await Promise.all([
     db.rpc('estado_docs_legacy', { p_persona: params.id }),
     db.rpc('credencial_estado', { p_persona: params.id }),
@@ -341,7 +353,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <div className="mt-1 text-sm text-muted">
               {edadDecimal ? `${edadDecimal} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
-            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · canal {e.canal_origen ?? '—'} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
+            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · {referido && (aliadoRef as Any)?.nombre ? <MarcaReferido aliadoNombre={(aliadoRef as Any).nombre} estado={referido.estado} /> : <>canal {e.canal_origen ?? '—'}</>} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
+            {referido?.estado === 'por_revisar' && (aliadoRef as Any)?.nombre ? <DecisionReferido referidoId={referido.id} aliadoNombre={(aliadoRef as Any).nombre} personaId={params.id} /> : null}
           </div>
           <div className="text-right text-xs">
             <div className="flex flex-wrap justify-end gap-2">

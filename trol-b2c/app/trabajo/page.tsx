@@ -67,6 +67,18 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
                   <td className="px-3 py-2">
                     <Link href={`/trabajo/p/${p.id}`} className="font-semibold hover:underline">{p.nombre ?? '(sin nombre)'} {p.apellidos ?? ''}</Link>
                     {p.cabecera_id === m.id ? <span className="ml-1 rounded bg-lime/30 px-1.5 py-0.5 text-[10px] font-semibold text-ink">tuyo</span> : null}
+                    {/* Quién lo trajo (125). Marca, no columna: el 95% no viene
+                        de nadie y no vale ensanchar la tabla para todos. La
+                        referencia sin decidir se ve distinta porque es un
+                        pendiente, no un dato. */}
+                    {p.aliado_nombre ? (
+                      <span
+                        title={p.referido_estado === 'por_revisar' ? `${p.aliado_nombre} lo refirió — falta decidir si se le atribuye` : `Referido por ${p.aliado_nombre}`}
+                        className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${p.referido_estado === 'por_revisar' ? 'bg-amber-100 text-amber-900' : p.referido_estado === 'rechazado' ? 'bg-gray-100 text-muted' : 'bg-sky-100 text-sky-900'}`}
+                      >
+                        {p.referido_estado === 'por_revisar' ? '¿' : ''}{p.aliado_nombre.split(' ')[0]}{p.referido_estado === 'por_revisar' ? '?' : ''}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{p.curp ?? '—'}</td>
                   <td className="px-3 py-2 text-xs">

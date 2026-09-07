@@ -1207,7 +1207,12 @@ export async function altaAliado(x: {
  * saber quién trajo realmente a ese cliente. Mientras no se decida, el aliado
  * no la ve y no devenga.
  */
-export async function decidirReferido(referidoId: string, estado: 'atribuido' | 'rechazado', nota?: string | null) {
+export async function decidirReferido(
+  referidoId: string,
+  estado: 'atribuido' | 'rechazado',
+  nota?: string | null,
+  personaId?: string | null,
+) {
   await requireMiembro();
   const { error } = await t3().rpc('decidir_referido', {
     p_referido: referidoId,
@@ -1216,6 +1221,9 @@ export async function decidirReferido(referidoId: string, estado: 'atribuido' | 
   });
   if (error) return fail(error);
   revalidatePath('/trabajo/aliados/referidores');
+  // Se puede decidir desde el expediente, y ahí es donde se ve el cambio (125).
+  if (personaId) revalidatePath(`/trabajo/p/${personaId}`);
+  revalidatePath('/trabajo');
   return ok();
 }
 
