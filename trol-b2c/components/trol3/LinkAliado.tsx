@@ -50,6 +50,30 @@ export function LinkAliado({ link, qr }: { link: string; qr: string | null }) {
           <img src={qr} alt="Código QR de tu liga" className="h-36 w-36 rounded-xl border border-line" />
         ) : null}
       </div>
+
+      {/* Material listo para compartir: sale al vuelo con SU liga y SU QR,
+          así que siempre está al día y no hay archivos que versionar. */}
+      <div className="mt-5 border-t border-line pt-4">
+        <h3 className="mb-1 text-sm font-bold">Material para tus clientes</h3>
+        <p className="mb-3 text-xs text-muted">
+          Una página que explica qué hace Trol y cómo acompañamos a cada persona, con tu nombre, tu liga y tu QR.
+          Mándala por WhatsApp o imprímela.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/aliado/material/pdf"
+            className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
+          >
+            Descargar PDF (una página)
+          </a>
+          <a
+            href="/aliado/material/whatsapp"
+            className="rounded-lg border border-ink px-3 py-1.5 text-xs font-bold text-ink hover:bg-cream"
+          >
+            Descargar imagen para WhatsApp
+          </a>
+        </div>
+      </div>
     </section>
   );
 }
