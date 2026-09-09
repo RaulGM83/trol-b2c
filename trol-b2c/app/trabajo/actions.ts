@@ -354,6 +354,19 @@ export async function gestionarConsultaAliado(
   return ok({ consulta: data });
 }
 
+/** Reintenta la consulta B2B con el proveedor elegido. Si la consulta ya fue
+ *  exitosa, el RPC crea una consulta nueva (con su costo) que apunta a la anterior. */
+export async function reintentarConsultaAliado(id: string, proveedor: 'belvo' | 'jordan') {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('reintentar_consulta_aliado', { p_id: id, p_proveedor: proveedor });
+  if (error) return fail(error);
+  const r = (data ?? {}) as { modo?: string; id?: string };
+  revalidatePath('/trabajo/aliados');
+  revalidatePath(`/trabajo/aliados/${id}`);
+  if (r.id && r.id !== id) revalidatePath(`/trabajo/aliados/${r.id}`);
+  return ok({ modo: r.modo ?? 'reintento', id: r.id ?? id });
+}
+
 export async function autorizarViraalAliado(consultaId: string, payload: Any, snapshot?: SnapshotEscenario | null) {
   await requireMiembro();
   const p = payload ?? {};

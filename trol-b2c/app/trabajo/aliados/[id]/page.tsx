@@ -5,6 +5,7 @@ import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { requireMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { GestionAliado } from '@/components/trol3/GestionAliado';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
+import { ReintentarConsultaAliado } from '@/components/trol3/ReintentarConsultaAliado';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 
 export const dynamic = 'force-dynamic';
@@ -151,6 +152,13 @@ export default async function ConsultaAliadoDetalle({ params, searchParams }: { 
                 <Link href={href('calculadora')} className="rounded-lg border border-line px-3 py-2 text-center font-semibold hover:bg-cream">Abrir calculadora</Link>
                 <Link href={href('autorizar')} className="rounded-lg bg-ink px-3 py-2 text-center font-semibold text-white hover:opacity-90">Ir a autorizar (Viraal)</Link>
               </div>
+              <ReintentarConsultaAliado
+                id={c.id}
+                statusOrigen={c.status_origen ?? null}
+                exitosa={['completed', 'Doc prev listo', 'Doc previo listo', 'Envío exitoso'].includes(String(c.status_origen)) || !!c.calculo_pensional}
+                intentos={(((c.datos_pipeline as Any)?.datos_entrada?.reintentos ?? []) as Any[])}
+                reintentoDe={((c.datos_pipeline as Any)?.datos_entrada?.reintento_de as string | undefined) ?? null}
+              />
             </section>
           </aside>
         </div>
