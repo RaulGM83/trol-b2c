@@ -6,8 +6,8 @@ import { LEGAL } from '@/lib/legal';
 const soloDigitos = (s: string) => s.replace(/\D/g, '');
 const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/i;
 
-// CTA de captura para leads nuevos (sin cuenta): crea el contacto en HubSpot
-// vía webhook (n8n) y arranca el cálculo oficial con su historial del IMSS.
+// CTA de captura para leads nuevos (sin cuenta): da de alta la persona en trol3
+// (/api/lead) y arranca el cálculo oficial con su historial del IMSS.
 export function LeadForm({ campania = 'tako', origen = 'calcula' }: { campania?: string; origen?: string }) {
   const [curp, setCurp] = useState('');
   const [correo, setCorreo] = useState('');

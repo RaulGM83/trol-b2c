@@ -68,7 +68,7 @@ export function DocumentosPanel({ personaId, docs, legacy, tiposSubida = [], tie
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-1 text-sm font-bold">Diagnóstico avanzado</h2>
           <p className="mb-3 text-xs text-muted">Reporte completo en PDF: escenarios por edad, estrategia, Infonavit y ahorro. Uso interno, sin costo. Llega en unos minutos y aparece en la lista.</p>
-          {!legacy ? <p className="text-xs text-amber-700">Requiere que la persona tenga ficha (espejo HubSpot).</p>
+          {!legacy ? <p className="text-xs text-amber-700">Requiere que la persona tenga ficha en el sistema anterior (public.clientes).</p>
           : !tieneSemilla ? <p className="text-xs text-amber-700">Requiere SISEC/cálculo actualizado (semilla v2).</p>
           : generando ? <p className="text-xs text-muted">Generando… (solicitado {fmtFecha(legacy.diag_avanzado_solicitado_at)}). Recarga en unos minutos.</p>
           : (

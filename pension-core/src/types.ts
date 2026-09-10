@@ -275,7 +275,7 @@ export interface ResultadoLey73 {
 /**
  * Estatus del escenario. La negativa NO es un valor faltante: es un resultado,
  * y el front debe pintarla como tal en vez de dejar el monto vacío.
- * Vocabulario alineado con `escenario_base_status` de HubSpot
+ * Vocabulario heredado de `escenario_base_status` (campo del CRM anterior)
  * (`con_pension` ≡ `viable`; `sin_dato` no se emite desde el motor).
  *
  *  · viable                    → se pensiona.
