@@ -8,6 +8,8 @@ import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/e
 import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { crearActa, crearVentanilla, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
+import { sincronizarConsultaJordan } from '@/lib/jordan/procesar';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -131,6 +133,75 @@ export async function guardarContacto(personaId: string, tipo: 'email' | 'telefo
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
+}
+
+// ── Jordan on demand (132): ventanilla y actas ───────────────────────────────
+// La consulta nace en trol3 (pedir_consulta), se manda a Jordan con el id de la
+// consulta como llave de idempotencia, y se cierra por webhook/cron/botón con
+// `sincronizarConsultaJordan`. Si Jordan rechaza, la consulta queda en `error`
+// con el mensaje de Jordan tal cual (ya viene redactado para el usuario).
+async function cerrarConsultaRechazada(consultaId: string, personaId: string, e: unknown) {
+  const msg = e instanceof JordanError ? `${e.message}${e.code ? ` (${e.code})` : ''}` : e instanceof Error ? e.message : String(e);
+  await createAdminClient().schema('trol3').rpc('resultado_consulta', { p_consulta: consultaId, p_estado: 'error', p_datos: {}, p_documentos: [], p_resultado: null, p_error: msg, p_fecha_dato: null });
+  await createAdminClient().schema('trol3').from('consultas').update({ costo: 0 }).eq('id', consultaId);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return fail(msg);
+}
+
+/** Semanas cotizadas por ventanilla del IMSS (Jordan, ~30 min hábiles, 4 créditos). Sólo cuando la automática no pudo. */
+export async function pedirVentanilla(personaId: string, motivo: string) {
+  const m = await requireMiembro();
+  const admin = createAdminClient().schema('trol3');
+  const [{ data: p }, { data: nss }] = await Promise.all([
+    admin.from('personas').select('curp').eq('id', personaId).maybeSingle(),
+    admin.from('v_mejor_dato').select('valor').eq('persona_id', personaId).eq('campo', 'nss').maybeSingle(),
+  ]);
+  const curp = (p?.curp as string | null)?.trim().toUpperCase();
+  const nssVal = String((nss?.valor as unknown) ?? '').replace(/\D/g, '');
+  if (!curp || curp.length !== 18) return fail('Falta la CURP.');
+  if (nssVal.length !== 11) return fail('Jordan exige el NSS de 11 dígitos: captúralo en Identidad antes de pedir la ventanilla.');
+  const { data, error } = await t3().rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'imss_ventanilla', p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol', p_notificar: false, p_motivo: motivo || 'ventanilla: la consulta automática no pudo', p_forzar: false, p_proveedor: 'jordan_ventanilla' });
+  if (error) return fail(error);
+  const res = data as { ok?: boolean; consulta_id?: string; motivo?: string; costo?: number };
+  if (!res?.ok || !res.consulta_id) return fail(res?.motivo === 'ventanilla_en_curso' ? 'Ya hay un trámite de ventanilla en curso para esta persona.' : `No enviada: ${res?.motivo ?? 'sin motivo'}`);
+  try {
+    const v = await crearVentanilla({ curp, nss: nssVal, idempotencyKey: res.consulta_id });
+    await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { sid: v.sid, estado_jordan: v.estado, eta_min: v.eta_min ?? null, creditos_apartados: v.creditos_apartados ?? null, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ consulta_id: res.consulta_id, sid: v.sid, eta_min: v.eta_min ?? 30 });
+  } catch (e) {
+    return cerrarConsultaRechazada(res.consulta_id, personaId, e);
+  }
+}
+
+/** Acta del Registro Civil (Jordan, 30–90 s normalmente, 1.5 créditos). La pide Trol para un trámite; el cliente la ve en /mi. */
+export async function pedirActa(personaId: string, tipo: TipoActa, conFolio: boolean, motivo: string) {
+  const m = await requireMiembro();
+  if (!TIPOS_ACTA.includes(tipo)) return fail('Tipo de acta inválido.');
+  const admin = createAdminClient().schema('trol3');
+  const { data: p } = await admin.from('personas').select('curp').eq('id', personaId).maybeSingle();
+  const curp = (p?.curp as string | null)?.trim().toUpperCase();
+  if (!curp || curp.length !== 18) return fail('Falta la CURP.');
+  const { data, error } = await t3().rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'acta', p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol', p_notificar: false, p_motivo: motivo || `acta de ${tipo}`, p_forzar: true, p_proveedor: 'jordan_actas' });
+  if (error) return fail(error);
+  const res = data as { ok?: boolean; consulta_id?: string; motivo?: string };
+  if (!res?.ok || !res.consulta_id) return fail(`No enviada: ${res?.motivo ?? 'sin motivo'}`);
+  try {
+    const a = await crearActa({ tipo, curp, conFolio, externalId: res.consulta_id });
+    await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { jordan_id: a.id, tipo_acta: tipo, con_folio: conFolio, estado_jordan: a.status, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ consulta_id: res.consulta_id, jordan_id: a.id });
+  } catch (e) {
+    return cerrarConsultaRechazada(res.consulta_id, personaId, e);
+  }
+}
+
+/** El asesor pregunta a Jordan cómo va (mismo cierre que el webhook y el cron). */
+export async function revisarConsultaJordan(consultaId: string, personaId: string) {
+  await requireMiembro();
+  const r = await sincronizarConsultaJordan(consultaId);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return r.ok ? ok({ estado: r.estado, mensaje: r.mensaje, cambio: r.cambio }) : fail(r.mensaje);
 }
 
 export async function marcarEtapa(personaId: string, etapa: string) {

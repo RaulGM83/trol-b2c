@@ -10,6 +10,8 @@ import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAcc
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
 import { ContactoEditable } from '@/components/trol3/ContactoEditable';
+import { VentanillaBloque, ActasBloque, type ConsultaJordan, type ServicioInfo } from '@/components/trol3/JordanOnDemand';
+import { ventanillaEstado, actasEstado, horarioLegible, MXN_POR_CREDITO, type EstadoServicio } from '@/lib/jordan/client';
 import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
@@ -53,10 +55,23 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('miembros').select('id,nombre,email,roles').eq('activo', true),
     db.from('puntos').select('tipo,puntos,expira_at').eq('persona_id', params.id),
   ]);
-  const [{ data: ultimaImss }, { data: proveedores }] = await Promise.all([
+  // Jordan on demand (132): horario y precio se leen de Jordan al pintar; si no
+  // responde, el botón queda apagado con aviso en vez de fingir que está abierto.
+  const infoServicio = async (f: () => Promise<EstadoServicio>, fallbackCosto: number | null): Promise<ServicioInfo | null> => {
+    try { const e = await f(); return { abierto: !!e.abierto, horario: horarioLegible(e), costo: e.costo_creditos != null ? e.costo_creditos * MXN_POR_CREDITO : fallbackCosto }; } catch { return null; }
+  };
+  const [{ data: ultimaImss }, { data: proveedores }, { data: consultasJordan }] = await Promise.all([
     db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
+    db.from('consultas').select('id,tipo,estado,error,created_at,completed_at,payload_in').eq('persona_id', params.id).in('tipo', ['imss_ventanilla', 'acta']).order('created_at', { ascending: false }).limit(10),
   ]);
+  const costoProv = (codigo: string) => { const x = (proveedores ?? []).find((p: Any) => p.codigo === codigo); return x?.costo_unitario == null ? null : Number(x.costo_unitario); };
+  const [svcVentanilla, svcActas] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas'))]);
+  const cj = (consultasJordan ?? []) as ConsultaJordan[];
+  const ventanillaAbierta = cj.find((c) => c.tipo === 'imss_ventanilla' && ['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
+  const ventanillaUltima = cj.find((c) => c.tipo === 'imss_ventanilla' && !['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
+  const actasAbiertas = cj.filter((c) => c.tipo === 'acta' && ['solicitada', 'en_proceso'].includes(c.estado));
+  const actasUltimas = cj.filter((c) => c.tipo === 'acta' && !['solicitada', 'en_proceso'].includes(c.estado));
   // ¿Quién lo trajo? El % de la venta sólo importa si es de un aliado (124), y
   // la marca de quién lo refirió va en la cabecera (125). El primero manda: si
   // alguien más comparte su link después, no le quita el cliente a quien lo
@@ -508,6 +523,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 inconsistencia={inconsistencia}
                 proveedores={((proveedores ?? []) as Any[]).map((p) => ({ codigo: p.codigo, nombre: p.nombre, costo_unitario: p.costo_unitario == null ? null : Number(p.costo_unitario) })) as Proveedor[]}
               />
+              <VentanillaBloque
+                personaId={e.persona_id}
+                servicio={svcVentanilla}
+                tieneNss={String((datosMap.get('nss')?.valor as unknown) ?? '').replace(/\D/g, '').length === 11}
+                abierta={ventanillaAbierta}
+                ultima={ventanillaUltima}
+                mostrar={['error', 'sin_resultado'].includes(String((ultimaImss as Any)?.estado ?? ''))}
+              />
             </section>
             {opsAbiertas.length ? (
               <section className="rounded-2xl border border-line bg-white p-5">
@@ -598,7 +621,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         )
       )}
 
-      {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
+      {tab === 'documentos' && (<div className="space-y-4"><ActasBloque personaId={e.persona_id} servicio={svcActas} tieneCurp={!!e.curp} abiertas={actasAbiertas} ultimas={actasUltimas} /><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
 
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">
