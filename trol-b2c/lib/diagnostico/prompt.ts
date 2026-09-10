@@ -216,6 +216,9 @@ Productos disponibles para complementar la pensión, independiente del régimen:
 Una cifra de pensión sin la edad a la que se cobra no dice nada: son dos números distintos según cuándo se retire. SIEMPRE menciona la EDAD DE RETIRO acordada (campo edad_retiro) la primera vez que des la pensión estimada.
 Si los datos traen "tabla_por_edad", NO la transcribas: ya va impresa en el documento. Úsala para una frase de lectura —cuánto gana o pierde por esperar— y nada más.
 
+## LO QUE SE HABLÓ EN LA SESIÓN
+Si los datos traen "reuniones", ahí está el resumen de lo que el cliente dijo en la asesoría. Úsalo para recoger SUS palabras —qué le preocupa, qué quiere lograr, qué prioriza— y para que el documento se sienta continuación de esa conversación. NO saques cifras de ahí: toda cifra viene de los demás campos. Si el resumen contradice un dato, manda el dato.
+
 ## ESCENARIOS DE PENSIÓN
 - Escenario Base (Inercial): Qué pasa si el cliente no hace cambios. Si es empleado, sigue cotizando a su salario actual. Si es desempleado, proyección sin semanas nuevas.
 - Escenario Potencial (Optimizado): Resultado de maximizar los factores aplicables (semanas + salario promedio + edad óptima) mediante Modalidad 10 y/o 40.

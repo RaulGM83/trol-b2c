@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3, type Any } from '@/lib/trol3/server';
 import { CitasEquipo, type CitaEquipo } from '@/components/trol3/Citas';
+import { ReunionesSinExpediente, type ReunionRow } from '@/components/trol3/Reuniones';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Hoy · Trol equipo' };
@@ -12,8 +13,9 @@ const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency'
 // de la experiencia B2C (24 h vs 7 días). Todo sale de trol3.tablero_hoy().
 export default async function TrabajoHoy() {
   await requireMiembro();
-  const [{ data, error }, { data: citas }] = await Promise.all([
+  const [{ data, error }, { data: citas }, { data: reunionesSueltas }] = await Promise.all([
     t3().rpc('tablero_hoy'),
+    t3().from('v_reuniones').select('*').is('persona_id', null).order('inicio', { ascending: false }).limit(20),
     // Citas (134): las de los próximos 7 días y cualquier cita que llegó del calendario sin expediente.
     t3().from('v_citas_equipo').select('*').or(`and(inicio.gte.${new Date(Date.now() - 2 * 3600e3).toISOString()},inicio.lte.${new Date(Date.now() + 7 * 86400e3).toISOString()}),and(sin_expediente.eq.true,inicio.gte.${new Date(Date.now() - 30 * 86400e3).toISOString()})`).order('inicio').limit(60),
   ]);
@@ -46,6 +48,7 @@ export default async function TrabajoHoy() {
       <div className="rounded-2xl border border-line bg-white p-5">
         <h2 className="text-sm font-bold">Citas {((citas ?? []) as CitaEquipo[]).some((c) => c.sin_expediente) ? <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px]">hay citas sin expediente</span> : null}</h2>
         <div className="mt-2"><CitasEquipo citas={(citas ?? []) as CitaEquipo[]} /></div>
+        {((reunionesSueltas ?? []) as ReunionRow[]).length ? <div className="mt-3 border-t border-line pt-3"><h3 className="text-xs font-bold uppercase text-muted">Reuniones sin expediente</h3><div className="mt-1"><ReunionesSinExpediente reuniones={(reunionesSueltas ?? []) as ReunionRow[]} /></div></div> : null}
       </div>
 
       <div className="rounded-2xl border-2 border-lime bg-white p-5">

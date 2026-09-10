@@ -192,6 +192,9 @@ export type EscenarioCerrado = {
 /** Un renglón de `v_mejor_dato`: el mejor valor de un campo, con su capa. */
 export type MejorDato = { campo: string; valor: unknown; capa?: string | null };
 
+/** Una reunión con el cliente (135): lo que Granola resumió. Sólo el resumen; la transcripción no va al redactor. */
+export type ReunionHecho = { inicio: string | null; asesor: string | null; titulo: string | null; resumen_md: string | null };
+
 /**
  * Lo que el redactor necesita de un escenario cerrado, según su ley.
  *
@@ -287,8 +290,12 @@ export function construirHechos({
   escenarios,
   issste,
   vivienda,
+  reuniones = [],
 }: {
   expediente: Record<string, any>;
+  /** Las últimas reuniones con el cliente (135). El redactor las usa para narrar
+   *  con las palabras del cliente; nunca para inventar cifras. */
+  reuniones?: ReunionHecho[];
   /** `v_mejor_dato` de esta persona. Varios campos que el documento cita viven
    *  SÓLO aquí y no en `v_expediente` — la última cotización, el salario
    *  promedio de 250 semanas, las semanas descontadas. Leerlos del expediente
@@ -433,5 +440,12 @@ export function construirHechos({
     // Lo que el asesor CERRÓ con el cliente. Es la diferencia entre este
     // documento y el que se generaba solo desde la semilla.
     escenarios: escenarios.map((s) => escenarioNarrable(s, num)),
+
+    // Lo que se habló en las sesiones (135). Las dos más recientes, recortadas:
+    // el redactor recoge el tono y las prioridades del cliente, no datos nuevos.
+    reuniones: reuniones
+      .filter((r) => r.resumen_md)
+      .slice(0, 2)
+      .map((r) => ({ fecha: r.inicio, asesor: r.asesor, titulo: r.titulo, resumen: String(r.resumen_md).slice(0, 2500) })),
   };
 }

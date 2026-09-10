@@ -12,6 +12,7 @@ import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
 import { ContactoEditable } from '@/components/trol3/ContactoEditable';
 import { VentanillaBloque, ActasBloque, type ConsultaJordan, type ServicioInfo } from '@/components/trol3/JordanOnDemand';
 import { AgendarBoton, type LinkCitas } from '@/components/trol3/Citas';
+import { ReunionesPanel, type ReunionRow } from '@/components/trol3/Reuniones';
 import { ventanillaEstado, actasEstado, horarioLegible, MXN_POR_CREDITO, type EstadoServicio } from '@/lib/jordan/client';
 import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
@@ -67,7 +68,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('consultas').select('id,tipo,estado,error,created_at,completed_at,payload_in').eq('persona_id', params.id).in('tipo', ['imss_ventanilla', 'acta']).order('created_at', { ascending: false }).limit(10),
   ]);
   const costoProv = (codigo: string) => { const x = (proveedores ?? []).find((p: Any) => p.codigo === codigo); return x?.costo_unitario == null ? null : Number(x.costo_unitario); };
-  const [svcVentanilla, svcActas, { data: linkCitas }] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas')), db.rpc('link_citas_para', { p_persona: params.id })]);
+  const [svcVentanilla, svcActas, { data: linkCitas }, { data: reuniones }] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas')), db.rpc('link_citas_para', { p_persona: params.id }), db.from('v_reuniones').select('*').eq('persona_id', params.id).order('inicio', { ascending: false }).limit(6)]);
   const cj = (consultasJordan ?? []) as ConsultaJordan[];
   const ventanillaAbierta = cj.find((c) => c.tipo === 'imss_ventanilla' && ['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
   const ventanillaUltima = cj.find((c) => c.tipo === 'imss_ventanilla' && !['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
@@ -481,6 +482,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 </div>
               )}
             </section>
+
+            <ReunionesPanel reuniones={(reuniones ?? []) as ReunionRow[]} personaId={e.persona_id} />
 
             <TareasPanel
               tareas={(tareasCliente ?? []) as Tarea[]}

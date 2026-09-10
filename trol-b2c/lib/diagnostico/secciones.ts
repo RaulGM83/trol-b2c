@@ -59,7 +59,7 @@ export const MODELO_REDACTOR = 'gpt-5.5'
  * 2026.09.06.4 — la pensión nunca se da sin la edad de retiro acordada, y la
  *                tabla por edad se lee, no se transcribe.
  */
-export const PROMPT_VERSION = '2026.09.06.4'
+export const PROMPT_VERSION = '2026.09.10.1'
 
 /**
  * Cómo se le pegan los ajustes al prompt base.

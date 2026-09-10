@@ -10,6 +10,7 @@ import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { crearActa, crearVentanilla, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
 import { sincronizarConsultaJordan } from '@/lib/jordan/procesar';
+import { extraerPropuestas } from '@/lib/granola/procesar';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -231,6 +232,34 @@ export async function ligarCita(citaId: string, personaId: string) {
   revalidatePath('/trabajo/hoy');
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
+}
+
+// ── Reuniones (135) ────────────────────────────────────────────────────────
+export async function decidirPropuestaReunion(reunionId: string, i: number, decision: 'aplicar' | 'descartar', personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('aplicar_propuesta_reunion', { p_reunion: reunionId, p_i: i, p_decision: decision, p_actor_id: null });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/** Vuelve a pedir propuestas a la IA sobre la misma reunión (respeta lo ya decidido). */
+export async function releerReunion(reunionId: string, personaId: string) {
+  await requireMiembro();
+  const r = await extraerPropuestas(reunionId);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return r.ok ? ok({ mensaje: r.mensaje }) : fail(r.mensaje);
+}
+
+/** Liga una reunión que llegó sin expediente y la lee. */
+export async function ligarReunion(reunionId: string, personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('ligar_reunion', { p_reunion: reunionId, p_persona: personaId });
+  if (error) return fail(error);
+  const r = await extraerPropuestas(reunionId);
+  revalidatePath('/trabajo/hoy');
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ mensaje: r.ok ? `Ligada. ${r.mensaje}` : `Ligada; la lectura falló: ${r.mensaje}` });
 }
 
 /** Búsqueda corta para ligar citas: nombre o teléfono, 8 resultados. */
@@ -858,6 +887,7 @@ async function hechosDeDiagnostico(
     });
   }
 
+  const { data: reuniones } = await t3().from('v_reuniones').select('inicio,miembro,titulo,resumen_md').eq('persona_id', personaId).order('inicio', { ascending: false }).limit(2);
   return construirHechos({
     expediente: e as Record<string, Any>,
     datos: (datos ?? []) as Any[],
@@ -865,6 +895,7 @@ async function hechosDeDiagnostico(
     escenarios,
     issste: Object.keys(issste).length ? issste : null,
     vivienda,
+    reuniones: ((reuniones ?? []) as Any[]).map((r) => ({ inicio: r.inicio, asesor: r.miembro, titulo: r.titulo, resumen_md: r.resumen_md })),
   });
 }
 
