@@ -69,11 +69,14 @@ export async function listarNotas(args: { updated_after?: string; created_after?
 
 export const listarCarpetas = () => llamar<{ folders?: { id: string; name: string; parent_folder_id?: string | null }[]; data?: unknown[] }>('/folders');
 
-/** Registra el endpoint del webhook. Devuelve `signing_secret` UNA sola vez: guardarlo en GRANOLA_WEBHOOK_SECRET. */
-export function crearWebhook(args: { url: string; scopes?: ('personal' | 'public')[]; events?: string[]; folder_ids?: string[] }) {
+/**
+ * Registra el endpoint del webhook. Devuelve `signing_secret` UNA sola vez: guardarlo en GRANOLA_WEBHOOK_SECRET.
+ * Con llave de WORKSPACE el scope es ['workspace'] (recibe lo que la llave puede leer); 'personal'/'public' son de llave de usuario.
+ */
+export function crearWebhook(args: { url: string; scopes?: ('workspace' | 'personal' | 'public')[]; events?: string[]; folder_ids?: string[] }) {
   return llamar<{ id: string; url: string; signing_secret?: string; events?: string[] }>('/webhook-endpoints', {
     method: 'POST',
-    body: JSON.stringify({ url: args.url, scopes: args.scopes ?? ['personal', 'public'], events: args.events ?? ['note.generated', 'note.edited'], ...(args.folder_ids?.length ? { folder_ids: args.folder_ids } : {}) }),
+    body: JSON.stringify({ url: args.url, scopes: args.scopes ?? ['workspace'], events: args.events ?? ['note.generated', 'note.edited'], ...(args.folder_ids?.length ? { folder_ids: args.folder_ids } : {}) }),
   });
 }
 export const listarWebhooks = () => llamar<unknown>('/webhook-endpoints');
