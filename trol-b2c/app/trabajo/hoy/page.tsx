@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { requireMiembro, t3, type Any } from '@/lib/trol3/server';
+import { CitasEquipo, type CitaEquipo } from '@/components/trol3/Citas';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Hoy · Trol equipo' };
@@ -11,7 +12,11 @@ const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency'
 // de la experiencia B2C (24 h vs 7 días). Todo sale de trol3.tablero_hoy().
 export default async function TrabajoHoy() {
   await requireMiembro();
-  const { data, error } = await t3().rpc('tablero_hoy');
+  const [{ data, error }, { data: citas }] = await Promise.all([
+    t3().rpc('tablero_hoy'),
+    // Citas (134): las de los próximos 7 días y cualquier cita que llegó del calendario sin expediente.
+    t3().from('v_citas_equipo').select('*').or(`and(inicio.gte.${new Date(Date.now() - 2 * 3600e3).toISOString()},inicio.lte.${new Date(Date.now() + 7 * 86400e3).toISOString()}),and(sin_expediente.eq.true,inicio.gte.${new Date(Date.now() - 30 * 86400e3).toISOString()})`).order('inicio').limit(60),
+  ]);
   if (error || !data) return <section className="text-sm text-red-600">Error cargando el tablero: {error?.message ?? 'sin datos'}</section>;
   const d = data as Any;
   const ahorro: Any[] = d.ahorro_pendiente ?? [];
@@ -37,6 +42,11 @@ export default async function TrabajoHoy() {
   return (
     <section className="space-y-5">
       <h1 className="text-xl font-extrabold">Hoy</h1>
+
+      <div className="rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-bold">Citas {((citas ?? []) as CitaEquipo[]).some((c) => c.sin_expediente) ? <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px]">hay citas sin expediente</span> : null}</h2>
+        <div className="mt-2"><CitasEquipo citas={(citas ?? []) as CitaEquipo[]} /></div>
+      </div>
 
       <div className="rounded-2xl border-2 border-lime bg-white p-5">
         <h2 className="text-sm font-bold">Requiere acción {hayAccion ? <span className="ml-1 rounded-full bg-lime px-2 py-0.5 text-[11px]">{ahorro.length + docs.length + canjes.length + curp.length + atoradas.length}</span> : null}</h2>

@@ -11,6 +11,7 @@ import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
 import { ContactoEditable } from '@/components/trol3/ContactoEditable';
 import { VentanillaBloque, ActasBloque, type ConsultaJordan, type ServicioInfo } from '@/components/trol3/JordanOnDemand';
+import { AgendarBoton, type LinkCitas } from '@/components/trol3/Citas';
 import { ventanillaEstado, actasEstado, horarioLegible, MXN_POR_CREDITO, type EstadoServicio } from '@/lib/jordan/client';
 import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
@@ -66,7 +67,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('consultas').select('id,tipo,estado,error,created_at,completed_at,payload_in').eq('persona_id', params.id).in('tipo', ['imss_ventanilla', 'acta']).order('created_at', { ascending: false }).limit(10),
   ]);
   const costoProv = (codigo: string) => { const x = (proveedores ?? []).find((p: Any) => p.codigo === codigo); return x?.costo_unitario == null ? null : Number(x.costo_unitario); };
-  const [svcVentanilla, svcActas] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas'))]);
+  const [svcVentanilla, svcActas, { data: linkCitas }] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas')), db.rpc('link_citas_para', { p_persona: params.id })]);
   const cj = (consultasJordan ?? []) as ConsultaJordan[];
   const ventanillaAbierta = cj.find((c) => c.tipo === 'imss_ventanilla' && ['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
   const ventanillaUltima = cj.find((c) => c.tipo === 'imss_ventanilla' && !['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
@@ -388,6 +389,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
           <div className="text-right text-xs">
             <div className="flex flex-wrap justify-end gap-2">
               {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp (Tako)</a>}
+              <AgendarBoton info={(linkCitas ?? null) as LinkCitas | null} />
             </div>
             <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
           </div>

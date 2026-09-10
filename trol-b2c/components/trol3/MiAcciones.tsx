@@ -11,7 +11,7 @@ const card = 'mt-5 rounded-2xl border border-line bg-white p-5';
 const btnDark = 'rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50';
 const btn = 'rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50';
 
-export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [] }: { tieneSemilla: boolean; cabecera: string | null; citas: { inicio: string; estado: string }[]; beneficios?: string[] }) {
+export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], linkCitas = null }: { tieneSemilla: boolean; cabecera: string | null; citas: { inicio: string; estado: string }[]; beneficios?: string[]; linkCitas?: string | null }) {
   const supabase = createClient();
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
@@ -35,7 +35,8 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [] }: {
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-xs text-muted">{proxima ? `Tu próxima sesión: ${new Date(proxima.inicio).toLocaleString('es-MX')}` : 'Programa una sesión con tu experto:'}</span>
-        {!proxima && <HablarBoton texto="Programar sesión" mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto />}
+        {!proxima && linkCitas ? <a href={linkCitas} target="_blank" rel="noreferrer" className={btn}>Agendar mi asesoría</a> : null}
+        {!proxima && <HablarBoton texto={linkCitas ? 'Prefiero que me contacten' : 'Programar sesión'} mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto />}
       </div>
       {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
     </section>

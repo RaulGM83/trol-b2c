@@ -223,6 +223,24 @@ export async function crearCita(personaId: string, inicioISO: string, notas: str
   return ok();
 }
 
+/** Liga a mano una cita que llegó del calendario sin expediente (134). */
+export async function ligarCita(citaId: string, personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('ligar_cita', { p_cita: citaId, p_persona: personaId });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/hoy');
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/** Búsqueda corta para ligar citas: nombre o teléfono, 8 resultados. */
+export async function buscarPersonasRapido(q: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('buscar_personas', { p_q: q, p_limit: 8, p_orden: 'actividad', p_dir: 'desc' });
+  if (error) return fail(error);
+  return ok({ personas: ((data ?? []) as Any[]).map((p) => ({ id: p.persona_id ?? p.id, nombre: [p.nombre, p.apellidos].filter(Boolean).join(' ') || p.telefono || 'Sin nombre' })) });
+}
+
 export async function reevaluar(personaId: string) {
   await requireMiembro();
   const { error } = await t3().rpc('evaluar_persona_seguro', { p_id: personaId });

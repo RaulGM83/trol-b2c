@@ -11,6 +11,8 @@
 //   /consulta/resultado {consulta_id, estado, datos?, documentos?, resultado?, error?, fecha_dato?}
 //                       documentos: [{tipo, nombre, base64?|storage_path?|url?, gating?}] — el base64 se sube a la bóveda
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
+//   /cita            {calendario_email, evento_id, inicio, fin, titulo?, estado?, meet_url?, invitado_nombre?, invitado_email?, invitado_telefono?, descripcion?}
+//                    (134: el workflow n8n de Google Calendar registra/actualiza la cita en trol3.citas)
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -107,7 +109,10 @@ Deno.serve(async (req) => {
       }
       const { data, error } = await db.rpc("resumen_bot", { p_persona: b.persona_id });
       if (error) throw error;
-      return json({ existe: true, ...(data as object) });
+      // 134: la liga de citas que le toca (la de su cabecera o la general), para que el bot agende ahí.
+      let link_citas: string | null = null;
+      try { const { data: lc } = await db.rpc("link_citas_para", { p_persona: b.persona_id }); link_citas = ((lc as { link?: string } | null)?.link) ?? null; } catch { /* sin liga no se bloquea */ }
+      return json({ existe: true, ...(data as object), link_citas });
     }
     if (req.method === "GET" && path === "/eventos/pendientes") {
       const limit = Number(url.searchParams.get("limit") ?? 100);
@@ -209,6 +214,16 @@ Deno.serve(async (req) => {
         // se suben a la bóveda privada y se guarda su storage_path, no la URL del proveedor.
         const docs = await subirDocumentosBase64(String(b.consulta_id ?? ""), (b.documentos ?? []) as DocEntrada[]);
         const { data, error } = await db.rpc("resultado_consulta", { p_consulta: b.consulta_id, p_estado: b.estado ?? "completada", p_datos: b.datos ?? {}, p_documentos: docs, p_resultado: b.resultado ?? null, p_error: b.error ?? null, p_fecha_dato: b.fecha_dato ?? null });
+        if (error) throw error;
+        return json(data);
+      }
+      case "/cita": {
+        const { data, error } = await db.rpc("registrar_cita_externa", {
+          p_calendario_email: b.calendario_email ?? "", p_evento_id: b.evento_id ?? "", p_inicio: b.inicio ?? null, p_fin: b.fin ?? null,
+          p_titulo: b.titulo ?? null, p_estado: b.estado ?? "confirmed", p_meet_url: b.meet_url ?? null,
+          p_invitado_nombre: b.invitado_nombre ?? null, p_invitado_email: b.invitado_email ?? null, p_invitado_telefono: b.invitado_telefono ?? null,
+          p_descripcion: b.descripcion ?? null,
+        });
         if (error) throw error;
         return json(data);
       }
