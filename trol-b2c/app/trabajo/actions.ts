@@ -124,6 +124,15 @@ export async function declararAsesor(personaId: string, campo: string, valor: un
   return ok();
 }
 
+/** Corrige el correo (o teléfono) del cliente: queda como principal y se copia al legacy (130). */
+export async function guardarContacto(personaId: string, tipo: 'email' | 'telefono', valor: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('guardar_contacto', { p_persona: personaId, p_tipo: tipo, p_valor: valor });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
 export async function marcarEtapa(personaId: string, etapa: string) {
   await requireMiembro();
   const { error } = await t3().from('personas').update({ etapa }).eq('id', personaId);

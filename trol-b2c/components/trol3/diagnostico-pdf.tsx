@@ -20,8 +20,9 @@
 // cumplen por construcción: los hechos ya vienen en lista blanca desde el
 // servidor y este archivo no tiene acceso a nada más.
 //
-// Mientras el documento no esté ENTREGADO, cada página lo dice. Un borrador que
-// se imprime igual que el final acaba en manos del cliente.
+// Mientras el documento sea BORRADOR, cada página lo dice. Un borrador que se
+// imprime igual que el final acaba en manos del cliente. Ya revisado, la marca
+// se va aunque todavía no se entregue: el asesor lo dio por bueno.
 // ============================================================================
 
 import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
@@ -204,7 +205,7 @@ export type DiagnosticoPdfInput = {
 
 export function diagnosticoDoc(d: DiagnosticoPdfInput) {
   const h = d.hechos ?? {};
-  const borrador = d.estado !== 'entregado';
+  const borrador = d.estado === 'borrador';
   const esc: any[] = Array.isArray(h.escenarios) ? h.escenarios : [];
   const principal = esc[0] ?? null;
   const hl = h.historia_laboral ?? null;

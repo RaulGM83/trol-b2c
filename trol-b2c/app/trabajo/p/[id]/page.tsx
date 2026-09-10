@@ -9,6 +9,7 @@ import { MarcaReferido, DecisionReferido } from '@/components/trol3/MarcaReferid
 import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAccion, ReprocesarConsulta, type UltimaConsulta, type Proveedor } from '@/components/trol3/ExpedienteAcciones';
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
+import { ContactoEditable } from '@/components/trol3/ContactoEditable';
 import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
@@ -32,7 +33,7 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['datos', 'Información'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -339,7 +340,17 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // El texto legible lo escribe `aplicar_regla_identidad` (071); el crudo del proveedor
   // se queda en consultas.error y sólo se enseña dentro del colapsable.
   const inconsistencia = (datosMap.get('inconsistencia_imss')?.valor ?? null) as string | null;
+  // Resumen en tres bandas: lo que ya tenemos / lo que nos falta / detalle.
+  // CLAVE es la lista de campos sin los cuales la asesoría cojea; lo demás se
+  // captura desde el detalle. Los que ya salen en los KPI no se repiten abajo.
+  const CLAVE = ['curp', 'nss', 'fecha_nacimiento', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente', 'ahorro_voluntario', 'plan_corporativo', 'otros_planes', 'dolor_principal', 'expectativa_pension_mxn', 'edad_retiro_deseada', 'ingreso_mensual', 'dependientes'];
+  const EN_KPI = ['ley', 'semanas_cotizadas', 'status_empleo', 'conserva_derechos', 'saldo_infonavit', 'dolor_principal'];
+  const faltantes = rows.filter((r) => CLAVE.includes(r.campo) && r.valor == null);
+  const tenemos = rows.filter((r) => ['imss', 'afore', 'infonavit', 'ahorro_privado', 'contexto'].includes(r.grupo) && r.valor != null && !EN_KPI.includes(r.campo) && (r.grupo !== 'contexto' || CLAVE.includes(r.campo)));
+  const ordenConDato = (ck ?? []).filter((c: Any) => c.estado !== 'sin_dato');
+  const sinDato = (ck ?? []).filter((c: Any) => c.estado === 'sin_dato');
   const href = (t: string) => `/trabajo/p/${e.persona_id}?tab=${t}`;
+  const faltaAlgo = faltantes.length > 0 || !email || sinDato.length > 0 || (ultimaConsulta && ['solicitada', 'en_proceso', 'error'].includes(ultimaConsulta.estado));
   // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
   const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
 
@@ -375,6 +386,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       {tab === 'resumen' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <div className="space-y-4">
+            {/* ── 1 · Lo que ya tenemos ─────────────────────────────────── */}
             <section className="rounded-2xl border border-line bg-white p-5">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Kpi label="Régimen" v={e.ley ?? '—'} sub={e.ley_capa === 'validado' ? `SISEC al ${fmtFecha(e.ley_en)}${e.ley_vigente === false ? ' · conviene actualizar' : ''}` : e.ley_capa ?? ''} />
@@ -390,28 +402,64 @@ export default async function Expediente({ params, searchParams }: { params: { i
               </div>
               <SaldoInfonavitAccion personaId={e.persona_id} saldo={e.saldo_infonavit == null ? null : Number(e.saldo_infonavit)} estimado={e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado)} capa={e.saldo_infonavit_capa ?? null} origen={e.saldo_infonavit_origen ?? null} en={e.saldo_infonavit_en ?? null} vigente={e.saldo_infonavit_vigente ?? null} credito={e.credito_infonavit ?? null} />
               {e.dolor_principal && <p className="mt-4 rounded-xl bg-cream p-3 text-sm">“{e.dolor_principal}”</p>}
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-                <span><b className={e.ley_vigente === false ? 'text-amber-700' : 'text-ink'}>Datos del IMSS (SISEC) al {e.ley_en ? fmtFecha(e.ley_en) : '—'}</b>{e.ley_en ? ` · hace ${Math.floor((Date.now() - new Date(e.ley_en).getTime()) / 86400000)} días` : ''}</span>
-                {ultimaConsulta && ['solicitada', 'en_proceso'].includes(ultimaConsulta.estado) ? <span className="text-amber-700">Actualización en proceso ({ultimaConsulta.proveedor}) desde {fmtFecha(ultimaConsulta.created_at)}</span> : ultimaConsulta?.estado === 'error' ? <span className="text-red-600">Última solicitud falló: {ultimaConsulta.error}</span> : null}
+              <div className="mt-3 text-xs text-muted">
+                <b className={e.ley_vigente === false ? 'text-amber-700' : 'text-ink'}>Datos del IMSS (SISEC) al {e.ley_en ? fmtFecha(e.ley_en) : '—'}</b>{e.ley_en ? ` · hace ${Math.floor((Date.now() - new Date(e.ley_en).getTime()) / 86400000)} días` : ''}
               </div>
             </section>
 
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="mb-3 text-sm font-bold">Orden de situación {alertas.length ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} alertas</span> : null}</h2>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {(ck ?? []).map((c: Any) => (
-                  <li key={c.item} className="flex items-start gap-2 text-sm">
-                    <span className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : c.estado === 'no_aplica' ? 'bg-gray-300' : 'bg-gray-200'}`} />
-                    <span>{CHECK_LABEL[c.item] ?? c.item}{c.detalle ? <span className="text-muted"> · {c.detalle}</span> : null}{c.estado === 'sin_dato' ? <span className="text-muted"> · sin dato</span> : null}</span>
-                  </li>
-                ))}
-              </ul>
+              <h2 className="mb-2 text-sm font-bold">Identidad y contacto</h2>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+                <div><dt className="text-[11px] text-muted">Nombre</dt><dd className="font-medium">{[e.nombre, e.apellidos].filter(Boolean).join(' ') || '—'}</dd></div>
+                <div><dt className="text-[11px] text-muted">CURP</dt><dd className="font-medium">{e.curp ?? <span className="text-amber-700">falta</span>}</dd></div>
+                <div><dt className="text-[11px] text-muted">NSS</dt><dd className="font-medium">{(datosMap.get('nss')?.valor as string | null) ?? <span className="text-amber-700">falta</span>}</dd></div>
+                <div><dt className="text-[11px] text-muted">Nacimiento</dt><dd className="font-medium">{e.fecha_nacimiento ? `${fmtFecha(e.fecha_nacimiento)} · ${edadDecimal} años` : <span className="text-amber-700">falta</span>}</dd></div>
+                <div><dt className="text-[11px] text-muted">Teléfono</dt><dd className="font-medium">{tel?.valor ?? <span className="text-amber-700">falta</span>}{tel?.no_contactar ? <span className="ml-1 text-red-600">NO CONTACTAR</span> : null}</dd></div>
+                <div><dt className="text-[11px] text-muted">Correo</dt><dd className="font-medium"><ContactoEditable personaId={e.persona_id} tipo="email" valor={email?.valor ?? null} /></dd></div>
+              </dl>
             </section>
 
-            <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="mb-3 text-sm font-bold">Información clave <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato o pide actualización por grupo · <Link href={href('datos')} className="underline">ver todo</Link>)</span></h2>
-              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => ['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado'].includes(r.grupo) && (r.valor != null || ['curp', 'nombre', 'fecha_nacimiento', 'edad_actual', 'ley', 'semanas_cotizadas', 'status_empleo', 'ultima_cotizacion', 'afore_actual', 'saldo_rcv97', 'saldo_infonavit', 'credito_infonavit_vigente', 'ahorro_voluntario', 'ahorro_voluntario_mensual', 'plan_corporativo', 'plan_corporativo_mensual', 'otros_planes', 'otros_planes_mensual'].includes(r.campo)))} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado']} fechas={{ imss: e.ley_en }} />
-              <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
+            {ordenConDato.length ? (
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <h2 className="mb-3 text-sm font-bold">Orden de situación {alertas.length ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} alertas</span> : null}</h2>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {ordenConDato.map((c: Any) => (
+                    <li key={c.item} className="flex items-start gap-2 text-sm">
+                      <span className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : 'bg-gray-300'}`} />
+                      <span>{CHECK_LABEL[c.item] ?? c.item}{c.detalle ? <span className="text-muted"> · {c.detalle}</span> : null}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {tenemos.length ? (
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <h2 className="mb-3 text-sm font-bold">Lo que ya tenemos <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato · <a href="#detalle" className="underline">ver todo</a>)</span></h2>
+                <DatosTabla personaId={e.persona_id} rows={tenemos} grupos={['imss', 'afore', 'infonavit', 'ahorro_privado', 'contexto']} fechas={{ imss: e.ley_en }} />
+                <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
+              </section>
+            ) : null}
+
+            {/* ── 2 · Lo que nos falta ──────────────────────────────────── */}
+            <section id="falta" className={`rounded-2xl border p-5 ${faltaAlgo ? 'border-amber-300 bg-amber-50/40' : 'border-line bg-white'}`}>
+              <h2 className="mb-2 text-sm font-bold">Lo que nos falta {faltaAlgo ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{faltantes.length + (email ? 0 : 1) + sinDato.length}</span> : null}</h2>
+              {!faltaAlgo ? (
+                <p className="text-sm text-green-700">Expediente completo para la asesoría.</p>
+              ) : (
+                <div className="space-y-3">
+                  {ultimaConsulta && ['solicitada', 'en_proceso'].includes(ultimaConsulta.estado) ? <p className="text-xs text-amber-700">Actualización del IMSS en proceso ({ultimaConsulta.proveedor}) desde {fmtFecha(ultimaConsulta.created_at)}.</p> : ultimaConsulta?.estado === 'error' ? <p className="text-xs text-red-600">La última consulta al IMSS falló: {ultimaConsulta.error}</p> : null}
+                  {!email ? <p className="text-sm"><span className="text-xs text-muted">Correo</span> · <ContactoEditable personaId={e.persona_id} tipo="email" valor={null} /></p> : null}
+                  {faltantes.length ? <DatosTabla personaId={e.persona_id} rows={faltantes} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'contexto']} fechas={{ imss: e.ley_en }} /> : null}
+                  {sinDato.length ? (
+                    <ul className="grid gap-1 sm:grid-cols-2">
+                      {sinDato.map((c: Any) => (
+                        <li key={c.item} className="flex items-start gap-2 text-sm"><span className="mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-gray-200" /><span>{CHECK_LABEL[c.item] ?? c.item}<span className="text-muted"> · sin dato</span></span></li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              )}
             </section>
 
             <TareasPanel
@@ -422,7 +470,29 @@ export default async function Expediente({ params, searchParams }: { params: { i
               compacto
             />
 
-            <HistorialLaboral historial={historialLaboral} />
+            {/* ── 3 · Detalle (lo que era la pestaña Información) ───────── */}
+            <details id="detalle" className="rounded-2xl border border-line bg-white p-5">
+              <summary className="cursor-pointer text-sm font-bold">Detalle completo <span className="ml-2 text-xs font-normal text-muted">historial laboral · todos los datos · consultas</span></summary>
+              <div className="mt-4 space-y-5">
+                <HistorialLaboral historial={historialLaboral} />
+                <div>
+                  <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
+                  <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
+                </div>
+                <div className="border-t border-line pt-4">
+                  <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
+                  <ul className="space-y-1 text-xs">
+                    {(consultas ?? []).map((c: Any) => (
+                      <li key={c.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
+                        <span>{c.tipo} · {c.proveedor ?? '—'} <span className="text-muted">· {c.solicitante_tipo}{c.motivo ? ` · ${c.motivo}` : ''}</span></span>
+                        <span className={c.estado === 'completada' ? 'text-green-700' : c.estado === 'error' || c.estado === 'sin_resultado' ? 'text-red-600' : 'text-amber-700'}>{c.estado} · {fmtFecha(c.created_at)}{c.error ? ` · ${c.error}` : ''}</span>
+                      </li>
+                    ))}
+                    {!consultas?.length && <li className="text-muted">Sin consultas.</li>}
+                  </ul>
+                </div>
+              </div>
+            </details>
           </div>
           <aside className="space-y-4">
             <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} />
@@ -438,10 +508,6 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 inconsistencia={inconsistencia}
                 proveedores={((proveedores ?? []) as Any[]).map((p) => ({ codigo: p.codigo, nombre: p.nombre, costo_unitario: p.costo_unitario == null ? null : Number(p.costo_unitario) })) as Proveedor[]}
               />
-            </section>
-            <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="mb-2 text-sm font-bold">Contexto</h2>
-              <DatosTabla personaId={e.persona_id} rows={rows.filter((r) => r.grupo === 'contexto')} grupos={['contexto']} compacto />
             </section>
             {opsAbiertas.length ? (
               <section className="rounded-2xl border border-line bg-white p-5">
@@ -476,7 +542,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 rescate={rescateSupuestos}
                 cerrarEscenario={{ personaId: e.persona_id }}
               />
-              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={href('datos')} className="underline">Información</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
+              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={`${href('resumen')}#detalle`} className="underline">Resumen → Detalle</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
             </>
           ) : (
             <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
@@ -530,24 +596,6 @@ export default async function Expediente({ params, searchParams }: { params: { i
             Faltan los supuestos globales de la asesoría Infonavit. Cárgalos en <Link href="/trabajo/proyectos" className="underline">Inmuebles</Link>.
           </section>
         )
-      )}
-
-      {tab === 'datos' && (
-        <section className="rounded-2xl border border-line bg-white p-5">
-          <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
-          <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
-          <div className="mt-5 border-t border-line pt-4">
-            <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
-            <ul className="space-y-1 text-xs">
-              {(consultas ?? []).map((c: Any) => (
-                <li key={c.id} className="flex justify-between gap-2 border-t border-line/70 py-1">
-                  <span>{c.tipo} · {c.proveedor ?? '—'} <span className="text-muted">· {c.solicitante_tipo}{c.motivo ? ` · ${c.motivo}` : ''}</span></span>
-                  <span className={c.estado === 'completada' ? 'text-green-700' : c.estado === 'error' || c.estado === 'sin_resultado' ? 'text-red-600' : 'text-amber-700'}>{c.estado} · {fmtFecha(c.created_at)}{c.error ? ` · ${c.error}` : ''}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
       )}
 
       {tab === 'documentos' && (<div className="space-y-4"><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}

@@ -499,7 +499,7 @@ export function DiagnosticoPanel({
           rel="noreferrer"
           className="mt-3 inline-block rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-cream"
         >
-          Ver el PDF{bloqueado ? '' : ' (con marca de borrador)'}
+          Ver el PDF{diagnostico.estado === 'borrador' ? ' (con marca de borrador)' : ''}
         </a>
 
         {bloqueado ? (
