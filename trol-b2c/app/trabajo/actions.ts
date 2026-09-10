@@ -1363,10 +1363,10 @@ export async function pagarComisiones(ids: string[], referencia?: string | null)
 export async function guardarTerminosComision(
   opId: string,
   personaId: string,
-  x: { honorario?: number | null; pct?: number | null },
+  x: { honorario?: number | null; pct?: number | null; producto?: string | null; costo_gestoria?: number | null },
 ) {
   await requireMiembro();
-  const patch: Record<string, number | null> = {};
+  const patch: Record<string, number | string | null> = {};
 
   if ('honorario' in x) {
     const v = x.honorario == null || Number.isNaN(x.honorario) ? null : Number(x.honorario);
@@ -1377,6 +1377,13 @@ export async function guardarTerminosComision(
     const v = x.pct == null || Number.isNaN(x.pct) ? null : Number(x.pct);
     if (v != null && (v <= 0 || v > 1)) return fail(new Error('El porcentaje va entre 0 y 100%.'));
     patch.comision_pct_aliado = v;
+  }
+  // Gestoría (133): qué se vendió y cuánto se le pagó al gestor. Margen = honorario − costo.
+  if ('producto' in x) patch.producto = x.producto?.trim() || null;
+  if ('costo_gestoria' in x) {
+    const v = x.costo_gestoria == null || Number.isNaN(x.costo_gestoria) ? null : Number(x.costo_gestoria);
+    if (v != null && v < 0) return fail(new Error('El costo no puede ser negativo.'));
+    patch.costo_gestoria = v;
   }
   if (!Object.keys(patch).length) return ok();
 

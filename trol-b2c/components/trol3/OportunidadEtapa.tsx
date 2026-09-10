@@ -7,6 +7,8 @@ import { cambiarEstadoOportunidad, asignarEspecialista, guardarTerminosComision 
 type R = { ok: boolean; error?: string };
 export type Motivo = { codigo: string; nombre: string };
 export type ProveedorOp = { codigo: string; nombre: string; lineas: string[] };
+/** Producto de gestoría (133): lo que se vende cuando la oportunidad es de gestoría, con honorario y costo por defecto. */
+export type ProductoGestoria = { codigo: string; nombre: string; honorario_default: number; costo_default: number };
 export type OpEtapa = {
   id: string; codigo: string; estado: string; especialista_id?: string | null;
   motivo_perdida?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota_estado?: string | null;
@@ -14,6 +16,11 @@ export type OpEtapa = {
   honorario_trol?: number | null;
   /** Porcentaje pactado sólo para esta venta (124). Vacío = el del aliado. */
   comision_pct_aliado?: number | null;
+  /** Producto de gestoría vendido y lo que se le pagó al gestor (133). */
+  producto?: string | null;
+  costo_gestoria?: number | null;
+  /** Producto que sugiere el catálogo para este código (prellena al ganar). */
+  producto_sugerido?: string | null;
 };
 
 const ESTADOS: [string, string][] = [
@@ -26,8 +33,9 @@ export const ESTADO_COLOR: Record<string, string> = {
 const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 const sel = 'rounded-lg border border-line bg-white px-2 py-1 text-xs';
 
-export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros, compacto, conAliado }: {
+export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros, compacto, conAliado, productos = [] }: {
   op: OpEtapa; personaId: string; motivos: Motivo[]; proveedores: ProveedorOp[]; miembros?: { id: string; nombre: string }[]; compacto?: boolean;
+  productos?: ProductoGestoria[];
   /** Esta persona llegó referida por un aliado: entonces el % de la venta importa. */
   conAliado?: boolean;
 }) {
@@ -40,6 +48,17 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
   const [honorario, setHonorario] = useState(op.honorario_trol == null ? '' : String(op.honorario_trol));
   const [pct, setPct] = useState(op.comision_pct_aliado == null ? '' : String(Math.round(Number(op.comision_pct_aliado) * 1000) / 10));
   const [msg, setMsg] = useState<string | null>(null);
+  // Gestoría (133): el producto prellena honorario y costo; los dos se pueden ajustar por caso.
+  const esGestoria = productos.length > 0 && (!!op.producto_sugerido || !!op.producto);
+  const [producto, setProducto] = useState(op.producto ?? op.producto_sugerido ?? '');
+  const [costo, setCosto] = useState(op.costo_gestoria == null ? '' : String(op.costo_gestoria));
+  const productoGuardado = op.producto ?? '';
+  const costoGuardado = op.costo_gestoria == null ? '' : String(op.costo_gestoria);
+  const elegirProducto = (codigo: string) => {
+    setProducto(codigo);
+    const pr = productos.find((x) => x.codigo === codigo);
+    if (pr) { if (!honorario.trim()) setHonorario(String(pr.honorario_default)); if (!costo.trim()) setCosto(String(pr.costo_default)); }
+  };
   const honorarioGuardado = op.honorario_trol == null ? '' : String(op.honorario_trol);
   const pctGuardado = op.comision_pct_aliado == null ? '' : String(Math.round(Number(op.comision_pct_aliado) * 1000) / 10);
   const provs = proveedores.filter((p) => !p.lineas?.length || p.lineas.includes(op.codigo));
@@ -76,7 +95,18 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
           Cuando entra el honorario, de ahí sale la comisión del aliado que la
           refirió (123), con el porcentaje pactado para esta venta si lo hay (124). */}
       {estado === 'ganada' && (
-        <label className="flex items-center gap-1 text-[11px] text-muted">honorario Trol $
+        <label className="flex flex-wrap items-center gap-1 text-[11px] text-muted">
+          {esGestoria && (
+            <>
+              <select value={producto} onChange={(e) => elegirProducto(e.target.value)} className={sel} disabled={pending}>
+                <option value="">Producto…</option>
+                {productos.map((x) => <option key={x.codigo} value={x.codigo}>{x.nombre}</option>)}
+              </select>
+              <span>costo gestor $</span>
+              <input value={costo} onChange={(e) => setCosto(e.target.value)} inputMode="decimal" placeholder="—" className={`${sel} w-20`} disabled={pending} />
+            </>
+          )}
+          honorario Trol $
           <input value={honorario} onChange={(e) => setHonorario(e.target.value)} inputMode="decimal" placeholder="—" className={`${sel} w-24`} disabled={pending} />
           {conAliado && (
             <>
@@ -87,12 +117,14 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
           )}
           <button
             className="underline disabled:opacity-40"
-            disabled={pending || (honorario.trim() === honorarioGuardado && pct.trim() === pctGuardado)}
+            disabled={pending || (honorario.trim() === honorarioGuardado && pct.trim() === pctGuardado && producto === productoGuardado && costo.trim() === costoGuardado)}
             onClick={() => start(async () => {
               setMsg(null);
-              const cambios: { honorario?: number | null; pct?: number | null } = {};
+              const cambios: { honorario?: number | null; pct?: number | null; producto?: string | null; costo_gestoria?: number | null } = {};
               if (honorario.trim() !== honorarioGuardado) cambios.honorario = honorario.trim() === '' ? null : Number(honorario);
               if (conAliado && pct.trim() !== pctGuardado) cambios.pct = pct.trim() === '' ? null : Number(pct) / 100;
+              if (esGestoria && producto !== productoGuardado) cambios.producto = producto || null;
+              if (esGestoria && costo.trim() !== costoGuardado) cambios.costo_gestoria = costo.trim() === '' ? null : Number(costo);
               const r = (await guardarTerminosComision(op.id, personaId, cambios)) as R;
               if (!r.ok) setMsg(r.error ?? 'error');
             })}
