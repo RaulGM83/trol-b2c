@@ -86,10 +86,14 @@ export const verVentanilla = (sid: string) => llamar<Ventanilla>(`/ventanilla/${
 export const cancelarVentanilla = (sid: string) => llamar<Ventanilla>(`/ventanilla/${encodeURIComponent(sid)}/cancelar`, { method: 'POST' });
 
 // ── Actas ────────────────────────────────────────────────────────────────────
-export function crearActa(args: { tipo: TipoActa; curp: string; conFolio: boolean; externalId: string }) {
+/** Por CURP del titular o, si ya se tiene, por la cadena/folio electrónico del acta (modo `cadena`: va en `curp`). */
+export function crearActa(args: { tipo: TipoActa; curp: string; conFolio: boolean; externalId: string; cadena?: string | null }) {
+  const cadena = args.cadena?.trim();
   return llamar<Acta>('/actas', {
     method: 'POST',
-    body: JSON.stringify({ tipo: args.tipo, curp: args.curp, con_folio: args.conFolio, external_id: args.externalId, webhook_url: webhookUrl('actas') }),
+    body: JSON.stringify(cadena
+      ? { tipo: 'cadena', curp: cadena, external_id: args.externalId, webhook_url: webhookUrl('actas') }
+      : { tipo: args.tipo, curp: args.curp, con_folio: args.conFolio, external_id: args.externalId, webhook_url: webhookUrl('actas') }),
   });
 }
 export const verActa = (id: string) => llamar<Acta>(`/actas/${encodeURIComponent(id)}`);

@@ -84,10 +84,12 @@ export function ActasBloque({ personaId, servicio, tieneCurp, abiertas, ultimas 
 }) {
   const [tipo, setTipo] = useState<TipoActa>('nacimiento');
   const [folio, setFolio] = useState(false);
+  const [cadena, setCadena] = useState('');
   const [confirmando, setConfirmando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const puede = !!servicio?.abierto && tieneCurp;
+  const porCadena = cadena.trim().length >= 4;
+  const puede = !!servicio?.abierto && (tieneCurp || porCadena);
   return (
     <section className="rounded-2xl border border-line bg-white p-5">
       <h2 className="mb-1 text-sm font-bold">Pedir acta al Registro Civil</h2>
@@ -97,19 +99,20 @@ export function ActasBloque({ personaId, servicio, tieneCurp, abiertas, ultimas 
         {ultimas.filter((c) => c.estado === 'error').slice(0, 2).map((c) => (
           <div key={c.id} className="rounded-lg bg-red-50 p-2 text-red-700">Acta de {ACTA_LABEL[(c.payload_in?.tipo_acta as TipoActa) ?? 'nacimiento']} · {fecha(c.completed_at ?? c.created_at)} · {c.error ?? 'no se pudo'}</div>
         ))}
-        {!tieneCurp ? <p className="text-amber-700">Falta la CURP.</p> : null}
+        {!tieneCurp && !porCadena ? <p className="text-amber-700">Falta la CURP (o captura la cadena/folio electrónico del acta).</p> : null}
         <div className="flex flex-wrap items-center gap-2">
           <select value={tipo} onChange={(e) => { setTipo(e.target.value as TipoActa); setConfirmando(false); }} className="rounded-lg border border-line px-2 py-1.5">
             {(Object.keys(ACTA_LABEL) as TipoActa[]).map((t) => <option key={t} value={t}>{ACTA_LABEL[t]}</option>)}
           </select>
-          <label className="flex items-center gap-1"><input type="checkbox" checked={folio} disabled={tipo === 'divorcio'} onChange={(e) => setFolio(e.target.checked)} /> con folio de validación</label>
+          <label className="flex items-center gap-1" title="Que el acta salga foliada (con folio de validación impreso). No es para capturar un folio."><input type="checkbox" checked={folio} disabled={tipo === 'divorcio' || porCadena} onChange={(e) => setFolio(e.target.checked)} /> que salga con folio de validación</label>
         </div>
+        <input value={cadena} onChange={(e) => { setCadena(e.target.value); setConfirmando(false); }} placeholder="Cadena o folio electrónico del acta (opcional: si lo tienes, Jordan busca por ahí en vez de por CURP)" className="w-full rounded-lg border border-line px-2 py-1.5" />
         {confirmando ? (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-2">
-            <p className="text-amber-900">Se pide el acta de <b>{ACTA_LABEL[tipo].toLowerCase()}</b>{folio && tipo !== 'divorcio' ? ' con folio' : ''} por <b>{mxn(servicio?.costo ?? null)}</b> (sólo si la entrega). ¿Confirmas?</p>
+            <p className="text-amber-900">Se pide el acta de <b>{ACTA_LABEL[tipo].toLowerCase()}</b>{porCadena ? ' por su cadena/folio electrónico' : folio && tipo !== 'divorcio' ? ' con folio' : ' por CURP'} por <b>{mxn(servicio?.costo ?? null)}</b> (sólo si la entrega). ¿Confirmas?</p>
             <div className="mt-2 flex gap-2">
               <button disabled={pending} className={btnDark} onClick={() => start(async () => {
-                const r = (await pedirActa(personaId, tipo, folio && tipo !== 'divorcio', '')) as R;
+                const r = (await pedirActa(personaId, tipo, folio && tipo !== 'divorcio', '', porCadena ? cadena : null)) as R;
                 setConfirmando(false);
                 setMsg(r.ok ? 'Pedida. Suele llegar en uno o dos minutos; usa "Revisar" si no aparece.' : r.error ?? 'error');
               })}>{pending ? 'Pidiendo…' : 'Sí, pedir el acta'}</button>

@@ -175,20 +175,22 @@ export async function pedirVentanilla(personaId: string, motivo: string) {
 }
 
 /** Acta del Registro Civil (Jordan, 30–90 s normalmente, 1.5 créditos). La pide Trol para un trámite; el cliente la ve en /mi. */
-export async function pedirActa(personaId: string, tipo: TipoActa, conFolio: boolean, motivo: string) {
+export async function pedirActa(personaId: string, tipo: TipoActa, conFolio: boolean, motivo: string, cadena?: string | null) {
   const m = await requireMiembro();
   if (!TIPOS_ACTA.includes(tipo)) return fail('Tipo de acta inválido.');
   const admin = createAdminClient().schema('trol3');
   const { data: p } = await admin.from('personas').select('curp').eq('id', personaId).maybeSingle();
   const curp = (p?.curp as string | null)?.trim().toUpperCase();
-  if (!curp || curp.length !== 18) return fail('Falta la CURP.');
+  const cad = cadena?.trim() || null;
+  if (cad && (cad.length < 4 || cad.length > 400)) return fail('La cadena o folio electrónico debe tener entre 4 y 400 caracteres.');
+  if (!cad && (!curp || curp.length !== 18)) return fail('Falta la CURP.');
   const { data, error } = await t3().rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'acta', p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol', p_notificar: false, p_motivo: motivo || `acta de ${tipo}`, p_forzar: true, p_proveedor: 'jordan_actas' });
   if (error) return fail(error);
   const res = data as { ok?: boolean; consulta_id?: string; motivo?: string };
   if (!res?.ok || !res.consulta_id) return fail(`No enviada: ${res?.motivo ?? 'sin motivo'}`);
   try {
-    const a = await crearActa({ tipo, curp, conFolio, externalId: res.consulta_id });
-    await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { jordan_id: a.id, tipo_acta: tipo, con_folio: conFolio, estado_jordan: a.status, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
+    const a = await crearActa({ tipo, curp: curp ?? '', conFolio, externalId: res.consulta_id, cadena: cad });
+    await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { jordan_id: a.id, tipo_acta: tipo, con_folio: conFolio, cadena: cad, estado_jordan: a.status, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
     revalidatePath(`/trabajo/p/${personaId}`);
     return ok({ consulta_id: res.consulta_id, jordan_id: a.id });
   } catch (e) {
