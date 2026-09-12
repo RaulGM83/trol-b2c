@@ -1,11 +1,12 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { solicitarDiagnosticoAvanzado, subirDocumento } from '@/app/trabajo/actions';
+import { fmtDia } from '@/lib/fecha';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type R = { ok: boolean; error?: string; resultado?: unknown };
 const btnDark = 'rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
-const fmtFecha = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+const fmtFecha = (d?: string | null) => (d ? fmtDia(d) : '');
 
 type TipoSubida = { tipo: string; nombre: string; formatos: string[]; parseable: boolean };
 

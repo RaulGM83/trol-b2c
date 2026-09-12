@@ -40,6 +40,7 @@ import {
   type Narrativa,
   type SeccionNarrativa,
 } from '@/lib/diagnostico/secciones';
+import { fmtDia } from '@/lib/fecha';
 import { TareasPanel, type MiembroOpcion, type Tarea } from '@/components/trol3/TareasPanel';
 import {
   AfinarRedactor,
@@ -117,13 +118,7 @@ const mxn = new Intl.NumberFormat('es-MX', {
   maximumFractionDigits: 0,
 });
 
-const fecha = (iso: string | null | undefined) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
-};
+const fecha = (iso: string | null | undefined) => fmtDia(iso);
 
 const fechaHora = (iso: string | null | undefined) => {
   if (!iso) return '—';

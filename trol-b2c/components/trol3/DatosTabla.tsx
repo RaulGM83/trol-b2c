@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { declararAsesor, pedirConsulta } from '@/app/trabajo/actions';
+import { fmtDia } from '@/lib/fecha';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface DatoRow { campo: string; nombre: string; tipo: string; grupo: string; opciones?: string[] | null; valor: any; capa?: string; proveedor?: string | null; origen_tipo?: string; obtenido_en?: string | null; vigente?: boolean | null; soloLectura?: boolean; }
@@ -8,7 +9,7 @@ type R = { ok: boolean; error?: string; resultado?: unknown };
 
 const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 const fmtNum = (n: number) => new Intl.NumberFormat('es-MX').format(n);
-const fmtFecha = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+const fmtFecha = (d?: string | null) => (d ? fmtDia(d) : '');
 const CAPA: Record<string, [string, string]> = { validado: ['Oficial', 'bg-green-50 text-green-700'], calculado: ['Trol', 'bg-blue-50 text-blue-700'], declarado: ['Declarado', 'bg-amber-50 text-amber-700'] };
 
 function show(r: DatoRow) {
