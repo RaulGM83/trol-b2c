@@ -1046,6 +1046,23 @@ export async function guardarDiagnostico(input: {
   return ok();
 }
 
+/**
+ * Qué bloques NO se imprimen en este diagnóstico.
+ *
+ * Sólo toca el PDF: en pantalla el asesor sigue viendo todo, porque apagar una
+ * sección no es borrarla —es decidir que este cliente no la necesita hoy.
+ */
+export async function seccionesDiagnostico(diagnosticoId: string, personaId: string, off: string[]) {
+  await requireMiembro();
+  const { error } = await t3().rpc('secciones_diagnostico', {
+    p_diagnostico: diagnosticoId,
+    p_off: off,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
 export async function cambiarEstadoDiagnostico(
   diagnosticoId: string, personaId: string, estado: 'borrador' | 'revisado' | 'entregado',
 ) {

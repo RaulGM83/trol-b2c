@@ -31,8 +31,10 @@ import {
   ligarEscenarios,
   refrescarHechosDiagnostico,
   regenerarNarrativa,
+  seccionesDiagnostico,
 } from '@/app/trabajo/actions';
 import {
+  BLOQUES_APAGABLES,
   SECCIONES_NARRATIVA,
   TITULO_SECCION,
   type Narrativa,
@@ -82,7 +84,12 @@ export type DiagnosticoRow = {
   actualizado_en: string;
   entregado_en: string | null;
   creado_por_nombre: string | null;
-  contenido: { hechos?: any; narrativa?: Narrativa; acuerdos?: string } | null;
+  contenido: {
+    hechos?: any;
+    narrativa?: Narrativa;
+    acuerdos?: string;
+    secciones_off?: string[];
+  } | null;
 };
 
 const TIPO_LABEL: Record<string, string> = {
@@ -329,6 +336,10 @@ export function DiagnosticoPanel({
       else toast.success(exito);
     });
 
+  // Lo que este documento NO imprime. Vive en el diagnóstico, no en el asesor:
+  // dos clientes del mismo asesor no necesitan las mismas secciones.
+  const [off, setOff] = useState<string[]>(diagnostico?.contenido?.secciones_off ?? []);
+
   const narrativa = diagnostico?.contenido?.narrativa ?? {};
   const acuerdos = diagnostico?.contenido?.acuerdos ?? '';
   const bloqueado = diagnostico?.estado === 'entregado';
@@ -501,6 +512,40 @@ export function DiagnosticoPanel({
         >
           Ver el PDF{diagnostico.estado === 'borrador' ? ' (con marca de borrador)' : ''}
         </a>
+
+        <details className="mt-3 rounded-xl border border-line bg-cream/50 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold">
+            Qué sale en el PDF
+            {off.length ? ` · ${off.length} secci${off.length === 1 ? 'ón' : 'ones'} apagada${off.length === 1 ? '' : 's'}` : ''}
+          </summary>
+          <p className="mt-2 text-xs text-muted">
+            Lo que apagues aquí no se imprime. En pantalla lo sigues viendo, y se puede volver a
+            encender cuando quieras.
+          </p>
+          <div className="mt-2 grid gap-1 sm:grid-cols-2">
+            {BLOQUES_APAGABLES.map((b) => {
+              const encendido = !off.includes(b.id);
+              return (
+                <label key={b.id} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={encendido}
+                    disabled={pending || bloqueado}
+                    onChange={() => {
+                      const nuevo = encendido ? [...off, b.id] : off.filter((x) => x !== b.id);
+                      setOff(nuevo);
+                      correr(
+                        () => seccionesDiagnostico(diagnostico.id, personaId, nuevo),
+                        encendido ? `${b.titulo}: fuera del PDF` : `${b.titulo}: vuelve al PDF`,
+                      );
+                    }}
+                  />
+                  <span className={encendido ? '' : 'text-muted line-through'}>{b.titulo}</span>
+                </label>
+              );
+            })}
+          </div>
+        </details>
 
         {bloqueado ? (
           <p className="mt-3 rounded-xl bg-cream px-3 py-2 text-xs">

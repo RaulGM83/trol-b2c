@@ -33,6 +33,47 @@ export const TITULO_SECCION: Record<SeccionNarrativa, string> = {
   oportunidades_ahorro: 'Ahorro e inversión',
 }
 
+/**
+ * Los bloques que imprime el PDF, EN EL ORDEN DEL DOCUMENTO.
+ *
+ * Es la única lista: el PDF la recorre para armar el cuerpo y el panel la
+ * recorre para pintar los switches. Reordenar aquí reordena el documento; si
+ * fueran dos listas, el día que se toque una el panel prometería un orden que
+ * el PDF no cumple.
+ *
+ * `id` es lo que se guarda en `contenido.secciones_off`, así que no se renombra
+ * a la ligera: un id que cambia resucita en el PDF una sección que el asesor ya
+ * había apagado.
+ *
+ * `siempre: true` marca lo que no se puede quitar — sin la procedencia de las
+ * cifras y sin el cierre legal el documento no se puede entregar.
+ */
+export const BLOQUES_PDF = [
+  { id: 'datos', titulo: 'Con qué datos se hizo', siempre: true },
+  { id: 'resumen_perfil', titulo: 'Tu situación hoy' },
+  { id: 'historia_laboral', titulo: 'Lectura de su historia laboral' },
+  { id: 'historia_laboral_tabla', titulo: 'Tu historia laboral (tabla de patrones)' },
+  { id: 'oportunidades_gestorias', titulo: 'Gestorías' },
+  { id: 'oportunidades_issste', titulo: 'ISSSTE' },
+  { id: 'escenario', titulo: 'El escenario que revisamos' },
+  { id: 'estrategia_oportunidades', titulo: 'Estrategia y oportunidades' },
+  { id: 'oportunidades_infonavit', titulo: 'Infonavit' },
+  { id: 'plan_vivienda', titulo: 'El plan de vivienda' },
+  { id: 'oportunidades_ahorro', titulo: 'Ahorro e inversión' },
+  { id: 'acuerdos', titulo: 'Lo que acordamos y lo que sigue' },
+  { id: 'ayuda', titulo: 'Estamos para ayudarte', siempre: true },
+  { id: 'educacion', titulo: 'Cómo funciona tu pensión (anexo)' },
+] as const
+
+export type BloquePdf = (typeof BLOQUES_PDF)[number]['id']
+
+/** Los que el asesor puede apagar. */
+export const BLOQUES_APAGABLES = BLOQUES_PDF.filter((b) => !('siempre' in b && b.siempre))
+
+/** `true` si ese bloque debe imprimirse. */
+export const bloqueEncendido = (off: string[] | null | undefined, id: BloquePdf) =>
+  !(off ?? []).includes(id)
+
 /** El modelo que ya se usaba en n8n, con la misma cuenta de OpenAI. */
 export const MODELO_REDACTOR = 'gpt-5.5'
 

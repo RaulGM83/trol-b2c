@@ -13,6 +13,18 @@
 
 export type Capa = 'oficial' | 'declarado' | 'estimado' | 'desconocido';
 
+/**
+ * Cuándo se obtuvo un dato, según el `kv` del expediente.
+ *
+ * Es la fecha del dato, no la de la consulta: para lo que sale de un SISEC es
+ * la fecha de corte del reporte, que es la que el cliente reconoce.
+ */
+function fechaDato(kv: any, campo: string): string | null {
+  const v = kv?.[campo];
+  const en = v && typeof v === 'object' ? v.en : null;
+  return en ? String(en) : null;
+}
+
 /** Un número con su procedencia. `null` es "no lo sabemos", que no es cero. */
 export type Dato = { valor: number | string | boolean | null; capa: Capa };
 
@@ -336,7 +348,11 @@ export function construirHechos({
     // matizar ("según tu último reporte oficial", "según lo que nos comentaste")
     // en vez de afirmar todo con la misma seguridad.
     procedencia: {
-      imss_sisec: e.ley_en ?? null,
+      // La fecha del REPORTE, no la del día en que lo pedimos. `en` es el
+      // `obtenido_en` del dato: en un SISEC es la fecha de corte del reporte.
+      // Antes salía de `ley`, que se reescribe en cada consulta aunque falle y
+      // terminaba imprimiendo el día del intento.
+      imss_sisec: fechaDato(e.kv, 'semanas_cotizadas') ?? e.ley_en ?? null,
       saldo_infonavit: capaDe(e.saldo_infonavit_capa),
       nota:
         'oficial = viene del IMSS o del ISSSTE; declarado = lo dijo el cliente; estimado = lo calculamos nosotros.',

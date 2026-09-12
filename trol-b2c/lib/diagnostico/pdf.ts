@@ -74,6 +74,7 @@ export async function construirPdfDiagnostico(diagnosticoId: string): Promise<Pd
         responsable: t.responsable_nombre ?? null,
         vence_el: t.vence_el ?? null,
       })),
+      seccionesOff: Array.isArray(contenido.secciones_off) ? (contenido.secciones_off as string[]) : null,
       capitulos: capitulosDe({
         ley: hechos?.cliente?.ley ?? null,
         regimenIssste: regimen as string | null,
