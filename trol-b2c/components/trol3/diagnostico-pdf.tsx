@@ -177,6 +177,28 @@ const Lista = ({ items }: { items: string[] }) => (
   </>
 );
 
+/**
+ * El encabezado que se repite en cada hoja menos la portada.
+ *
+ * El cuerpo del diagnóstico es un solo hilo que se corta donde cae; sin esto,
+ * toda hoja a partir de la segunda —incluida la del escenario, que abre hoja a
+ * propósito— salía sin marca ni nombre del cliente. `render` lo deja fuera de
+ * la primera, donde ya está la banda grande de portada.
+ */
+const Encabezado = ({ cliente }: { cliente: string }) => (
+  <View
+    fixed
+    render={({ pageNumber }) =>
+      pageNumber === 1 ? null : (
+        <View style={s.bandChica}>
+          <Image style={s.logoChico} src={LOGO_TROL_BLANCO} />
+          <Text style={{ color: '#fff', fontSize: 8.6 }}>Diagnóstico Avanzado · {cliente}</Text>
+        </View>
+      )
+    }
+  />
+);
+
 const Pie = ({ cliente }: { cliente: string }) => (
   <View style={s.foot} fixed>
     <Text style={s.pieMarca}>El Trol financiero</Text>
@@ -294,6 +316,7 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
           El orden de los bloques es el de BLOQUES_PDF, que es también el que
           pinta los switches del panel. */}
       <Page size="LETTER" style={s.page}>
+        <Encabezado cliente={d.cliente} />
         <View style={s.band}>
           <Image style={s.logoBanda} src={LOGO_TROL_BLANCO} />
           <Text style={s.h1}>Diagnóstico Avanzado</Text>
