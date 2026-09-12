@@ -207,10 +207,24 @@ const Pie = ({ cliente }: { cliente: string }) => (
   </View>
 );
 
+/**
+ * La marca de borrador, sólo en la primera hoja.
+ *
+ * Basta verla una vez para saber qué se tiene en la mano; repetida en cada
+ * hoja se vuelve ruido y le quita aire al encabezado. `pageNumber` es del
+ * documento entero, así que esto también la deja fuera del anexo.
+ */
 const Aviso = () => (
-  <View style={s.aviso} fixed>
-    <Text style={s.avisoTxt}>BORRADOR — documento en revisión, no entregar al cliente</Text>
-  </View>
+  <View
+    fixed
+    render={({ pageNumber }) =>
+      pageNumber === 1 ? (
+        <View style={s.aviso}>
+          <Text style={s.avisoTxt}>BORRADOR — documento en revisión, no entregar al cliente</Text>
+        </View>
+      ) : null
+    }
+  />
 );
 
 // ---------------------------------------------------------------------------
@@ -768,7 +782,6 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
             <Image style={s.logoChico} src={LOGO_TROL_BLANCO} />
             <Text style={{ color: '#fff', fontSize: 8.6 }}>Diagnóstico Avanzado · {d.cliente}</Text>
           </View>
-          {borrador ? <Aviso /> : null}
           <View style={s.body}>
             {d.capitulos.map((c) => (
               <Sec key={c.titulo} titulo={c.titulo}>
