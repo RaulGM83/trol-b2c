@@ -63,11 +63,19 @@ const num = (n: any, d = 0) => {
   const v = Number(n);
   return n == null || Number.isNaN(v) ? '—' : v.toLocaleString('es-MX', { maximumFractionDigits: d });
 };
+/** `true` si el texto es una fecha sin hora real: medianoche UTC o sólo el día. */
+const esFechaPura = (s: string) => /^\d{4}-\d{2}-\d{2}(T00:00:00(\.0+)?(Z|\+00:00))?$/.test(s);
+
 const fecha = (s: any) => {
   if (!s) return '—';
-  const d = new Date(String(s).length <= 10 ? String(s) + 'T00:00:00' : String(s));
+  // Una fecha sin hora (la de un reporte, un alta, una baja) se guarda como
+  // medianoche UTC. Convertirla a otra zona la corre un día: el SISEC emitido
+  // el 11 se leía "10 de septiembre" en México. Se formatea el día tal cual.
+  const txt = String(s);
+  const solo = esFechaPura(txt) ? txt.slice(0, 10) : null;
+  const d = new Date(solo ? solo + 'T12:00:00' : txt.length <= 10 ? txt + 'T12:00:00' : txt);
   return Number.isNaN(d.getTime())
-    ? String(s)
+    ? txt
     : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
@@ -404,7 +412,9 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
           {on('oportunidades_issste') ? narr('oportunidades_issste') : null}
 
           {on('escenario') ? (
-            <>
+            /* El escenario abre hoja: son las cifras que el cliente busca
+               primero y no deben aparecer como cola de la sección previa. */
+            <View break>
                       {principal && principal.pension_mensual == null ? (
                         <Sec titulo="El escenario que revisamos">
                           <Text style={s.p}>
@@ -584,7 +594,7 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
                           </Text>
                         </Sec>
                       ) : null}
-            </>
+            </View>
           ) : null}
 
           {on('estrategia_oportunidades') ? narr('estrategia_oportunidades') : null}

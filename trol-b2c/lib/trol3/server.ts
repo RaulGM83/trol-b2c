@@ -73,8 +73,24 @@ export const fmtMXN = (n: number | null | undefined) =>
   n == null ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n));
 export const fmtNum = (n: number | null | undefined) => (n == null ? '—' : new Intl.NumberFormat('es-MX').format(Number(n)));
 export const TZ = 'America/Mexico_City';
-export const fmtFecha = (d: string | null | undefined) =>
-  d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TZ }) : '—';
+/**
+ * Una fecha sin hora —la de emisión de un reporte, un alta, una baja— se guarda
+ * como medianoche UTC. Pasarla por `timeZone: TZ` la corre un día hacia atrás:
+ * el SISEC emitido el 11 de septiembre se leía "10 de septiembre" en pantalla,
+ * mientras el PDF (que corre en UTC) decía 11. Se imprime el día tal como está.
+ */
+const esFechaPura = (s: string) => /^\d{4}-\d{2}-\d{2}(T00:00:00(\.0+)?(Z|\+00:00))?$/.test(s);
+
+export const fmtFecha = (d: string | null | undefined) => {
+  if (!d) return '—';
+  const solo = esFechaPura(d) ? d.slice(0, 10) : null;
+  return new Date(solo ? solo + 'T12:00:00' : d).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...(solo ? {} : { timeZone: TZ }),
+  });
+};
 export const fmtHora = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: TZ }) : '';
 export const fmtFechaHora = (d: string | null | undefined) =>
