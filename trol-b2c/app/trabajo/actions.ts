@@ -1063,6 +1063,19 @@ export async function seccionesDiagnostico(diagnosticoId: string, personaId: str
   return ok();
 }
 
+/**
+ * El asesor se llevó el link directo del cliente.
+ *
+ * Generarlo ya no es evento: la RPC corre al pintar el expediente y contaba
+ * aperturas de ficha. Esto se llama al copiar, que es cuando de verdad pasó algo.
+ */
+export async function marcarMiLinkCompartido(personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('marcar_mi_link_compartido', { p_persona: personaId });
+  if (error) return fail(error);
+  return ok();
+}
+
 export async function cambiarEstadoDiagnostico(
   diagnosticoId: string, personaId: string, estado: 'borrador' | 'revisado' | 'entregado',
 ) {

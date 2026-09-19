@@ -518,7 +518,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             </details>
           </div>
           <aside className="space-y-4">
-            <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} />
+            <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} personaId={e.persona_id} />
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="mb-2 text-sm font-bold">Pedir información</h2>
               <ConsultaForm personaId={e.persona_id} />
