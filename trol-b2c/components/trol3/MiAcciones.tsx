@@ -87,8 +87,16 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], lin
               : `Actualizar mi información del IMSS · $${actualizacion.precio}`}
           </button>
         )}
+        {/* Sin link a /checkout a propósito: ese flujo es el legacy (ordenes_b2c),
+            no conoce 'actualizacion_datos' y getProducto() cae en silencio a la
+            calculadora — le cobraría $100 por otra cosa. Hasta que el checkout
+            sepa cumplir este producto, el camino de pago lo abre su experto. */}
         {actualizacion?.ofrecer && !actualizacion.alcanzan_puntos && actualizacion.precio != null && (
-          <Link href={`/checkout?p=actualizacion_datos`} className={btn}>Pagar ${actualizacion.precio}</Link>
+          <HablarBoton
+            texto={`Quiero actualizarla ($${actualizacion.precio})`}
+            mensaje={`Hola, quiero actualizar mi información del IMSS (${actualizacion.precio} MXN). Vengo de mi cuenta Trol (app.trol.mx).`}
+            compacto
+          />
         )}
         {actualizacion?.en_curso && <span className="self-center text-xs text-muted">Estamos consultando tu información al IMSS.</span>}
         {tieneSemilla && beneficios.includes('calculadora') && <Link href="/mi?tab=calculadora" className={btn}>Abrir mi calculadora</Link>}
