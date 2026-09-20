@@ -10,6 +10,9 @@
 //   /mi-link         {persona_id|telefono, campania?}                          -> {mi_link} (acceso a /mi por WhatsApp)
 //   /consulta/resultado {consulta_id, estado, datos?, documentos?, resultado?, error?, fecha_dato?}
 //                       documentos: [{tipo, nombre, base64?|storage_path?|url?, gating?}] — el base64 se sube a la bóveda
+//   /avisar          {persona_id|telefono, evento, payload?, plantilla?, componentes?}
+//                    (144: intenta inyectar el evento en su chat con Tako; si la ventana
+//                     de 24 h está cerrada, cae a la plantilla que se indique)
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
 //   /cita            {calendario_email, evento_id, inicio, fin, titulo?, estado?, meet_url?, invitado_nombre?, invitado_email?, invitado_telefono?, descripcion?}
 //                    (134: el workflow n8n de Google Calendar registra/actualiza la cita en trol3.citas)
@@ -23,6 +26,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 let API_KEY = Deno.env.get("TROL_API_KEY") ?? "";
+const TAKO_API_KEY = Deno.env.get("TAKO_API_KEY") ?? "";
+const TAKO_PHONE_ID = Deno.env.get("TAKO_PHONE_NUMBER_ID") ?? "";
+const TAKO_BASE = "https://api.insuranceboosters.com/api/v1/whatsapp";
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { db: { schema: "trol3" }, auth: { persistSession: false } });
 
@@ -134,6 +140,95 @@ async function subirDocumentosBase64(consultaId: string, docs: DocEntrada[]): Pr
     }
   }
   return out;
+}
+
+/**
+ * Avisarle algo al cliente por WhatsApp, por el camino que corresponda.
+ *
+ * Hay dos formas de hablarle y no son intercambiables:
+ *
+ *   1. Dentro de su conversación viva: se le inyecta un evento de sistema y Tako
+ *      reacciona con todo el hilo delante. El cliente lee una continuación de lo que ya
+ *      estaba hablando, no una circular que lo saluda otra vez por su nombre.
+ *   2. Si el chat está cerrado: Meta sólo deja reabrir con plantilla aprobada.
+ *
+ * La regla de Meta —y la del endpoint de Tako— es la ventana de 24 horas desde el último
+ * mensaje del cliente. Como esa ventana no se puede saber con certeza desde aquí, no se
+ * adivina: se intenta el evento y, si lo rechazan, se cae a la plantilla. Preguntar
+ * primero sería una condición de carrera; intentar y caer siempre acierta.
+ */
+async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const evento = String(b.evento ?? "").trim();
+  if (!evento) return { ok: false, error: "falta evento" };
+  const payload = (b.payload ?? {}) as Record<string, unknown>;
+
+  const { data: per } = await db.from("personas").select("tako_conversacion_id").eq("id", pid).maybeSingle();
+  const conv = (per as { tako_conversacion_id?: string } | null)?.tako_conversacion_id ?? null;
+
+  let fallo: string | null = null;
+  if (conv && TAKO_API_KEY) {
+    try {
+      const r = await fetch(`${TAKO_BASE}/conversations/${encodeURIComponent(conv)}/system-events`, {
+        method: "POST",
+        headers: { "x-ib-api-key": TAKO_API_KEY, "content-type": "application/json" },
+        body: JSON.stringify({ event: evento, payload }),
+      });
+      if (r.ok) {
+        await db.rpc("registrar_interaccion", {
+          p_persona: pid, p_canal: "wa", p_actor: "sistema", p_actor_id: null, p_direccion: "saliente",
+          p_contenido: `Evento al bot: ${evento} — ${JSON.stringify(payload).slice(0, 400)}`,
+          p_visible_cliente: false, p_meta: { via: "system_event", evento },
+        });
+        return { ok: true, via: "system_event", evento, persona_id: pid };
+      }
+      fallo = `system-events ${r.status}: ${(await r.text()).slice(0, 200)}`;
+    } catch (e) {
+      fallo = `system-events: ${(e as Error).message}`;
+    }
+  } else {
+    fallo = conv ? "sin TAKO_API_KEY" : "la persona no tiene conversación abierta con el bot";
+  }
+
+  // El chat está cerrado (o nunca existió): sólo queda reabrir con plantilla.
+  const plantilla = typeof b.plantilla === "string" ? b.plantilla.trim() : "";
+  if (!plantilla) return { ok: false, via: "ninguna", motivo: fallo, evento, persona_id: pid };
+  if (!TAKO_API_KEY || !TAKO_PHONE_ID) return { ok: false, via: "ninguna", motivo: "faltan credenciales de Tako", evento, persona_id: pid };
+
+  const { data: c } = await db.from("contactos").select("normalizado").eq("persona_id", pid)
+    .eq("tipo", "telefono").eq("no_contactar", false)
+    .order("principal", { ascending: false }).limit(1).maybeSingle();
+  const destino = (c as { normalizado?: string } | null)?.normalizado
+    ?? (typeof b.telefono === "string" ? b.telefono : null);
+  if (!destino) return { ok: false, via: "ninguna", motivo: "sin teléfono", evento, persona_id: pid };
+
+  const to = "521" + String(destino).replace(/\D/g, "").slice(-10);
+  const cuerpo: Record<string, unknown> = { to, name: plantilla, language: "es" };
+  if (Array.isArray(b.componentes)) cuerpo.components = b.componentes;
+
+  try {
+    const r = await fetch(`${TAKO_BASE}/${TAKO_PHONE_ID}/template`, {
+      method: "POST",
+      headers: { "x-ib-api-key": TAKO_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify(cuerpo),
+    });
+    const txt = (await r.text()).slice(0, 300);
+    // El registro dice lo que pasó de verdad. Que una plantilla rechazada por Meta
+    // quedara escrita como "enviada" es lo que hizo creer durante un mes que 860
+    // mensajes habían llegado.
+    await db.rpc("registrar_interaccion", {
+      p_persona: pid, p_canal: "wa", p_actor: "sistema", p_actor_id: null, p_direccion: "saliente",
+      p_contenido: r.ok
+        ? `Trol envió la plantilla ${plantilla} por: ${evento}`
+        : `Trol NO pudo enviar la plantilla ${plantilla} por: ${evento} — ${txt}`,
+      p_visible_cliente: false,
+      p_meta: { via: "plantilla", plantilla, evento, enviado: r.ok ? "1" : "0", fallo_evento: fallo },
+    });
+    return r.ok
+      ? { ok: true, via: "plantilla", plantilla, evento, persona_id: pid, fallo_evento: fallo }
+      : { ok: false, via: "plantilla", plantilla, evento, persona_id: pid, error: txt, fallo_evento: fallo };
+  } catch (e) {
+    return { ok: false, via: "plantilla", evento, persona_id: pid, error: (e as Error).message, fallo_evento: fallo };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -281,6 +376,11 @@ Deno.serve(async (req) => {
         });
         if (error) throw error;
         return json(data);
+      }
+      case "/avisar": {
+        // Un solo camino para hablarle al cliente: el que decide es el estado de su chat.
+        const pid = await personaId(b, req.headers);
+        return json(await avisarCliente(pid, b));
       }
       case "/eventos/ack": {
         const ids = (b.ids ?? []) as number[];
