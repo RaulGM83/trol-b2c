@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
+import { MiAcciones, ChatTrol, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
 
 // No importar constantes con métodos desde módulos 'use client': en el server
 // llegan como Proxy y llamar .includes() revienta el render (digest 32375732).
@@ -15,9 +15,9 @@ import { NegativaLey73 } from '@/components/NegativaLey73';
 import { NegativaPension } from '@/components/NegativaPension';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Mi expediente · Trol' };
+export const metadata = { title: 'Mi cuenta · Trol' };
 
-const TABS: [string, string][] = [['hoy', 'Hoy'], ['misiones', 'Misiones'], ['expediente', 'Mi expediente'], ['documentos', 'Documentos'], ['puntos', 'Puntos'], ['asesorias', 'Asesorías']];
+const TABS: [string, string][] = [['hoy', 'Hoy'], ['misiones', 'Misiones'], ['expediente', 'Mi cuenta'], ['documentos', 'Documentos'], ['puntos', 'Puntos'], ['asesorias', 'Asesorías']];
 const NIVEL: Record<number, [string, string]> = { 1: ['Poner en orden', 'Lo básico para que nada te reste pensión.'], 2: ['Aprovechar hoy', 'Lo que puedes ganar ahora mismo.'], 3: ['Crecer y proteger', 'Para llegar más lejos.'] };
 const ESTADO_MISION: Record<string, [string, string]> = { hecho: ['Hecho', 'bg-green-100 text-green-800'], pendiente: ['Pendiente', 'bg-cream text-ink'], en_proceso: ['En proceso', 'bg-amber-100 text-amber-800'], atencion: ['Requiere atención', 'bg-red-100 text-red-700'], bloqueado: ['Después', 'bg-gray-100 text-muted'], recomendada: ['Tu experto la recomienda', 'bg-lime text-ink'] };
 const BEN_LABEL: Record<string, string> = { calculadora: 'Calculadora completa', diagnostico_avanzado: 'Diagnóstico avanzado', sesion_experto: 'Sesión con experto', docs_premium: 'Documentos premium', seguimiento: 'Seguimiento de trámite' };
@@ -33,13 +33,25 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
     // cliente en su navegador): su casa es /trabajo, no un expediente.
     const miembro = await getMiembro();
     if (miembro) redirect('/trabajo');
-    return <main className="mx-auto max-w-md px-5 py-10 text-sm">No pudimos vincular tu teléfono con un expediente. Escríbenos por WhatsApp.</main>;
+    // El cliente más perdido de todos no puede quedarse sin puerta: aquí sí o sí va el chat.
+    return (
+      <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
+        <p>No pudimos reconocer tu teléfono. Escríbenos por WhatsApp y lo resolvemos contigo.</p>
+        <SalidaChat mensaje="Hola, entré a app.trol.mx y no reconoce mi teléfono. ¿Me ayudan a entrar a mi cuenta Trol?" />
+      </main>
+    );
   }
   const db = t3();
   await db.rpc('mi_bienvenida');
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
-  if (error || !x) return <main className="mx-auto max-w-md px-5 py-10 text-sm">Error cargando tu expediente: {error?.message ?? 'sin datos'}.</main>;
+  if (error || !x) return (
+    <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
+      <p>No pudimos cargar tu cuenta en este momento. Vuelve a intentarlo en un minuto, o escríbenos y lo vemos contigo.</p>
+      <SalidaChat mensaje="Hola, mi cuenta Trol (app.trol.mx) no carga. ¿Me ayudan?" />
+      <p className="text-[11px] text-muted">Detalle técnico: {error?.message ?? 'sin datos'}.</p>
+    </main>
+  );
   const e = x as Any;
   const tab = TABS.some(([t]) => t === searchParams.tab) || searchParams.tab === 'calculadora' ? (searchParams.tab as string) : 'hoy';
   const misiones: Any[] = (mis as Any[]) ?? [];
@@ -136,7 +148,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               <p className="mt-1 text-sm">{(jugada as Any).texto}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/70">{(jugada as Any).valor ? <span>hasta {fmtMXN((jugada as Any).valor)} al año</span> : null}{(jugada as Any).urgencia ? <span>· antes del {fmtFecha((jugada as Any).urgencia)}</span> : null}</div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi expediente mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro />
+                <HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi cuenta Trol mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro />
                 {e.tiene_semilla ? <Link href="/mejor-jugada" className="rounded-xl border border-ink/25 px-4 py-2.5 text-sm font-bold text-ink">Ver los números →</Link> : null}
               </div>
             </section>
@@ -164,14 +176,17 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             </ul>
           </section>
 
+          <ChatTrol />
+
           <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
 
           <Explicaciones items={explLey.slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
 
           {(e.interacciones ?? []).length ? (
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="text-sm font-bold">Novedades</h2>
-              <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).slice(0, 5).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}</div>{i.contenido}</li>)}</ul>
+              <h2 className="text-sm font-bold">Tu historial con Trol</h2>
+              <p className="mb-2 text-xs text-muted">Lo que te avisamos por WhatsApp y lo que ha hecho tu experto, en un solo lugar.</p>
+              <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).slice(0, 5).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}{i.canal === 'wa' ? ' · por WhatsApp' : ''}</div>{i.contenido}</li>)}</ul>
             </section>
           ) : null}
         </div>
@@ -212,7 +227,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
       {tab === 'expediente' && (
         <div className="space-y-4">
           <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="text-sm font-bold">Completa tu expediente {faltan.length ? <span className="ml-1 rounded-full bg-lime px-2 py-0.5 text-[11px]">+{5 * Math.min(faltan.length, 8)} pts</span> : null}</h2>
+            <h2 className="text-sm font-bold">Completa tus datos {faltan.length ? <span className="ml-1 rounded-full bg-lime px-2 py-0.5 text-[11px]">+{5 * Math.min(faltan.length, 8)} pts</span> : null}</h2>
             <p className="mb-3 text-xs text-muted">Lo que declares se guarda como “tu versión”; cuando tenemos el dato oficial, ese manda. Cada dato suma puntos.</p>
             <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
           </section>
@@ -273,13 +288,13 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               );
             })}
           </ul>
-          <p className="mt-3 text-[11px] text-muted">Cada documento que subes suma 50 puntos. Si subes tu constancia de semanas del IMSS, actualizamos tu expediente y tus cálculos con ella.</p>
+          <p className="mt-3 text-[11px] text-muted">Cada documento que subes suma 50 puntos. Si subes tu constancia de semanas del IMSS, actualizamos tus números con ella.</p>
         </section>
       )}
 
       {tab === 'calculadora' && (
         <div className="space-y-3">
-          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi expediente</Link>
+          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi cuenta</Link>
           {beneficios.includes('calculadora') && e.tiene_semilla ? (
             <CalculadoraEmbed />
           ) : (
@@ -333,7 +348,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </div>
       )}
 
-      <p className="mt-8 text-center text-[11px] leading-relaxed text-muted">El trámite ante el IMSS es gratis. Trol no pide anticipos en efectivo ni garantiza montos.</p>
+      <p className="mt-8 text-center text-xs text-muted">¿Tienes una duda? <HablarBoton texto="Escríbenos por WhatsApp" mensaje="Hola, tengo una duda sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." compacto /></p>
+
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">El trámite ante el IMSS es gratis. Trol no pide anticipos en efectivo ni garantiza montos.</p>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl justify-around px-2 py-2 text-[11px]">
@@ -348,4 +365,10 @@ async function CalculadoraEmbed() {
   const semilla = await getSemillaV2Cliente();
   if (!semilla) return <section className="rounded-2xl border border-line bg-white p-5 text-sm">Tu semilla de cálculo aún no está lista; pide a tu experto que actualice tu información.</section>;
   return <CalculadoraPro semilla={semilla} embed />;
+}
+
+/** La puerta al chat cuando no hay cuenta que pintar: sin sesión, sin RPC, sin nada que falle. */
+function SalidaChat({ mensaje }: { mensaje: string }) {
+  const tel = process.env.NEXT_PUBLIC_WHATSAPP_TROL || '5215555555555';
+  return <a href={`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`} className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Escribirnos por WhatsApp</a>;
 }

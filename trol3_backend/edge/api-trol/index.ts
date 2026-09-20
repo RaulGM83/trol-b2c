@@ -159,6 +159,32 @@ async function subirDocumentosBase64(consultaId: string, docs: DocEntrada[]): Pr
  * adivina: se intenta el evento y, si lo rechazan, se cae a la plantilla. Preguntar
  * primero sería una condición de carrera; intentar y caer siempre acierta.
  */
+// Lo que el cliente ve en su cuenta Trol cuando le avisamos algo por WhatsApp.
+// Su cuenta y el chat son el mismo producto: si se entera por un lado, queda
+// escrito del otro. `resumen` en el body manda sobre esta tabla; un evento que
+// no esté aquí y venga sin resumen no ensucia su historial (p.ej. los nudges).
+const RESUMEN_EVENTO: Record<string, string> = {
+  consulta_lista: "Llegó tu información oficial del IMSS y actualizamos tus números.",
+  oportunidad_nueva: "Tu experto encontró una oportunidad nueva para tu pensión.",
+  cita_agendada: "Quedó agendada tu sesión con tu experto.",
+  diagnostico_listo: "Tu diagnóstico ya está disponible en tu cuenta.",
+  documento_listo: "Tenemos un documento nuevo para ti en tu cuenta.",
+};
+
+/** Deja en el historial del cliente lo mismo que le avisamos por WhatsApp. */
+async function anotarParaElCliente(pid: string, b: Record<string, unknown>, evento: string, via: string) {
+  const dado = typeof b.resumen === "string" ? b.resumen.trim() : "";
+  const texto = dado || RESUMEN_EVENTO[evento] || "";
+  if (!texto) return;
+  try {
+    await db.rpc("registrar_interaccion", {
+      p_persona: pid, p_canal: "wa", p_actor: "sistema", p_actor_id: null, p_direccion: "saliente",
+      p_contenido: texto,
+      p_visible_cliente: true, p_meta: { via, evento, para_cliente: "1" },
+    });
+  } catch { /* el aviso ya salió; que falle la bitácora no lo deshace */ }
+}
+
 async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<Record<string, unknown>> {
   const evento = String(b.evento ?? "").trim();
   if (!evento) return { ok: false, error: "falta evento" };
@@ -181,6 +207,7 @@ async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<R
           p_contenido: `Evento al bot: ${evento} — ${JSON.stringify(payload).slice(0, 400)}`,
           p_visible_cliente: false, p_meta: { via: "system_event", evento },
         });
+        await anotarParaElCliente(pid, b, evento, "system_event");
         return { ok: true, via: "system_event", evento, persona_id: pid };
       }
       fallo = `system-events ${r.status}: ${(await r.text()).slice(0, 200)}`;
@@ -225,6 +252,7 @@ async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<R
       p_visible_cliente: false,
       p_meta: { via: "plantilla", plantilla, evento, enviado: r.ok ? "1" : "0", fallo_evento: fallo },
     });
+    if (r.ok) await anotarParaElCliente(pid, b, evento, "plantilla");
     return r.ok
       ? { ok: true, via: "plantilla", plantilla, evento, persona_id: pid, fallo_evento: fallo }
       : { ok: false, via: "plantilla", plantilla, evento, persona_id: pid, error: txt, fallo_evento: fallo };

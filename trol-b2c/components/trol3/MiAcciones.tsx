@@ -11,6 +11,29 @@ const card = 'mt-5 rounded-2xl border border-line bg-white p-5';
 const btnDark = 'rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50';
 const btn = 'rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50';
 
+/**
+ * Los dos lugares de Trol, dicho en su cuenta.
+ *
+ * El bot ya manda el link de la cuenta en su primer bloque (prompt v20.1 §1.1). Esto es
+ * el gesto de vuelta: sin esto, el cliente que entra aquí no tiene forma de saber que
+ * del otro lado hay alguien contestando al momento, y los únicos botones al chat
+ * ("Hablar con mi experto") hacen creer que escribir es molestar a un humano.
+ */
+export function ChatTrol({ compacto = false }: { compacto?: boolean }) {
+  return (
+    <section className={compacto ? 'rounded-2xl border border-line bg-cream/60 p-4' : 'rounded-2xl border border-lime bg-lime/10 p-5'}>
+      <h2 className="text-sm font-bold">¿Dudas? Escríbenos por WhatsApp</h2>
+      <p className="mt-1 text-xs text-muted">
+        Aquí ves tus números, tus documentos y lo que sigue. En el chat preguntas lo que sea
+        —a cualquier hora— y te contestamos al momento; si hace falta, te pasamos con tu experto.
+      </p>
+      <div className="mt-3">
+        <HablarBoton texto="Abrir mi chat de Trol" mensaje="Hola, tengo una duda sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." oscuro />
+      </div>
+    </section>
+  );
+}
+
 export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], linkCitas = null }: { tieneSemilla: boolean; cabecera: string | null; citas: { inicio: string; estado: string }[]; beneficios?: string[]; linkCitas?: string | null }) {
   const supabase = createClient();
   const router = useRouter();
@@ -21,9 +44,9 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], lin
   return (
     <section className={card}>
       <h2 className="text-sm font-bold">Tu experto</h2>
-      <p className="mt-1 text-xs text-muted">{cabecera ? `Tu experto asignado es ${cabecera}.` : 'Todavía no tienes asesor asignado; el primer experto que te atienda quedará asignado a tu caso.'}</p>
+      <p className="mt-1 text-xs text-muted">{cabecera ? `Tu experto asignado es ${cabecera}. Escríbele por WhatsApp: te contestamos al momento y te pasamos con él cuando haga falta.` : 'Todavía no tienes asesor asignado; el primer experto que te atienda quedará asignado a tu caso. Mientras, escríbenos por WhatsApp cuando quieras.'}</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <HablarBoton texto="Hablar con mi experto por WhatsApp" mensaje="Hola, soy cliente de Trol y quiero hablar con mi experto sobre mi pensión. Vengo de mi expediente en app.trol.mx." oscuro />
+        <HablarBoton texto="Escribirle por WhatsApp" mensaje="Hola, soy cliente de Trol y quiero hablar con mi experto sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." oscuro />
         <button disabled={pending} className={btn} onClick={() => start(async () => {
           const { data, error } = await supabase.schema('trol3').rpc('pedir_consulta_mia', { p_tipo: 'imss_historial' });
           const r = data as { ok?: boolean; motivo?: string } | null;
@@ -36,7 +59,7 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], lin
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-xs text-muted">{proxima ? `Tu próxima sesión: ${new Date(proxima.inicio).toLocaleString('es-MX')}` : 'Programa una sesión con tu experto:'}</span>
         {!proxima && linkCitas ? <a href={linkCitas} target="_blank" rel="noreferrer" className={btn}>Agendar mi asesoría</a> : null}
-        {!proxima && <HablarBoton texto={linkCitas ? 'Prefiero que me contacten' : 'Programar sesión'} mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto />}
+        {!proxima && <HablarBoton texto={linkCitas ? 'Prefiero que me contacten' : 'Programar sesión'} mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi cuenta Trol (app.trol.mx)." compacto />}
       </div>
       {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
     </section>
@@ -53,7 +76,7 @@ export function CompletarDatos({ campos }: { campos: { campo: string; nombre: st
   const [pending, start] = useTransition();
   const [verTodos, setVerTodos] = useState(false);
   const lista = verTodos ? campos : campos.slice(0, 6);
-  if (!campos.length) return <p className="text-sm text-muted">¡Tu expediente está completo con lo que puedes declarar!</p>;
+  if (!campos.length) return <p className="text-sm text-muted">¡Ya declaraste todo lo que podíamos pedirte!</p>;
   const parse = (c: { tipo: string }, v: string): unknown => c.tipo === 'number' ? Number(v.replace(/[^0-9.\-]/g, '')) : c.tipo === 'bool' ? v === 'si' : v;
   return (
     <div className="space-y-2">
@@ -179,7 +202,7 @@ export function CurpAcciones({ identidad, compacto = false }: { identidad: Ident
       {!identidad.editable && identidad.curp && (
         <div className="mt-2 text-xs text-muted">
           Tu CURP ya trajo información oficial, así que desde aquí ya no se puede cambiar. Si viene mal, tu experto la corrige contigo.
-          <div className="mt-2"><HablarBoton texto="Pedirle a mi experto que la revise" mensaje={`Hola, mi CURP (${identidad.curp}) necesita corregirse pero ya no puedo cambiarla desde mi expediente. Vengo de app.trol.mx.`} compacto={compacto} /></div>
+          <div className="mt-2"><HablarBoton texto="Pedirle a mi experto que la revise" mensaje={`Hola, mi CURP (${identidad.curp}) necesita corregirse pero ya no puedo cambiarla desde mi cuenta Trol. Vengo de app.trol.mx.`} compacto={compacto} /></div>
         </div>
       )}
 
@@ -246,7 +269,7 @@ export function MisionCta({ mision, campos, identidad = null, compacto = false }
   // corregirla y quién sólo confirmarla lo dice `mi_identidad()`: sin ella no
   // inventamos permisos, mandamos al experto.
   if (cta === 'curp_confirmar') {
-    if (!identidad) return <HablarBoton texto="Revisar mi CURP con mi experto" mensaje="Hola, el IMSS no reconoce mi CURP y quiero revisarla. Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro />;
+    if (!identidad) return <HablarBoton texto="Revisar mi CURP con mi experto" mensaje="Hola, el IMSS no reconoce mi CURP y quiero revisarla. Vengo de mi cuenta Trol (app.trol.mx)." compacto={compacto} oscuro />;
     return <CurpAcciones identidad={identidad} compacto={compacto} />;
   }
   if (cta === 'consulta_imss') {
@@ -299,7 +322,7 @@ export function MisionCta({ mision, campos, identidad = null, compacto = false }
     );
   }
   if (cta === 'agendar') {
-    return <HablarBoton texto="Programar sesión por WhatsApp" mensaje="Hola, quiero programar una sesión con mi experto de Trol para entender mi situación de pensión. ¿Cuándo pueden contactarme? Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro />;
+    return <HablarBoton texto="Programar sesión por WhatsApp" mensaje="Hola, quiero programar una sesión con mi experto de Trol para entender mi situación de pensión. ¿Cuándo pueden contactarme? Vengo de mi cuenta Trol (app.trol.mx)." compacto={compacto} oscuro />;
   }
   if (cta === 'infonavit') {
     if (compacto) return <Link href="/mi?tab=expediente" className={cls}>Contestar</Link>;
@@ -310,12 +333,12 @@ export function MisionCta({ mision, campos, identidad = null, compacto = false }
     return (
       <div className="w-full text-xs">
         {m.clabe ? <div className="rounded-lg bg-cream p-2 font-mono text-sm">CLABE: {m.clabe}</div> : <p className="text-muted">Tu experto te comparte la CLABE y los pasos por WhatsApp.</p>}
-        <div className="mt-2 flex flex-wrap gap-2"><HablarBoton texto="Quiero ahorrar" mensaje="Hola, quiero empezar a ahorrar para mi retiro con Millas para el Retiro. ¿Me comparten la CLABE y los pasos? Vengo de mi expediente en app.trol.mx." compacto={compacto} oscuro /></div>
+        <div className="mt-2 flex flex-wrap gap-2"><HablarBoton texto="Quiero ahorrar" mensaje="Hola, quiero empezar a ahorrar para mi retiro con Millas para el Retiro. ¿Me comparten la CLABE y los pasos? Vengo de mi cuenta Trol (app.trol.mx)." compacto={compacto} oscuro /></div>
       </div>
     );
   }
   if (cta === 'referir') return <Link href="/referidos" className={cls}>Invitar</Link>;
-  return <HablarBoton texto="Hablar con mi experto" mensaje={`Hola, quiero hablar con mi experto de Trol sobre: ${(mision as { titulo?: string }).titulo ?? 'mi pensión'}. Vengo de mi expediente en app.trol.mx.`} compacto={compacto} oscuro />;
+  return <HablarBoton texto="Hablar con mi experto" mensaje={`Hola, quiero hablar con mi experto de Trol sobre: ${(mision as { titulo?: string }).titulo ?? 'mi pensión'}. Vengo de mi cuenta Trol (app.trol.mx).`} compacto={compacto} oscuro />;
 }
 
 /** Registra el handoff y abre WhatsApp con el mensaje listo: la conversación la inicia el cliente. */
@@ -323,7 +346,7 @@ export function HablarBoton({ texto = 'Hablar con mi experto', mensaje, compacto
   const supabase = createClient();
   const [pending, start] = useTransition();
   const cls = oscuro ? (compacto ? 'rounded-lg bg-ink px-3 py-1 text-xs font-bold text-white disabled:opacity-50' : btnDark) : (compacto ? 'rounded-lg border border-line bg-white px-3 py-1 text-xs font-bold disabled:opacity-50' : btn);
-  const texto_wa = mensaje ?? `Hola, soy cliente de Trol y quiero hablar con mi experto: ${texto}. Vengo de mi expediente en app.trol.mx.`;
+  const texto_wa = mensaje ?? `Hola, soy cliente de Trol y quiero hablar con mi experto: ${texto}. Vengo de mi cuenta Trol (app.trol.mx).`;
   return (
     <button disabled={pending} className={cls} onClick={() => start(async () => {
       const url = waLink(texto_wa);
@@ -394,7 +417,7 @@ export function DesbloquearDoc({ tipo, precio, maxPct, saldo }: { tipo: string; 
   const conPuntos = Math.min(saldo, Math.floor((p * maxPct) / 100));
   return (
     <span className="inline-flex flex-col items-end gap-1 text-[11px] text-muted">
-      <HablarBoton texto={`Desbloquear · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(p)}`} mensaje={`Hola, quiero desbloquear mi documento "${tipo}" (${p} MXN${conPuntos ? `, usando ${conPuntos} puntos` : ''}). ¿Me pasan los datos de pago? Vengo de mi expediente en app.trol.mx.`} compacto oscuro />
+      <HablarBoton texto={`Desbloquear · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(p)}`} mensaje={`Hola, quiero desbloquear mi documento "${tipo}" (${p} MXN${conPuntos ? `, usando ${conPuntos} puntos` : ''}). ¿Me pasan los datos de pago? Vengo de mi cuenta Trol (app.trol.mx).`} compacto oscuro />
       {conPuntos > 0 ? <span>hasta {conPuntos} pts ({maxPct}%)</span> : null}
     </span>
   );
@@ -422,10 +445,10 @@ export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto
         <button disabled={pending || (pedirCurp && curp.length > 0 && curp.length < 18)} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50" onClick={() => start(async () => {
           const fd = new FormData(); fd.set('tipo', tipo); fd.set('archivo', archivo); if (curp) fd.set('curp', curp);
           const r = (await miSubirDocumento(fd)) as { ok: boolean; error?: string; procesando?: boolean; aviso?: string; falta_curp?: boolean };
-          setMsg(r.ok ? (r.aviso ?? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualiza tu expediente.' : '¡Guardado! +50 pts.')) : r.error ?? 'No se pudo subir.');
+          setMsg(r.ok ? (r.aviso ?? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualizan tus números.' : '¡Guardado! +50 pts.')) : r.error ?? 'No se pudo subir.');
           if (r.ok && r.falta_curp) setPedirCurp(true);
           if (r.ok && !r.falta_curp) { setArchivo(null); router.refresh(); }
-        })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mi expediente' : 'Subir (+50 pts)'}</button>
+        })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mis números' : 'Subir (+50 pts)'}</button>
       )}
       {msg && <span className="max-w-[220px] text-right text-[11px] text-green-700">{msg}</span>}
     </span>
