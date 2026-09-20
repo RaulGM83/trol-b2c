@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, ChatTrol, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
+import { MiAcciones, ChatTrol, type ActualizacionImss, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
 
 // No importar constantes con métodos desde módulos 'use client': en el server
 // llegan como Proxy y llamar .includes() revienta el render (digest 32375732).
@@ -46,7 +46,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   // 147: sella que está adentro. El nudge y la cola de campañas lo respetan
   // media hora: no se interrumpe a quien ya está prestando atención.
   await db.rpc('marcar_visto_en_app');
-  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id')]);
+  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
   if (error || !x) return (
     <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
@@ -181,7 +181,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
           <ChatTrol falta={siguiente ? { titulo: siguiente.titulo, cta: siguiente.cta ?? null } : null} />
 
-          <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
+          <MiAcciones actualizacion={(actualizacion as ActualizacionImss | null) ?? null} tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
 
           <Explicaciones items={explLey.slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
 

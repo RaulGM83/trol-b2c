@@ -47,7 +47,9 @@ export function ChatTrol({ compacto = false, falta = null }: { compacto?: boolea
   );
 }
 
-export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], linkCitas = null }: { tieneSemilla: boolean; cabecera: string | null; citas: { inicio: string; estado: string }[]; beneficios?: string[]; linkCitas?: string | null }) {
+export type ActualizacionImss = { ofrecer: boolean; desde: string | null; en_curso: boolean; precio: number | null; saldo: number; alcanzan_puntos: boolean };
+
+export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], linkCitas = null, actualizacion = null }: { tieneSemilla: boolean; cabecera: string | null; citas: { inicio: string; estado: string }[]; beneficios?: string[]; linkCitas?: string | null; actualizacion?: ActualizacionImss | null }) {
   const supabase = createClient();
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
@@ -60,12 +62,35 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], lin
       <p className="mt-1 text-xs text-muted">{cabecera ? `Tu experto asignado es ${cabecera}. Escríbele por WhatsApp: te contestamos al momento y te pasamos con él cuando haga falta.` : 'Todavía no tienes asesor asignado; el primer experto que te atienda quedará asignado a tu caso. Mientras, escríbenos por WhatsApp cuando quieras.'}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <HablarBoton texto="Escribirle por WhatsApp" mensaje="Hola, soy cliente de Trol y quiero hablar con mi experto sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." oscuro />
-        <button disabled={pending} className={btn} onClick={() => start(async () => {
-          const { data, error } = await supabase.schema('trol3').rpc('pedir_consulta_mia', { p_tipo: 'imss_historial' });
-          const r = data as { ok?: boolean; motivo?: string } | null;
-          setMsg(error ? error.message : r?.ok ? 'Pedimos tu información oficial al IMSS. Te avisamos cuando llegue.' : r?.motivo === 'validado_vigente' ? 'Tu información oficial ya está actualizada.' : 'Ya hay una consulta en curso.');
-          router.refresh();
-        })}>Actualizar mi información del IMSS</button>
+        {/* 155: sólo se ofrece cuando su información tiene más de 3 meses. Antes el
+            botón salía siempre y no podía funcionar nunca: lo frenaba el candado de
+            frescura o el de Belvo, y la pantalla le decía "ya hay una consulta en
+            curso", que era falso. Un botón que sólo puede fallar enseña que la app
+            no sirve. */}
+        {actualizacion?.ofrecer && actualizacion.precio != null && (
+          <button disabled={pending} className={btn} onClick={() => start(async () => {
+            const { data, error } = await supabase.schema('trol3').rpc('actualizar_imss_mia');
+            const r = data as { ok?: boolean; motivo?: string; precio?: number } | null;
+            setMsg(
+              error ? error.message
+              : r?.ok ? 'Estamos consultando tu información al IMSS. Te avisamos por WhatsApp en cuanto llegue.'
+              : r?.motivo === 'requiere_pago' ? `Te faltan puntos: son ${r.precio} puntos o $${r.precio} MXN.`
+              : r?.motivo === 'aun_reciente' ? 'Tu información es de hace menos de tres meses; todavía no hay nada nuevo que traer.'
+              : r?.motivo === 'consulta_en_curso' ? 'Ya la estamos consultando; te avisamos en cuanto llegue.'
+              : r?.motivo === 'sin_datos_previos' ? 'Todavía no tenemos tu información oficial: la primera búsqueda es gratis y la hacemos nosotros.'
+              : 'No se pudo pedir la actualización.',
+            );
+            router.refresh();
+          })}>
+            {actualizacion.alcanzan_puntos
+              ? `Actualizar mi información del IMSS · ${actualizacion.precio} pts`
+              : `Actualizar mi información del IMSS · $${actualizacion.precio}`}
+          </button>
+        )}
+        {actualizacion?.ofrecer && !actualizacion.alcanzan_puntos && actualizacion.precio != null && (
+          <Link href={`/checkout?p=actualizacion_datos`} className={btn}>Pagar ${actualizacion.precio}</Link>
+        )}
+        {actualizacion?.en_curso && <span className="self-center text-xs text-muted">Estamos consultando tu información al IMSS.</span>}
         {tieneSemilla && beneficios.includes('calculadora') && <Link href="/mi?tab=calculadora" className={btn}>Abrir mi calculadora</Link>}
         <Link href="/mi?tab=asesorias" className={btn}>Ver asesorías y precios</Link>
       </div>
