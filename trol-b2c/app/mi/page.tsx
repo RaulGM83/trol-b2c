@@ -43,6 +43,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   }
   const db = t3();
   await db.rpc('mi_bienvenida');
+  // 147: sella que está adentro. El nudge y la cola de campañas lo respetan
+  // media hora: no se interrumpe a quien ya está prestando atención.
+  await db.rpc('marcar_visto_en_app');
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
   if (error || !x) return (
@@ -176,7 +179,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             </ul>
           </section>
 
-          <ChatTrol />
+          <ChatTrol falta={siguiente ? { titulo: siguiente.titulo, cta: siguiente.cta ?? null } : null} />
 
           <MiAcciones tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
 

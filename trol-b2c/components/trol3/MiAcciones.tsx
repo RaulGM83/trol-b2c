@@ -19,16 +19,29 @@ const btn = 'rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bol
  * del otro lado hay alguien contestando al momento, y los únicos botones al chat
  * ("Hablar con mi experto") hacen creer que escribir es molestar a un humano.
  */
-export function ChatTrol({ compacto = false }: { compacto?: boolean }) {
+export function ChatTrol({ compacto = false, falta = null }: { compacto?: boolean; falta?: { titulo: string; cta?: string | null } | null }) {
+  // Cuando le falta algo concreto, el chat deja de ser "¿dudas?" y pasa a ser la
+  // otra forma de hacerlo: o lo completa aquí arriba, o nos lo dicta por WhatsApp
+  // y nosotros lo capturamos. Las dos llevan al mismo sitio; la segunda además
+  // abre su ventana de 24 h por iniciativa suya, que es lo que nos deja avisarle
+  // después sin gastar una plantilla ni saludarlo de cero.
+  const conFalta = !!falta;
   return (
     <section className={compacto ? 'rounded-2xl border border-line bg-cream/60 p-4' : 'rounded-2xl border border-lime bg-lime/10 p-5'}>
-      <h2 className="text-sm font-bold">¿Dudas? Escríbenos por WhatsApp</h2>
+      <h2 className="text-sm font-bold">{conFalta ? 'También puedes hacerlo por WhatsApp' : '¿Dudas? Escríbenos por WhatsApp'}</h2>
       <p className="mt-1 text-xs text-muted">
-        Aquí ves tus números, tus documentos y lo que sigue. En el chat preguntas lo que sea
-        —a cualquier hora— y te contestamos al momento; si hace falta, te pasamos con tu experto.
+        {conFalta
+          ? `Lo de arriba (${falta!.titulo}) lo puedes dejar aquí mismo, o mandárnoslo por el chat y lo capturamos nosotros. Lo que te acomode.`
+          : 'Aquí ves tus números, tus documentos y lo que sigue. En el chat preguntas lo que sea —a cualquier hora— y te contestamos al momento; si hace falta, te pasamos con tu experto.'}
       </p>
       <div className="mt-3">
-        <HablarBoton texto="Abrir mi chat de Trol" mensaje="Hola, tengo una duda sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." oscuro />
+        <HablarBoton
+          texto={conFalta ? 'Mandarlo por WhatsApp' : 'Abrir mi chat de Trol'}
+          mensaje={conFalta
+            ? `Hola, vengo de mi cuenta Trol (app.trol.mx) y quiero avanzar con esto: ${falta!.titulo}. ¿Me ayudas?`
+            : 'Hola, tengo una duda sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx).'}
+          oscuro
+        />
       </div>
     </section>
   );

@@ -2,9 +2,9 @@
 // Cambio de etapa de una oportunidad (ciclo unificado, migración 084).
 // Se usa en el expediente (/trabajo/p/[id]) y en la lista por línea (/trabajo/embudo).
 import { useState, useTransition } from 'react';
-import { cambiarEstadoOportunidad, asignarEspecialista, guardarTerminosComision } from '@/app/trabajo/actions';
+import { cambiarEstadoOportunidad, asignarEspecialista, guardarTerminosComision, avisarOportunidad } from '@/app/trabajo/actions';
 
-type R = { ok: boolean; error?: string };
+type R = { ok: boolean; error?: string; via?: string };
 export type Motivo = { codigo: string; nombre: string };
 export type ProveedorOp = { codigo: string; nombre: string; lineas: string[] };
 /** Producto de gestoría (133): lo que se vende cuando la oportunidad es de gestoría, con honorario y costo por defecto. */
@@ -48,6 +48,7 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
   const [honorario, setHonorario] = useState(op.honorario_trol == null ? '' : String(op.honorario_trol));
   const [pct, setPct] = useState(op.comision_pct_aliado == null ? '' : String(Math.round(Number(op.comision_pct_aliado) * 1000) / 10));
   const [msg, setMsg] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   // Gestoría (133): el producto prellena honorario y costo; los dos se pueden ajustar por caso.
   const esGestoria = productos.length > 0 && (!!op.producto_sugerido || !!op.producto);
   const [producto, setProducto] = useState(op.producto ?? op.producto_sugerido ?? '');
@@ -139,6 +140,20 @@ export function OportunidadEtapa({ op, personaId, motivos, proveedores, miembros
         </select>
       )}
       <button disabled={pending || !cambio || (estado === 'perdida' && !motivo)} className={btnDark} onClick={guardar}>{pending ? '…' : 'Guardar'}</button>
+      {!compacto && ['detectada', 'presentada', 'interesada'].includes(op.estado) && (
+        <button
+          disabled={pending}
+          title="Se lo decimos dentro de su conversación de WhatsApp, sin volver a saludarlo; también queda en su cuenta Trol."
+          className="rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+          onClick={() => start(async () => {
+            setMsg(null); setAviso(null);
+            const r = (await avisarOportunidad(op.id, personaId)) as R;
+            if (!r.ok) setMsg(r.error ?? 'No se pudo avisar');
+            else setAviso(r.via === 'plantilla' ? 'Avisado (hubo que reabrir su chat)' : 'Avisado en su conversación');
+          })}
+        >Avisar al cliente</button>
+      )}
+      {aviso && <span className="text-xs text-green-700">{aviso}</span>}
       {msg && <span className="text-xs text-red-600">{msg}</span>}
     </div>
   );

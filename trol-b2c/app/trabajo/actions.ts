@@ -8,6 +8,7 @@ import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/e
 import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { avisar } from '@/lib/trol3/avisar';
 import { crearActa, crearVentanilla, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
 import { sincronizarConsultaJordan } from '@/lib/jordan/procesar';
 import { extraerPropuestas } from '@/lib/granola/procesar';
@@ -38,6 +39,54 @@ export async function cambiarEstadoOportunidad(opId: string, personaId: string, 
   revalidatePath('/trabajo/lista');
   revalidatePath('/trabajo/embudo');
   return ok();
+}
+
+/**
+ * Avisarle al cliente de una oportunidad, desde la ficha (145).
+ *
+ * El asesor encuentra algo y hasta ahora no tenía cómo decírselo sin salirse a
+ * WhatsApp a mano. Esto lo manda por el camino bueno: si su chat sigue abierto
+ * le entra dentro del hilo y Lukas lo presenta sin volver a saludarlo; si la
+ * ventana cerró, no se inventa una plantilla desde aquí — se dice que no salió,
+ * porque reabrir en frío es otra decisión y tiene otro costo.
+ *
+ * El nombre de la oportunidad se lee del catálogo en el servidor: el cliente no
+ * debe recibir un código interno, y el navegador no debe poder elegir el texto.
+ */
+export async function avisarOportunidad(opId: string, personaId: string) {
+  await requireMiembro();
+  const { data, error } = await t3()
+    .from('oportunidades')
+    .select('codigo, estado, persona_id, catalogo_oportunidades(nombre, plantilla)')
+    .eq('id', opId)
+    .maybeSingle();
+  if (error) return fail(error);
+  const o = data as Any;
+  if (!o) return fail('No encontramos esa oportunidad');
+  if (o.persona_id !== personaId) return fail('La oportunidad no es de esta persona');
+  const cat = o.catalogo_oportunidades as Any;
+  const nombre = cat?.nombre ?? o.codigo;
+  // 148: la plantilla de reapertura la decide el catálogo. Si esta oportunidad
+  // no tiene una aprobada, el aviso sólo entra si su chat sigue vivo: no se
+  // reabre en frío con una plantilla genérica que no dice de qué se trata.
+  const plantilla = (cat?.plantilla as string | null) || undefined;
+
+  const r = await avisar(personaId, 'oportunidad_nueva', {
+    payload: { nombre, codigo: o.codigo },
+    resumen: `Tu experto encontró una oportunidad para ti: ${nombre}.`,
+    plantilla,
+  });
+  revalidatePath(`/trabajo/p/${personaId}`);
+  if (!r.ok) {
+    return fail(
+      r.motivo?.includes('no tiene conversación')
+        ? (plantilla
+            ? 'Su chat está cerrado y la plantilla no salió. Revisa que esté aprobada en Meta.'
+            : 'Su chat con el bot no está abierto y esta oportunidad no tiene plantilla para reabrirlo. Escríbele tú o espera a que escriba.')
+        : (r.motivo ?? r.error ?? 'No se pudo avisar'),
+    );
+  }
+  return ok({ via: r.via });
 }
 
 /** Credenciales del portal Infonavit (migración 089): cifradas; guardar y revelar dejan bitácora. */
