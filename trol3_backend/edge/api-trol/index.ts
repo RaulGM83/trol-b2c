@@ -1,4 +1,12 @@
 // Trol 3.0 — API para Tako (bot), N8N y aliados. Auth por header x-trol-key.
+//
+// ⚠️ SE DESPLIEGA SIEMPRE CON verify_jwt = false. La auth de esta función es el
+//    x-trol-key de abajo; Tako, n8n y la app NO mandan JWT. Si se despliega con
+//    verify_jwt = true (el default de casi toda herramienta), el gateway de
+//    Supabase contesta 401 UNAUTHORIZED_NO_AUTH_HEADER antes de ejecutar nada y
+//    se cae el bot entero, sin un solo error en los logs de la función. Pasó el
+//    2026-09-20 y costó 3 h 48 min de servicio.
+//      supabase functions deploy api-trol --no-verify-jwt
 // Rutas (POST salvo indicado):
 //   /alta            {telefono, canal?, nombre?, campania?, actor?}            -> {persona_id, nueva}
 //   /expediente      GET ?telefono= | ?persona_id=                              -> resumen para bot
