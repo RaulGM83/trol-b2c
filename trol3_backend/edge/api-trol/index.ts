@@ -50,31 +50,51 @@ function curpValida(v: string): boolean { return /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[
  * plantilla. Tako es la única fuente fiable: él lo conoce y llama aquí en cada
  * conversación, así que se guarda de paso en cualquier ruta, sin pedirle un viaje extra.
  */
-function conversacionDe(b: Record<string, unknown>): string | null {
+function conversacionDe(b: Record<string, unknown>, h?: Headers): string | null {
   for (const k of ["conversacion_id", "conversation_id", "conversationId", "id_conversacion"]) {
     const v = b[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  // 143: puede que el runtime del bot ya lo mande por cabecera y no haya que pedirle nada.
+  for (const k of ["x-conversation-id", "conversation-id", "conversationid", "x-ib-conversation-id", "x-conversacion-id"]) {
+    const v = h?.get(k);
     if (typeof v === "string" && v.trim() !== "") return v.trim();
   }
   return null;
 }
 
+/**
+ * Sonda temporal (143): qué cabeceras llegan de verdad en las llamadas del bot.
+ *
+ * Sirve para no pedirle a nadie que toque la configuración de las herramientas antes de
+ * saber si el id de conversación ya viene solo. La función de base filtra los secretos y
+ * se apaga sola por fecha y por tope de filas.
+ */
+async function sondarHeaders(req: Request, path: string): Promise<void> {
+  try {
+    const h: Record<string, string> = {};
+    req.headers.forEach((v, k) => { h[k] = v; });
+    await db.rpc("anotar_headers", { p_ruta: path, p_metodo: req.method, p_headers: h });
+  } catch { /* una sonda jamás tumba la ruta que observa */ }
+}
+
 /** Best-effort: que el bot no se caiga porque no pudimos anotar de dónde hablaba. */
-async function anotarConversacion(pid: string | null, b: Record<string, unknown>): Promise<void> {
-  const conv = conversacionDe(b);
+async function anotarConversacion(pid: string | null, b: Record<string, unknown>, h?: Headers): Promise<void> {
+  const conv = conversacionDe(b, h);
   if (!pid || !conv) return;
   try { await db.rpc("registrar_conversacion_tako", { p_persona: pid, p_conversacion: conv }); } catch { /* no bloquea */ }
 }
 
-async function personaId(b: Record<string, unknown>): Promise<string> {
-  if (b.persona_id) { await anotarConversacion(String(b.persona_id), b); return String(b.persona_id); }
+async function personaId(b: Record<string, unknown>, h?: Headers): Promise<string> {
+  if (b.persona_id) { await anotarConversacion(String(b.persona_id), b, h); return String(b.persona_id); }
   if (b.telefono) {
     const { data, error } = await db.rpc("persona_por_telefono", { p_tel: String(b.telefono) });
     if (error) throw error;
-    if (data) { await anotarConversacion(data as string, b); return data as string; }
+    if (data) { await anotarConversacion(data as string, b, h); return data as string; }
     // alta implícita si viene teléfono desconocido
     const { data: alta, error: e2 } = await db.rpc("alta_por_telefono", { p_tel: String(b.telefono), p_canal: b.canal ?? "organico", p_actor: b.actor ?? "bot", p_nombre: b.nombre ?? null, p_campania: b.campania ?? null, p_verificacion: "wa" });
     if (e2) throw e2;
-    await anotarConversacion((alta as { persona_id: string }).persona_id, b);
+    await anotarConversacion((alta as { persona_id: string }).persona_id, b, h);
     return (alta as { persona_id: string }).persona_id;
   }
   throw new Error("falta persona_id o telefono");
@@ -126,6 +146,7 @@ Deno.serve(async (req) => {
     API_KEY = (data?.valor as string) ?? "";
   }
   if (!API_KEY || key !== API_KEY) return json({ error: "no autorizado" }, 401);
+  await sondarHeaders(req, path);
 
   try {
     if (req.method === "GET" && path === "/expediente") {
@@ -139,7 +160,7 @@ Deno.serve(async (req) => {
         if (!data) return json({ existe: false });
         b.persona_id = data;
       }
-      await anotarConversacion(b.persona_id ? String(b.persona_id) : null, b);
+      await anotarConversacion(b.persona_id ? String(b.persona_id) : null, b, req.headers);
       const { data, error } = await db.rpc("resumen_bot", { p_persona: b.persona_id });
       if (error) throw error;
       // 134: la liga de citas que le toca (la de su cabecera o la general), para que el bot agende ahí.
@@ -168,7 +189,7 @@ Deno.serve(async (req) => {
         }
         // Magic link al expediente (/m/<token>?d=mi): el bot lo manda al WhatsApp
         // del cliente, así que poseerlo = teléfono validado. Best-effort.
-        await anotarConversacion((data as { persona_id?: string })?.persona_id ?? null, b);
+        await anotarConversacion((data as { persona_id?: string })?.persona_id ?? null, b, req.headers);
         let mi_link: string | null = null;
         try {
           const { data: link } = await db.rpc("generar_mi_link", { p_persona: (data as { persona_id: string }).persona_id, p_campania: b.campania ?? "alta" });
@@ -178,13 +199,13 @@ Deno.serve(async (req) => {
       }
       case "/mi-link": {
         // Link de acceso a /mi para un cliente existente (lo pide el bot bajo demanda).
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         const { data, error } = await db.rpc("generar_mi_link", { p_persona: pid, p_campania: b.campania ?? "mi-link" });
         if (error) throw error;
         return json({ ok: true, persona_id: pid, mi_link: data });
       }
       case "/declarar": {
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         if (b.campo === "curp" && typeof b.valor === "string") {
           b.valor = curpNormalizada(b.valor as string);
           if (!curpValida(b.valor as string)) return json({ ok: false, error: "curp_formato_invalido", mensaje: "CURP no válida (18 caracteres, formato oficial). Pídela de nuevo." }, 400);
@@ -194,7 +215,7 @@ Deno.serve(async (req) => {
         return json({ ok: true, dato_id: data, persona_id: pid });
       }
       case "/declarar-varios": {
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         // Acepta: {datos:{...}}, {datos:"json string"} o campos planos junto a telefono/actor (formato Tako)
         const RESERVADOS = new Set(["persona_id", "telefono", "actor", "actor_id", "canal", "nombre", "campania", "datos"]);
         let datos: Record<string, unknown> = {};
@@ -226,19 +247,19 @@ Deno.serve(async (req) => {
         return json({ ok: true, persona_id: pid, resultados: out });
       }
       case "/interaccion": {
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         const { data, error } = await db.rpc("registrar_interaccion", { p_persona: pid, p_canal: b.canal ?? "wa", p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_direccion: b.direccion ?? "entrante", p_contenido: b.contenido ?? "", p_visible_cliente: b.visible_cliente ?? false, p_meta: b.meta ?? {} });
         if (error) throw error;
         return json({ ok: true, interaccion_id: data, persona_id: pid });
       }
       case "/handoff": {
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         const { data, error } = await db.rpc("handoff", { p_persona: pid, p_motivo: b.motivo ?? null, p_actor: b.actor ?? "bot" });
         if (error) throw error;
         return json({ ok: true, evento_id: data, persona_id: pid });
       }
       case "/consulta": {
-        const pid = await personaId(b);
+        const pid = await personaId(b, req.headers);
         const { data, error } = await db.rpc("pedir_consulta", { p_persona: pid, p_tipo: b.tipo ?? "imss_historial", p_actor: b.actor ?? "sistema", p_actor_id: b.actor_id ?? null, p_pagador: b.pagador ?? null, p_notificar: b.notificar ?? false, p_motivo: b.motivo ?? null, p_forzar: b.forzar ?? false, p_proveedor: b.proveedor ?? null });
         if (error) throw error;
         return json({ persona_id: pid, ...(data as object) });
