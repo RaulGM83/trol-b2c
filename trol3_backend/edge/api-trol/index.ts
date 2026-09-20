@@ -18,9 +18,13 @@
 //   /mi-link         {persona_id|telefono, campania?}                          -> {mi_link} (acceso a /mi por WhatsApp)
 //   /consulta/resultado {consulta_id, estado, datos?, documentos?, resultado?, error?, fecha_dato?}
 //                       documentos: [{tipo, nombre, base64?|storage_path?|url?, gating?}] — el base64 se sube a la bóveda
-//   /avisar          {persona_id|telefono, evento, payload?, plantilla?, componentes?}
+//   /avisar          {persona_id|telefono, evento, payload?, plantilla?, componentes?, resumen?}
 //                    (144: intenta inyectar el evento en su chat con Tako; si la ventana
 //                     de 24 h está cerrada, cae a la plantilla que se indique)
+//                    (145: `resumen` es la frase que el cliente ve en el historial de su
+//                     cuenta Trol; si no viene, se usa la de RESUMEN_EVENTO)
+//                    (149: si cae a plantilla y no se pasan `componentes`, genera el
+//                     mi_link corto y arma solo el {{1}} del cuerpo)
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
 //   /cita            {calendario_email, evento_id, inicio, fin, titulo?, estado?, meet_url?, invitado_nombre?, invitado_email?, invitado_telefono?, descripcion?}
 //                    (134: el workflow n8n de Google Calendar registra/actualiza la cita en trol3.citas)
@@ -240,7 +244,19 @@ async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<R
 
   const to = "521" + String(destino).replace(/\D/g, "").slice(-10);
   const cuerpo: Record<string, unknown> = { to, name: plantilla, language: "es" };
-  if (Array.isArray(b.componentes)) cuerpo.components = b.componentes;
+  if (Array.isArray(b.componentes)) {
+    cuerpo.components = b.componentes;
+  } else {
+    // 149: la plantilla lleva el link escrito en el cuerpo, como {{1}}, y lo arma
+    // aquí — no quien llama. Si el parámetro falta o sobra, Meta rechaza con
+    // #132000 y el mensaje no sale: es exactamente lo que pasó con los 20 de
+    // Viraal. Un solo sitio que lo construya es un solo sitio que revisar.
+    // La campaña se guarda en la fila del token (el link corto ya no arrastra
+    // ?c= a la vista), así que se manda el nombre de la plantilla como campaña.
+    const { data: link } = await db.rpc("generar_mi_link", { p_persona: pid, p_campania: plantilla });
+    if (!link) return { ok: false, via: "ninguna", motivo: "no se pudo generar el link de su cuenta", evento, persona_id: pid };
+    cuerpo.components = [{ type: "body", parameters: [{ type: "text", text: link }] }];
+  }
 
   try {
     const r = await fetch(`${TAKO_BASE}/${TAKO_PHONE_ID}/template`, {
