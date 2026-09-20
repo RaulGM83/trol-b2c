@@ -21,6 +21,8 @@
 //      y lo guarda en la persona. Es el hilo de WhatsApp en Tako: con él se le puede
 //      avisar al bot dentro de la conversación en vez de abrir un chat nuevo con
 //      plantilla, que es lo que obligaba a saludar de cero en cada mensaje.
+//      Da igual mandarlo por la URL o en el cuerpo: vale en las dos formas en todas las
+//      rutas, para que la configuración de las herramientas del bot sea una sola línea.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -274,6 +276,13 @@ Deno.serve(async (req) => {
     // Tako deja "{{param}}" literal cuando el modelo no llena un parámetro: se trata como ausente
     const b: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(bRaw)) b[k] = (typeof v === "string" && (/^\{\{.*\}\}$/.test(v.trim()) || v.trim() === "")) ? undefined : v;
+    // Lo que venga en la URL vale igual que lo que venga en el cuerpo, y no lo pisa.
+    // Así quien configura las herramientas del bot pone la misma línea en todas, sin
+    // tener que recordar cuál ruta es GET y cuál POST: una distinción nuestra que a él
+    // no le sirve de nada.
+    for (const [k, v] of url.searchParams.entries()) {
+      if (k !== "key" && b[k] === undefined && v.trim() !== "" && !/^\{\{.*\}\}$/.test(v.trim())) b[k] = v;
+    }
 
     switch (path) {
       case "/alta": {
@@ -312,7 +321,7 @@ Deno.serve(async (req) => {
       case "/declarar-varios": {
         const pid = await personaId(b, req.headers);
         // Acepta: {datos:{...}}, {datos:"json string"} o campos planos junto a telefono/actor (formato Tako)
-        const RESERVADOS = new Set(["persona_id", "telefono", "actor", "actor_id", "canal", "nombre", "campania", "datos"]);
+        const RESERVADOS = new Set(["persona_id", "telefono", "actor", "actor_id", "canal", "nombre", "campania", "datos", "conversacion_id", "conversation_id", "conversationId", "id_conversacion"]);
         let datos: Record<string, unknown> = {};
         if (typeof b.datos === "string") { try { datos = JSON.parse(b.datos as string); } catch { datos = {}; } }
         else if (b.datos && typeof b.datos === "object") datos = b.datos as Record<string, unknown>;
