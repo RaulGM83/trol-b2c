@@ -13,6 +13,11 @@
 //   /eventos/pendientes GET ?limit=  (para N8N: eventos no procesados) ; POST /eventos/ack {ids:[...]}
 //   /cita            {calendario_email, evento_id, inicio, fin, titulo?, estado?, meet_url?, invitado_nombre?, invitado_email?, invitado_telefono?, descripcion?}
 //                    (134: el workflow n8n de Google Calendar registra/actualiza la cita en trol3.citas)
+//
+// 142: cualquier ruta acepta `conversacion_id` (alias conversation_id / conversationId)
+//      y lo guarda en la persona. Es el hilo de WhatsApp en Tako: con él se le puede
+//      avisar al bot dentro de la conversación en vez de abrir un chat nuevo con
+//      plantilla, que es lo que obligaba a saludar de cero en cada mensaje.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -38,15 +43,38 @@ function normalizaAfore(v: string): string {
 function curpNormalizada(v: string): string { return v.toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function curpValida(v: string): boolean { return /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9][0-9]$/.test(v); }
 
+/**
+ * El id de conversación de Tako, venga con el nombre que venga.
+ *
+ * Es lo que permite avisarle al bot DENTRO del hilo en vez de abrir un chat nuevo con
+ * plantilla. Tako es la única fuente fiable: él lo conoce y llama aquí en cada
+ * conversación, así que se guarda de paso en cualquier ruta, sin pedirle un viaje extra.
+ */
+function conversacionDe(b: Record<string, unknown>): string | null {
+  for (const k of ["conversacion_id", "conversation_id", "conversationId", "id_conversacion"]) {
+    const v = b[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return null;
+}
+
+/** Best-effort: que el bot no se caiga porque no pudimos anotar de dónde hablaba. */
+async function anotarConversacion(pid: string | null, b: Record<string, unknown>): Promise<void> {
+  const conv = conversacionDe(b);
+  if (!pid || !conv) return;
+  try { await db.rpc("registrar_conversacion_tako", { p_persona: pid, p_conversacion: conv }); } catch { /* no bloquea */ }
+}
+
 async function personaId(b: Record<string, unknown>): Promise<string> {
-  if (b.persona_id) return String(b.persona_id);
+  if (b.persona_id) { await anotarConversacion(String(b.persona_id), b); return String(b.persona_id); }
   if (b.telefono) {
     const { data, error } = await db.rpc("persona_por_telefono", { p_tel: String(b.telefono) });
     if (error) throw error;
-    if (data) return data as string;
+    if (data) { await anotarConversacion(data as string, b); return data as string; }
     // alta implícita si viene teléfono desconocido
     const { data: alta, error: e2 } = await db.rpc("alta_por_telefono", { p_tel: String(b.telefono), p_canal: b.canal ?? "organico", p_actor: b.actor ?? "bot", p_nombre: b.nombre ?? null, p_campania: b.campania ?? null, p_verificacion: "wa" });
     if (e2) throw e2;
+    await anotarConversacion((alta as { persona_id: string }).persona_id, b);
     return (alta as { persona_id: string }).persona_id;
   }
   throw new Error("falta persona_id o telefono");
@@ -101,12 +129,17 @@ Deno.serve(async (req) => {
 
   try {
     if (req.method === "GET" && path === "/expediente") {
-      const b: Record<string, unknown> = { persona_id: url.searchParams.get("persona_id") ?? undefined, telefono: url.searchParams.get("telefono") ?? undefined };
+      const b: Record<string, unknown> = {
+        persona_id: url.searchParams.get("persona_id") ?? undefined,
+        telefono: url.searchParams.get("telefono") ?? undefined,
+        conversacion_id: url.searchParams.get("conversacion_id") ?? url.searchParams.get("conversation_id") ?? undefined,
+      };
       if (!b.persona_id && b.telefono) {
         const { data } = await db.rpc("persona_por_telefono", { p_tel: String(b.telefono) });
         if (!data) return json({ existe: false });
         b.persona_id = data;
       }
+      await anotarConversacion(b.persona_id ? String(b.persona_id) : null, b);
       const { data, error } = await db.rpc("resumen_bot", { p_persona: b.persona_id });
       if (error) throw error;
       // 134: la liga de citas que le toca (la de su cabecera o la general), para que el bot agende ahí.
@@ -135,6 +168,7 @@ Deno.serve(async (req) => {
         }
         // Magic link al expediente (/m/<token>?d=mi): el bot lo manda al WhatsApp
         // del cliente, así que poseerlo = teléfono validado. Best-effort.
+        await anotarConversacion((data as { persona_id?: string })?.persona_id ?? null, b);
         let mi_link: string | null = null;
         try {
           const { data: link } = await db.rpc("generar_mi_link", { p_persona: (data as { persona_id: string }).persona_id, p_campania: b.campania ?? "alta" });
