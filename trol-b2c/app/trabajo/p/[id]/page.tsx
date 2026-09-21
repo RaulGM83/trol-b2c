@@ -391,6 +391,28 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
   const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
 
+  // 169 · El mismo panel vive en la pestaña Diagnóstico y en el paso 5 de la asesoría.
+  const diagPanel = (
+        <DiagnosticoPanel
+          personaId={e.persona_id}
+          diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por) } as DiagnosticoRow) : null}
+          escenarios={(escsCerrados ?? []) as EscenarioCerradoOpcion[]}
+          asesorias={historialInf.map((a) => ({
+            id: a.id, nombre: a.nombre ?? null, desarrollo: a.desarrollo ?? null,
+            horizonte: a.horizonte ?? null,
+            efectivo: a.efectivo == null ? null : Number(a.efectivo),
+            ventaja_corte: a.ventaja_corte == null ? null : Number(a.ventaja_corte),
+            cotitular_nombre: a.cotitular_nombre ?? null, created_at: a.created_at,
+          })) as AsesoriaOpcion[]}
+          tareas={((tareasCliente ?? []) as Any[]).filter((t) => t.origen === 'diagnostico' && (!diagRow || t.origen_id === (diagRow as Any).id)) as Tarea[]}
+          miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre, email: x.email }))}
+          yoId={m.id}
+          esAdmin={esAdmin}
+          feedback={feedbackDiag}
+          vigentes={instruccionesVigentes}
+        />
+  );
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -511,7 +533,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       })()}
 
       {tab === 'asesoria' && vistaAsesoria ? (
-        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico') }} />
+        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} />
       ) : null}
 
       {tab === 'resumen' && (
@@ -691,26 +713,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'diagnostico' && (
-        <DiagnosticoPanel
-          personaId={e.persona_id}
-          diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por) } as DiagnosticoRow) : null}
-          escenarios={(escsCerrados ?? []) as EscenarioCerradoOpcion[]}
-          asesorias={historialInf.map((a) => ({
-            id: a.id, nombre: a.nombre ?? null, desarrollo: a.desarrollo ?? null,
-            horizonte: a.horizonte ?? null,
-            efectivo: a.efectivo == null ? null : Number(a.efectivo),
-            ventaja_corte: a.ventaja_corte == null ? null : Number(a.ventaja_corte),
-            cotitular_nombre: a.cotitular_nombre ?? null, created_at: a.created_at,
-          })) as AsesoriaOpcion[]}
-          tareas={((tareasCliente ?? []) as Any[]).filter((t) => t.origen === 'diagnostico' && (!diagRow || t.origen_id === (diagRow as Any).id)) as Tarea[]}
-          miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre, email: x.email }))}
-          yoId={m.id}
-          esAdmin={esAdmin}
-          feedback={feedbackDiag}
-          vigentes={instruccionesVigentes}
-        />
-      )}
+      {tab === 'diagnostico' && diagPanel}
 
       {tab === 'infonavit' && (
         baseInfonavit && supInfonavit ? (

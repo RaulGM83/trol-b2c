@@ -180,6 +180,26 @@ export async function marcarAsesoria(id: string, personaId: string, x: { paso?: 
   return ok();
 }
 
+/** 169 · Arma el diagnóstico desde la asesoría (paso 4) y lo deja ligado a la sesión. */
+export async function armarDiagnosticoAsesoria(asesoriaId: string, personaId: string, escenarioIds: string[]) {
+  await requireMiembro();
+  const r = (await generarBorradorDiagnostico(personaId, escenarioIds, [])) as { ok: boolean; error?: string; id?: string; aviso?: string | null };
+  if (!r.ok || !r.id) return r;
+  const { error } = await t3().rpc('asesoria_ligar_diagnostico', { p_id: asesoriaId, p_diagnostico: r.id });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath(`/presentar/${personaId}`);
+  return ok({ id: r.id, aviso: r.aviso ?? null });
+}
+
+/** 169 · Usa en esta asesoría un diagnóstico que el cliente ya tenía. */
+export async function ligarDiagnosticoAsesoria(asesoriaId: string, personaId: string, diagnosticoId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('asesoria_ligar_diagnostico', { p_id: asesoriaId, p_diagnostico: diagnosticoId });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath(`/presentar/${personaId}`);
+  return ok();
+}
+
 export type CambioOportunidad = { motivo?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota?: string | null };
 /** Cambia la etapa de una oportunidad (ciclo unificado, migración 084): historial, timestamps y nota en bitácora los pone la función SQL. */
 export async function cambiarEstadoOportunidad(opId: string, personaId: string, estado: string, extra?: string | CambioOportunidad) {
@@ -1314,6 +1334,11 @@ export async function cambiarEstadoDiagnostico(
   diagnosticoId: string, personaId: string, estado: 'borrador' | 'revisado' | 'entregado',
 ) {
   const m = await requireMiembro();
+  // 169 · El diagnóstico siempre se arma; se ENTREGA si lo pagó (o se le habilitó de cortesía).
+  if (estado === 'entregado') {
+    const { data: pagado, error: eB } = await t3().rpc('tiene_beneficio', { p_persona: personaId, p_codigo: 'diagnostico_avanzado' });
+    if (!eB && pagado === false) return fail('Todavía no tiene el diagnóstico avanzado. Registra su pago en Documentos → “Registrar un cobro”, o habilítaselo de cortesía en Beneficios, y vuelve a entregar.');
+  }
   const { error } = await t3().rpc('estado_diagnostico', { p_diagnostico: diagnosticoId, p_estado: estado });
   if (error) return fail(error);
 

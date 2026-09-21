@@ -86,6 +86,17 @@ export default async function Presentar({ params, searchParams }: { params: { id
 
         {paso === 4 && (() => {
           const k = caminos(v).find((x) => x.id === rec) ?? null;
+          // 169 · Si ya hay propuesta escrita, el porqué va con las palabras del asesor.
+          const prop = v.oportunidades.find((o) => o.propuesta?.texto) ?? null;
+          if (!k && prop) return (
+            <div className="max-w-3xl rounded-3xl bg-lime p-8">
+              <div className="text-sm font-bold uppercase tracking-wide text-ink/70">Lo que te recomendamos</div>
+              <div className="mt-1 text-3xl font-extrabold">{prop.nombre}</div>
+              {prop.propuesta?.pension_con_plan ? <div className="mt-4 text-6xl font-extrabold tracking-tight">{mxn(prop.propuesta.pension_con_plan)}<span className="text-xl font-normal text-ink/70"> al mes</span></div> : null}
+              <p className="mt-4 whitespace-pre-wrap text-xl leading-relaxed">{prop.propuesta?.texto}</p>
+              {prop.propuesta?.costo ? <p className="mt-2 text-lg">Inversión: <b>{mxn(prop.propuesta.costo)}</b></p> : null}
+            </div>
+          );
           return k ? (
             <div className="max-w-3xl rounded-3xl bg-lime p-8">
               <div className="text-sm font-bold uppercase tracking-wide text-ink/70">El camino que te recomendamos</div>
@@ -93,11 +104,27 @@ export default async function Presentar({ params, searchParams }: { params: { id
               <div className="mt-4 text-6xl font-extrabold tracking-tight">{mxn(k.pension)}<span className="text-xl font-normal text-ink/70"> al mes</span></div>
               {num.pension_base && k.pension ? <p className="mt-3 text-xl">Son <b>{mxn(Number(k.pension) - Number(num.pension_base))} más cada mes</b> que como estás hoy.</p> : null}
               {k.costo ? <p className="mt-2 text-lg">Inversión: <b>{mxn(k.costo)}</b>{k.edad ? ` · retiro a los ${k.edad}` : ''}</p> : null}
+              {prop?.propuesta?.texto ? <p className="mt-5 whitespace-pre-wrap border-t border-ink/15 pt-4 text-lg leading-relaxed">{prop.propuesta.texto}</p> : null}
             </div>
           ) : <p className="text-xl text-muted">Tu experto está por marcar el camino que te recomienda.</p>;
         })()}
 
-        {paso === 5 && <p className="max-w-3xl text-xl leading-relaxed">Lo que acordamos hoy queda escrito en tu diagnóstico y en tu cuenta Trol, con quién hace cada cosa y para cuándo.</p>}
+        {paso === 5 && (
+          <div className="max-w-3xl space-y-6">
+            {v.diagnostico?.acuerdos?.trim() ? <p className="whitespace-pre-wrap text-xl leading-relaxed">{v.diagnostico.acuerdos.trim()}</p> : null}
+            {v.pendientes?.length ? (
+              <ul className="divide-y divide-line rounded-3xl border border-line">
+                {v.pendientes.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-6 py-4">
+                    <span className="text-lg font-bold">{t.titulo}</span>
+                    <span className="text-sm text-muted">{[t.responsable ? `${t.responsable}, de Trol` : null, t.vence_el ? `para el ${fechaLarga(t.vence_el)}` : null].filter(Boolean).join(' · ')}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className={v.diagnostico?.acuerdos?.trim() || v.pendientes?.length ? 'text-sm text-muted' : 'text-xl leading-relaxed'}>Lo que acordamos hoy queda escrito en tu diagnóstico y en tu cuenta Trol, con quién hace cada cosa y para cuándo.</p>
+          </div>
+        )}
 
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-6">
           <div className="flex items-center gap-2">

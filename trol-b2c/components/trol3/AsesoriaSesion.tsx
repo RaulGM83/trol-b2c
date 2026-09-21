@@ -1,8 +1,9 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { abrirAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
+import { abrirAsesoria, armarDiagnosticoAsesoria, guardarDiagnostico, ligarDiagnosticoAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
+import { PropuestaForm } from '@/components/trol3/RelacionPanel';
 import { PASOS, caminos, guion, mxn, tramos, type VistaAsesoria } from '@/lib/trol3/asesoria';
 
 const dark = 'rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50';
@@ -14,12 +15,14 @@ const fechaLarga = (iso?: string | null) => (iso ? new Date(`${String(iso).slice
  * pasó, no obliga a nada. Lo que el asesor ve aquí trae guion, valores internos y notas;
  * "Presentar" abre la versión limpia para compartir pantalla.
  */
-export function AsesoriaSesion({ personaId, vista, hrefTab }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string> }) {
+export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode }) {
   const router = useRouter();
   const ses = vista.sesion && vista.sesion.estado === 'abierta' ? vista.sesion : null;
   const [paso, setPaso] = useState<number>(ses?.paso ?? 1);
   const [nota, setNota] = useState<string>(ses?.notas?.[String(ses?.paso ?? 1)] ?? '');
   const [msg, setMsg] = useState<string | null>(null);
+  const [estrategia, setEstrategia] = useState<string>(vista.diagnostico?.estrategia ?? '');
+  const [msgDiag, setMsgDiag] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   if (!ses) {
@@ -42,6 +45,13 @@ export function AsesoriaSesion({ personaId, vista, hrefTab }: { personaId: strin
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
   const ts = tramos(vista.historial);
   const cams = caminos(vista);
+  // 169 · pasos 4 y 5: el camino recomendado, el diagnóstico de esta sesión y la propuesta.
+  const recom = cams.find((k) => k.id === ses.escenario_recomendado) ?? null;
+  const diag = vista.diagnostico;
+  const diagListo = !!diag && (diag.ligado === true || ses.diagnostico_id === diag.id);
+  const idsParaDiag = recom ? [recom.id, ...cams.filter((k) => k.id !== recom.id).slice(0, 2).map((k) => k.id)] : [];
+  const opsProp = vista.oportunidades.filter((o) => ['detectada', 'presentada', 'interesada'].includes(o.estado)).map((o) => ({ id: o.id, nombre: o.nombre, estado: o.estado, propuesta: o.propuesta ?? null }));
+  const armar = () => start(async () => { setMsgDiag('Armando el diagnóstico: junta los hechos y redacta. Tarda cerca de un minuto…'); const r = (await armarDiagnosticoAsesoria(ses.id, personaId, idsParaDiag)) as { ok: boolean; error?: string; aviso?: string | null }; setMsgDiag(r.ok ? (r.aviso ?? 'Diagnóstico armado.') : (r.error ?? 'No se pudo armar.')); if (r.ok) router.refresh(); });
 
   return (
     <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
@@ -144,15 +154,62 @@ export function AsesoriaSesion({ personaId, vista, hrefTab }: { personaId: strin
           </>
         )}
 
-        {(paso === 4 || paso === 5) && (
-          <section className="rounded-2xl border border-dashed border-line bg-white p-5 text-sm">
-            <p className="font-bold">{paso === 4 ? 'La recomendación se escribe hoy en dos lugares:' : 'Los acuerdos viven hoy en el diagnóstico:'}</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
-              {paso === 4 ? <li><Link href={hrefTab.relacion} className="underline">Relación → Enviar propuesta</Link>: lo que le llega al cliente y ve como “Tu plan”.</li> : null}
-              <li><Link href={hrefTab.diagnostico} className="underline">Diagnóstico</Link>: {paso === 4 ? 'la sección “Estrategia y oportunidades”.' : 'acuerdos y pendientes con dueño y fecha.'}</li>
-            </ul>
-            <p className="mt-2 text-xs text-muted">En la siguiente entrega (3c) este paso los junta aquí mismo y arma el diagnóstico al cerrar.</p>
-          </section>
+        {paso === 4 && (
+          <>
+            {recom ? (
+              <section className="rounded-2xl border-2 border-ink bg-lime/10 p-5">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted">El camino que recomiendas</div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+                  <div className="text-lg font-extrabold">{recom.etiqueta}</div>
+                  <div className="text-2xl font-extrabold">{mxn(recom.pension)}<span className="text-xs font-normal text-muted"> al mes</span></div>
+                  {num.pension_base && recom.pension ? <div className="text-sm">+{mxn(Number(recom.pension) - Number(num.pension_base))} contra hoy</div> : null}
+                  <div className="text-xs text-muted">{recom.costo ? `Inversión total: ${mxn(recom.costo)}` : 'Sin inversión'}{recom.edad ? ` · retiro a los ${recom.edad}` : ''}</div>
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-2xl border border-dashed border-line bg-white p-5 text-sm">Todavía no marcas un camino. <button type="button" className="font-bold underline" onClick={() => ir(3)}>Vuelve a Escenarios</button> y aprieta “Es el que recomiendo”.</section>
+            )}
+
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h3 className="text-sm font-bold">El porqué <span className="font-normal text-muted">· es la sección “Estrategia” de su diagnóstico</span></h3>
+              {diagListo && diag ? (
+                diag.estado === 'entregado' ? <p className="mt-2 whitespace-pre-wrap text-sm">{diag.estrategia ?? '—'}<span className="mt-2 block text-xs text-muted">Ya se entregó el {fechaLarga(diag.entregado_en)}. Para cambiarlo, regrésalo a borrador en el paso 5.</span></p> : (
+                  <>
+                    <textarea value={estrategia} onChange={(e) => setEstrategia(e.target.value)} rows={8} placeholder="Por qué este camino y no otro, en sus palabras." className="mt-2 block w-full rounded-lg border border-line px-3 py-2 text-sm" />
+                    <button disabled={pending || estrategia === (diag.estrategia ?? '')} className={`${dark} mt-2`} onClick={() => start(async () => { const r = await guardarDiagnostico({ diagnosticoId: diag.id, personaId, narrativa: { estrategia_oportunidades: estrategia } }); setMsgDiag(r.ok ? 'Estrategia guardada en su diagnóstico.' : (r as { error?: string }).error ?? 'No se guardó.'); if (r.ok) router.refresh(); })}>Guardar en su diagnóstico</button>
+                  </>
+                )
+              ) : (
+                <div className="mt-2 text-sm">
+                  <p className="text-muted">El diagnóstico se arma con los escenarios de esta sesión{recom ? ` (el recomendado y hasta dos más)` : ''}: junta los hechos del caso y redacta un primer borrador que tú corriges. Se arma siempre; se entrega cuando lo pagó.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button disabled={pending || !recom} className={dark} onClick={armar}>Armar su diagnóstico</button>
+                    {diag ? <button disabled={pending} className={line} onClick={() => start(async () => { const r = await ligarDiagnosticoAsesoria(ses.id, personaId, diag.id); setMsgDiag(r.ok ? null : (r as { error?: string }).error ?? 'No se pudo.'); if (r.ok) router.refresh(); })}>Usar el que ya tiene ({diag.estado})</button> : null}
+                  </div>
+                </div>
+              )}
+              {msgDiag ? <p className="mt-2 text-xs text-muted">{msgDiag}</p> : null}
+            </section>
+
+            {opsProp.length ? <PropuestaForm key={recom?.id ?? 'sin'} personaId={personaId} ops={opsProp} pensionBase={num.pension_base == null ? null : Number(num.pension_base)} sugerido={recom ? { pension: recom.pension, costo: recom.costo } : undefined} />
+              : <section className="rounded-2xl border border-dashed border-line bg-white p-5 text-sm text-muted">No tiene oportunidades abiertas a las que colgarle una propuesta. Si ya está en trámite, la recomendación vive en su diagnóstico.</section>}
+          </>
+        )}
+
+        {paso === 5 && (
+          <>
+            {diagListo && diag ? (
+              <>
+                {!diag.pagado && diag.estado !== 'entregado' ? (
+                  <div className="rounded-xl border border-line bg-cream px-4 py-3 text-sm">Aún no tiene el diagnóstico avanzado: puedes escribirlo y revisarlo, pero <b>“Entregado” se abre cuando lo pague</b>. <Link href={hrefTab.documentos} className="underline">Registrar su pago o habilitarlo de cortesía</Link>.</div>
+                ) : null}
+                {vista.pendientes.length ? <p className="text-xs text-muted">{vista.pendientes.length} {vista.pendientes.length === 1 ? 'pendiente abierto' : 'pendientes abiertos'}: son los que ve el cliente en “Presentar”.</p> : null}
+                {diagSlot}
+              </>
+            ) : (
+              <section className="rounded-2xl border border-dashed border-line bg-white p-5 text-sm">Los acuerdos y los pendientes se escriben en su diagnóstico. <button type="button" className="font-bold underline" onClick={() => ir(4)}>Ármalo en el paso 4</button> y vuelve.</section>
+            )}
+          </>
         )}
 
         <section className="rounded-2xl border border-line bg-white p-5">

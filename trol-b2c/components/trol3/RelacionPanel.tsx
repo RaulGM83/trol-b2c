@@ -78,13 +78,15 @@ export function ActivarCard({ personaId, chatAbierto, takoUrl, op, puede }: { pe
 }
 
 /** Enviar propuesta: una sola acción. Queda como "Tu plan" en su cuenta y le llega por WhatsApp. */
-export function PropuestaForm({ personaId, ops, pensionBase }: { personaId: string; ops: { id: string; nombre: string; estado: string; propuesta: { texto?: string; pension_con_plan?: number; costo?: number; enviada_en?: string } | null }[]; pensionBase: number | null }) {
+export function PropuestaForm({ personaId, ops, pensionBase, sugerido }: { personaId: string; ops: { id: string; nombre: string; estado: string; propuesta: { texto?: string; pension_con_plan?: number; costo?: number; enviada_en?: string } | null }[]; pensionBase: number | null; sugerido?: { pension?: number | null; costo?: number | null; texto?: string | null } }) {
   const { msg, pending, run } = useAccion();
   const [opId, setOpId] = useState(ops[0]?.id ?? '');
   const actual = ops.find((o) => o.id === opId) ?? null;
-  const [texto, setTexto] = useState(actual?.propuesta?.texto ?? '');
-  const [pension, setPension] = useState(actual?.propuesta?.pension_con_plan != null ? String(actual.propuesta.pension_con_plan) : '');
-  const [costo, setCosto] = useState(actual?.propuesta?.costo != null ? String(actual.propuesta.costo) : '');
+  // 169 · Desde la asesoría llegan sugeridos los números del camino recomendado; lo ya enviado manda.
+  const sug = (n?: number | null) => (n != null && Number(n) > 0 ? String(Math.round(Number(n))) : '');
+  const [texto, setTexto] = useState(actual?.propuesta?.texto ?? sugerido?.texto ?? '');
+  const [pension, setPension] = useState(actual?.propuesta?.pension_con_plan != null ? String(actual.propuesta.pension_con_plan) : sug(sugerido?.pension));
+  const [costo, setCosto] = useState(actual?.propuesta?.costo != null ? String(actual.propuesta.costo) : sug(sugerido?.costo));
   const elegir = (id: string) => {
     setOpId(id); const o = ops.find((x) => x.id === id);
     setTexto(o?.propuesta?.texto ?? ''); setPension(o?.propuesta?.pension_con_plan != null ? String(o.propuesta.pension_con_plan) : ''); setCosto(o?.propuesta?.costo != null ? String(o.propuesta.costo) : '');

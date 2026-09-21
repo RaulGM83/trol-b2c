@@ -21,13 +21,18 @@ export type Sesion = {
   escenario_recomendado: string | null; notas: Record<string, string>; diagnostico_id: string | null; iniciada_en: string; cerrada_en: string | null;
 };
 
+export type Propuesta = { texto?: string; pension_con_plan?: number; costo?: number; enviada_en?: string };
+
 export type VistaAsesoria = {
   cliente: Record<string, any>; numeros: Record<string, any>; experto: string | null; parada: number | null;
   hallazgos: { item: string; severidad: string; titulo: string; detalle: string }[]; en_orden: number | null;
-  oportunidades: { id: string; codigo: string; estado: string; nivel: number; nombre: string; frase: string | null; motivo: string | null; urgencia: string | null; valor: number | null; nombre_interno: string }[];
+  oportunidades: { id: string; codigo: string; estado: string; nivel: number; nombre: string; frase: string | null; motivo: string | null; urgencia: string | null; valor: number | null; nombre_interno: string; propuesta: Propuesta | null }[];
   historial: { empleador?: string; fecha_inicio?: string; fecha_fin?: string; salario_base?: number }[];
   escenarios: { id: string; tipo: string; creado_en: string; inputs: any; resultado: any }[];
   sesion: Sesion | null;
+  /** 169 · El diagnóstico de esta sesión (o el último del cliente si aún no se liga). */
+  diagnostico: { id: string; estado: 'borrador' | 'revisado' | 'entregado'; entregado_en: string | null; estrategia: string | null; acuerdos: string | null; ligado: boolean | null; pagado: boolean } | null;
+  pendientes: { id: string; titulo: string; vence_el: string | null; responsable: string }[];
 };
 
 export const mxn = (n: unknown) => (n == null || Number.isNaN(Number(n)) ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n)));
@@ -78,6 +83,6 @@ export function guion(paso: number, v: VistaAsesoria): string {
     ? `Una cosa a la vez, empezando por lo que pone en orden su situación. La primera: ${top.nombre}. Di la frase, pregunta si le hace sentido y sigue. No cotices aquí: los números van en el paso 3.`
     : 'No hay hallazgos urgentes: dilo como buena noticia, y pasa a ver si sus números se pueden subir.';
   if (paso === 3) return `Tres caminos como máximo: cómo está hoy${base ? ` (${mxn(base)})` : ''}, el que recomiendas y, si acaso, uno más ambicioso. Cierra cada uno en la calculadora para que aparezca aquí.`;
-  if (paso === 4) return 'Una sola recomendación, con su porqué, lo que cambia en su pensión y lo que cuesta. Si duda entre dos caminos, recomienda el que pone en orden primero.';
+  if (paso === 4) return v.sesion?.escenario_recomendado ? 'Una sola recomendación, con su porqué, lo que cambia en su pensión y lo que cuesta. Escríbela abajo como se la dirías: es lo que va a su diagnóstico y, si la envías, lo que ve como “Tu plan”.' : 'Falta marcar el camino que recomiendas en el paso 3. Una sola recomendación, con su porqué, lo que cambia en su pensión y lo que cuesta. Si duda entre dos caminos, recomienda el que pone en orden primero.';
   return 'Repite en voz alta lo que quedó: qué hace él, qué hacemos nosotros y para cuándo. Cada pendiente con dueño y fecha.';
 }
