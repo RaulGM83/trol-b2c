@@ -1,12 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, CHECK_LABEL, type Any } from '@/lib/trol3/server';
-import { MiAcciones, ChatTrol, type ActualizacionImss, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, IdentidadCard, type Identidad } from '@/components/trol3/MiAcciones';
+import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
+import { MiAcciones, ChatTrol, type ActualizacionImss, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, CurpAcciones, type Identidad } from '@/components/trol3/MiAcciones';
+import { waLink } from '@/lib/whatsapp';
 
-// No importar constantes con métodos desde módulos 'use client': en el server
-// llegan como Proxy y llamar .includes() revienta el render (digest 32375732).
-const IDENTIDAD_VISIBLE = ['por_confirmar', 'confirmada_con_problema'];
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
@@ -17,7 +15,18 @@ import { NegativaPension } from '@/components/NegativaPension';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi cuenta · Trol' };
 
-const TABS: [string, string][] = [['hoy', 'Hoy'], ['misiones', 'Misiones'], ['expediente', 'Mi cuenta'], ['documentos', 'Documentos'], ['puntos', 'Puntos'], ['asesorias', 'Asesorías']];
+// 157: tres puertas. Las claves viejas (?tab=misiones, puntos, asesorias, documentos…) siguen
+// vivas porque hay links repartidos; sólo cambia a qué puerta pertenecen.
+const TABS_VALIDAS = ['hoy', 'misiones', 'expediente', 'documentos', 'puntos', 'asesorias', 'calculadora', 'mas'];
+const NAV: [string, string, string[]][] = [['hoy', 'Hoy', ['hoy']], ['expediente', 'Mi pensión', ['expediente', 'documentos', 'calculadora']], ['mas', 'Más', ['mas', 'puntos', 'asesorias', 'misiones']]];
+const PARADAS = ['Tu información', 'Tu diagnóstico', 'Tu plan', 'En trámite', 'Tu pensión'];
+// Las tareas de datos nunca son "lo que sigue": viven en "Afina tus números", dichas por lo que desbloquean.
+const AFINA: Record<string, [string, string]> = {
+  issste: ['¿Trabajaste alguna vez en gobierno?', 'Si cotizaste al ISSSTE puedes tener años adicionales. Lo consultamos sin costo.'],
+  infonavit: ['El saldo real de tu Infonavit', 'Con él te decimos cuánto recuperas al pensionarte.'],
+  contexto: ['Cuéntanos de ti', 'Tu meta y tus dependientes cambian qué te conviene. 2 minutos.'],
+  afore: ['En qué AFORE estás', 'La AFORE correcta puede darte más rendimiento sin que hagas nada más.'],
+};
 const NIVEL: Record<number, [string, string]> = { 1: ['Poner en orden', 'Lo básico para que nada te reste pensión.'], 2: ['Aprovechar hoy', 'Lo que puedes ganar ahora mismo.'], 3: ['Crecer y proteger', 'Para llegar más lejos.'] };
 const ESTADO_MISION: Record<string, [string, string]> = { hecho: ['Hecho', 'bg-green-100 text-green-800'], pendiente: ['Pendiente', 'bg-cream text-ink'], en_proceso: ['En proceso', 'bg-amber-100 text-amber-800'], atencion: ['Requiere atención', 'bg-red-100 text-red-700'], bloqueado: ['Después', 'bg-gray-100 text-muted'], recomendada: ['Tu experto la recomienda', 'bg-lime text-ink'] };
 const BEN_LABEL: Record<string, string> = { calculadora: 'Calculadora completa', diagnostico_avanzado: 'Diagnóstico avanzado', sesion_experto: 'Sesión con experto', docs_premium: 'Documentos premium', seguimiento: 'Seguimiento de trámite' };
@@ -46,7 +55,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   // 147: sella que está adentro. El nudge y la cola de campañas lo respetan
   // media hora: no se interrumpe a quien ya está prestando atención.
   await db.rpc('marcar_visto_en_app');
-  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss')]);
+  const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }, { data: paradaData }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss'), db.rpc('mi_parada')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
   if (error || !x) return (
     <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
@@ -56,24 +65,18 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
     </main>
   );
   const e = x as Any;
-  const tab = TABS.some(([t]) => t === searchParams.tab) || searchParams.tab === 'calculadora' ? (searchParams.tab as string) : 'hoy';
   const misiones: Any[] = (mis as Any[]) ?? [];
+  const tab = TABS_VALIDAS.includes(searchParams.tab ?? '') ? (searchParams.tab as string) : 'hoy';
+  const pa = (paradaData as Any | null) ?? null;
+  const afina = misiones.filter((m) => AFINA[m.codigo] && m.estado === 'pendiente' && m.cta).slice(0, 3);
   // `editable` de mi_identidad() también es false cuando todavía no hay CURP; la tarjeta
   // sólo sale cuando el IMSS ya la rechazó, no en el camino normal.
   const identidad = (ident as Identidad | null) ?? null;
-  const identidadVisible = identidad && IDENTIDAD_VISIBLE.includes(identidad.estatus) ? identidad : null;
-  const ck: Any[] = e.checklist ?? [];
-  const alertas = ck.filter((c) => c.estado === 'alerta');
   const datos: Any[] = e.datos ?? [];
   const faltan: Any[] = e.campos_por_completar ?? [];
   const beneficios: string[] = e.beneficios ?? [];
   const nombre = (e.persona?.nombre ?? '').split(' ')[0];
   const brecha = e.pension_base && e.pension_maxima ? Number(e.pension_maxima) - Number(e.pension_base) : null;
-  // La misión de CURP ya vive en su propia tarjeta; no la repetimos en "tu siguiente paso".
-  const candidatas = identidadVisible ? misiones.filter((m) => m.codigo !== 'curp_confirmar') : misiones;
-  const siguiente = candidatas.find((m) => m.estado === 'atencion') ?? candidatas.find((m) => m.estado === 'recomendada') ?? candidatas.find((m) => m.estado === 'pendiente' && m.nivel === 1) ?? candidatas.find((m) => m.estado === 'pendiente');
-  const hechas = misiones.filter((m) => m.estado === 'hecho').length;
-  const progreso = Math.round((100 * hechas) / Math.max(1, misiones.length));
   const href = (t: string) => `/mi?tab=${t}`;
   const yaCubierto = (p: Any) => Array.isArray(p.beneficios) && p.beneficios.length > 0 && p.beneficios.every((b: string) => beneficios.includes(b));
   const leyTxt = e.ley === 'Ley97' ? 'Ley 97' : e.ley === 'Ley73' ? 'Ley 73' : '';
@@ -95,11 +98,13 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-5">
       <header className="mb-4 flex items-center justify-between">
         <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></span>
-        <Link href={href('puntos')} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{e.puntos} pts</Link>
+        {tab === 'hoy' ? <span className="text-xs text-muted">Tu cuenta Trol</span> : <Link href={href('puntos')} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{e.puntos} pts</Link>}
       </header>
 
       {tab === 'hoy' && (
         <div className="space-y-4">
+          {pa ? <Ruta parada={Number(pa.parada)} frase={pa.frase ?? ''} /> : null}
+
           <section className="rounded-3xl bg-ink p-5 text-white">
             <div className="text-sm text-white/70">Hola{nombre ? `, ${nombre}` : ''}. Tu pensión, en claro:</div>
             {vmNeg ? (
@@ -110,21 +115,17 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             ) : e.pension_base ? (
               <>
                 <div className="mt-2 flex items-end gap-3">
-                  <div><div className="text-[11px] uppercase tracking-wide text-white/60">Hoy</div><div className="text-3xl font-extrabold">{fmtMXN(e.pension_base)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
+                  <div><div className="text-[11px] uppercase tracking-wide text-white/60">Hoy te tocaría</div><div className="text-3xl font-extrabold">{fmtMXN(e.pension_base)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
                   <div className="pb-1 text-white/50">→</div>
-                  <div><div className="text-[11px] uppercase tracking-wide text-lime">Máxima posible</div><div className="text-3xl font-extrabold text-lime">{fmtMXN(e.pension_maxima)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
+                  <div><div className="text-[11px] uppercase tracking-wide text-lime">Podrías lograr</div><div className="text-3xl font-extrabold text-lime">{fmtMXN(e.pension_maxima)}<span className="text-sm font-normal text-white/60">/mes</span></div></div>
                 </div>
-                {brecha && brecha > 0 ? <p className="mt-2 text-sm text-white/80">Hay <b className="text-lime">{fmtMXN(brecha)}</b> al mes de diferencia entre lo que te tocaría hoy y lo que podrías lograr. Las misiones te llevan hacia allá.</p> : null}
+                {brecha && brecha > 0 ? <p className="mt-2 text-sm text-white/80">Te separan <b className="text-lime">{fmtMXN(brecha)} al mes</b> entre lo que te tocaría hoy y lo que podrías lograr.</p> : null}
                 <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
               </>
             ) : (
-              <p className="mt-2 text-sm">{e.persona?.curp ? 'Estamos por obtener tu información oficial del IMSS. En cuanto llegue verás aquí tu pensión estimada hoy y la máxima posible.' : 'Comparte tu CURP y buscamos tu información oficial en el IMSS sin costo. Con eso verás aquí tu pensión estimada hoy y la máxima posible.'}</p>
+              <p className="mt-2 text-sm">Aquí vas a ver lo que hoy te tocaría de pensión y lo máximo que podrías lograr, en cuanto tengamos tu información oficial del IMSS.</p>
             )}
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/15"><div className="h-1.5 bg-lime" style={{ width: `${progreso}%` }} /></div>
-            <div className="mt-1 text-[11px] text-white/60">{hechas} de {misiones.length} misiones · {progreso}%</div>
           </section>
-
-          {identidadVisible ? <IdentidadCard identidad={identidadVisible} /> : null}
 
           {vmNeg ? (
             vmNeg.razon73 ? (
@@ -144,42 +145,60 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
             )
           ) : null}
 
-          {jugada ? (
-            <section className="rounded-2xl bg-lime p-5 text-ink">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-ink/70">{(jugada as Any).recomendada ? `Tu mejor jugada · la recomienda ${(jugada as Any).experto ?? 'tu experto'}` : 'Tu mejor jugada (por confirmar con tu experto)'}</div>
-              <h2 className="mt-1 text-xl font-extrabold">{(jugada as Any).titulo}</h2>
-              <p className="mt-1 text-sm">{(jugada as Any).texto}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/70">{(jugada as Any).valor ? <span>hasta {fmtMXN((jugada as Any).valor)} al año</span> : null}{(jugada as Any).urgencia ? <span>· antes del {fmtFecha((jugada as Any).urgencia)}</span> : null}</div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <HablarBoton texto={(jugada as Any).recomendada ? 'Quiero avanzar con esto' : 'Quiero que me lo confirmen'} mensaje={`Hola, vi en mi cuenta Trol mi mejor jugada: ${(jugada as Any).titulo}. Quiero ${(jugada as Any).recomendada ? 'avanzar' : 'que me la confirmen'}. Vengo de app.trol.mx.`} oscuro />
-                {e.tiene_semilla ? <Link href="/mejor-jugada" className="rounded-xl border border-ink/25 px-4 py-2.5 text-sm font-bold text-ink">Ver los números →</Link> : null}
-              </div>
+
+          {pa ? <LoQueSigue pa={pa} jugada={(jugada as Any | null) ?? null} identidad={identidad} faltan={faltan} tieneSemilla={!!e.tiene_semilla} /> : <ChatTrol />}
+
+          {pa && ((pa.hallazgos ?? []).length > 0 || Number(pa.en_orden) > 0) && Number(pa.parada) > 1 ? (
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-bold">Lo que encontramos en tu caso</h2>
+              {(pa.hallazgos ?? []).length > 0 ? (
+                <ul className="mt-3 space-y-3">
+                  {(pa.hallazgos as Any[]).map((h) => (
+                    <li key={h.item} className="flex items-start gap-2.5">
+                      <span className={h.severidad === 'alta' ? 'mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500' : 'mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400'} />
+                      <div><div className="text-sm font-semibold">{h.titulo}</div><div className="text-xs text-muted">{h.detalle}</div></div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {Number(pa.en_orden) > 0 ? (
+                <div className={(pa.hallazgos ?? []).length > 0 ? 'mt-3 flex items-center gap-2 border-t border-line pt-3 text-sm' : 'mt-3 flex items-center gap-2 text-sm'}>
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green-600 text-[10px] font-bold text-white">✓</span>
+                  {(pa.hallazgos ?? []).length > 0 ? `${pa.en_orden} ${Number(pa.en_orden) === 1 ? 'cosa más' : 'cosas más'}, en orden` : `${pa.en_orden} ${Number(pa.en_orden) === 1 ? 'cosa revisada' : 'cosas revisadas'}, todo en orden`}
+                </div>
+              ) : null}
             </section>
           ) : null}
 
-          {siguiente && (
-            <section className="rounded-2xl border-2 border-lime bg-white p-5">
-              <div className="text-[11px] uppercase tracking-wide text-muted">Tu siguiente paso</div>
-              <h2 className="mt-1 text-lg font-extrabold">{siguiente.titulo}</h2>
-              <p className="mt-1 text-sm text-muted">{siguiente.detalle ?? siguiente.por_que}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted"><span>{siguiente.esfuerzo}</span>{siguiente.puntos ? <span>· +{siguiente.puntos} pts</span> : null}{siguiente.valor ? <span>· hasta {fmtMXN(siguiente.valor)}/año</span> : null}</div>
-              <div className="mt-3"><MisionCta mision={siguiente} campos={faltan} identidad={identidad} /></div>
+          {afina.length > 0 ? (
+            <section className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">
+              <h2 className="text-sm font-bold">Afina tus números <span className="font-normal text-muted">· cuando tengas un rato</span></h2>
+              <div className="mt-2">
+                {afina.map((m) => (
+                  <details key={m.codigo} className="border-t border-line py-3">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                      <span><span className="block text-sm font-semibold">{AFINA[m.codigo][0]}</span><span className="block text-xs text-muted">{AFINA[m.codigo][1]}</span></span>
+                      <span className="text-lg text-muted">›</span>
+                    </summary>
+                    <div className="mt-3"><MisionCta mision={m as never} campos={faltan as never} identidad={identidad} /></div>
+                  </details>
+                ))}
+              </div>
             </section>
-          )}
+          ) : null}
+        </div>
+      )}
 
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <div className="flex items-center justify-between"><h2 className="text-sm font-bold">Orden de tu situación</h2>{alertas.length ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">{alertas.length} por atender</span> : <span className="text-[11px] text-muted">{ck.filter((c) => c.estado === 'ok').length}/{ck.length} en orden</span>}</div>
-            <ul className="mt-2 grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
-              {ck.map((c) => (
-                <li key={c.item} className="flex items-start gap-2">
-                  <span className={`mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.estado === 'ok' ? 'bg-green-500' : c.estado === 'alerta' ? (c.severidad === 'alta' ? 'bg-red-500' : 'bg-amber-400') : 'bg-gray-200'}`} />
-                  <span>{CHECK_LABEL[c.item] ?? c.item}{c.estado === 'alerta' && c.detalle ? <span className="text-muted"> · {c.detalle}</span> : c.estado === 'sin_dato' ? <span className="text-muted"> · pendiente</span> : null}</span>
-                </li>
-              ))}
-            </ul>
+      {tab === 'mas' && (
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-line bg-white px-5 py-2">
+            {([[href('puntos'), 'Tus puntos', `${e.puntos} puntos · cómo ganarlos y en qué usarlos`], [href('asesorias'), 'Hablar con un experto', 'Asesorías, qué incluyen y cuánto cuestan'], ['/referidos', 'Invitar a alguien', 'Que alguien más tenga su pensión en claro']] as [string, string, string][]).map(([h, t, d], k) => (
+              <Link key={h} href={h} className={k === 0 ? 'flex items-center justify-between gap-3 py-3' : 'flex items-center justify-between gap-3 border-t border-line py-3'}>
+                <span><span className="block text-sm font-semibold">{t}</span><span className="block text-xs text-muted">{d}</span></span>
+                <span className="text-lg text-muted">›</span>
+              </Link>
+            ))}
           </section>
-
-          <ChatTrol falta={siguiente ? { titulo: siguiente.titulo, cta: siguiente.cta ?? null } : null} />
 
           <MiAcciones actualizacion={(actualizacion as ActualizacionImss | null) ?? null} tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
 
@@ -267,8 +286,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </div>
       )}
 
-      {tab === 'documentos' && (
-        <section className="rounded-2xl border border-line bg-white p-5">
+      {(tab === 'documentos' || tab === 'expediente') && (
+        <section className="mt-4 rounded-2xl border border-line bg-white p-5">
           <h2 className="text-sm font-bold">Tus documentos</h2>
           <p className="mb-3 text-xs text-muted">Todo en un solo lugar: lo que ya tenemos, lo que puedes desbloquear y lo que podemos conseguir por ti.</p>
           <ul className="space-y-2 text-sm">
@@ -351,13 +370,12 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </div>
       )}
 
-      <p className="mt-8 text-center text-xs text-muted">¿Tienes una duda? <HablarBoton texto="Escríbenos por WhatsApp" mensaje="Hola, tengo una duda sobre mi pensión. Vengo de mi cuenta Trol (app.trol.mx)." compacto /></p>
-
-      <p className="mt-3 text-center text-[11px] leading-relaxed text-muted">El trámite ante el IMSS es gratis. Trol no pide anticipos en efectivo ni garantiza montos.</p>
+      <p className="mt-8 text-center text-[11px] leading-relaxed text-muted">El trámite ante el IMSS es gratis. Trol no pide anticipos en efectivo ni garantiza montos.</p>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-2xl justify-around px-2 py-2 text-[11px]">
-          {TABS.map(([t, l]) => <Link key={t} href={href(t)} className={`rounded-lg px-2 py-1 ${tab === t ? 'bg-ink font-semibold text-white' : 'text-muted'}`}>{l}</Link>)}
+        <div className="mx-auto flex max-w-2xl items-center gap-1.5 px-3 py-2 text-sm">
+          {NAV.map(([t, l, grupo]) => <Link key={t} href={href(t)} className={grupo.includes(tab) ? 'flex-1 rounded-xl bg-ink px-2 py-2.5 text-center font-bold text-white' : 'flex-1 rounded-xl px-2 py-2.5 text-center text-muted'}>{l}</Link>)}
+          <a href={waLink((pa?.mensaje_wa as string | undefined) ?? 'Hola, vengo de mi cuenta Trol (app.trol.mx).')} target="_blank" rel="noreferrer" className="rounded-xl bg-lime px-3.5 py-2.5 font-bold text-ink">Mi chat</a>
         </div>
       </nav>
     </main>
@@ -374,4 +392,87 @@ async function CalculadoraEmbed() {
 function SalidaChat({ mensaje }: { mensaje: string }) {
   const tel = process.env.NEXT_PUBLIC_WHATSAPP_TROL || '5215555555555';
   return <a href={`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`} className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Escribirnos por WhatsApp</a>;
+}
+
+/** 157 · "Aquí vas": las cinco paradas. Sustituye a la barra de misiones, que medía nuestra captura y no su avance. */
+function Ruta({ parada, frase }: { parada: number; frase: string }) {
+  const cur = Math.min(Math.max(parada, 1), 5) - 1;
+  return (
+    <section className="rounded-2xl border border-line bg-white px-3 py-4">
+      <div className="px-1 text-[11px] font-bold uppercase tracking-wide text-muted">Aquí vas</div>
+      <div className="mt-3 flex items-center px-[calc(10%-11px)]">
+        {PARADAS.map((_, i) => (
+          <span key={i} className={i < 4 ? 'flex flex-1 items-center' : 'flex items-center'}>
+            <span className={i < cur ? 'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white' : i === cur ? 'h-[22px] w-[22px] shrink-0 rounded-full border-[3px] border-ink bg-lime' : 'h-[22px] w-[22px] shrink-0 rounded-full border-2 border-line bg-white'}>{i < cur ? '✓' : ''}</span>
+            {i < 4 ? <span className={i < cur ? 'h-[3px] flex-1 bg-ink' : 'h-[3px] flex-1 bg-line'} /> : null}
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-5 text-center text-[11px] leading-tight">
+        {PARADAS.map((p, i) => <span key={p} className={i === cur ? 'font-bold text-ink' : i < cur ? 'text-ink' : 'text-muted'}>{p}</span>)}
+      </div>
+      {frase ? <p className="mt-3 px-1 text-sm">{frase}</p> : null}
+    </section>
+  );
+}
+
+/** 157 · UNA sola cosa que sigue, y con dueño. No tener nada que hacer también es un estado válido. */
+function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla }: { pa: Any; jugada: Any | null; identidad: Identidad | null; faltan: Any[]; tieneSemilla: boolean }) {
+  const tocaCliente = pa.toca === 'cliente';
+  const lime = pa.cta === 'avanzar';
+  const op = (pa.oportunidad as Any | null) ?? null;
+  // El texto con números de la recomendación tiene una sola fuente (mi_mejor_jugada), y sólo si habla de la misma oportunidad.
+  const jug = jugada && op && jugada.oportunidad_id === op.id ? jugada : null;
+  const texto: string = pa.texto ?? jug?.texto ?? 'Es lo que te recomendamos para tu caso. Tu experto te explica los números y cómo se hace.';
+  const tramite: Any[] = pa.tramite ?? [];
+  const faltaCliente = tramite.some((t) => !t.hecho && t.quien === 'cliente');
+  return (
+    <section className={lime ? 'rounded-2xl border-2 border-lime bg-lime p-5 text-ink' : 'rounded-2xl border-2 border-ink bg-white p-5 text-ink'}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={lime ? 'text-[11px] font-bold uppercase tracking-wide text-ink/70' : 'text-[11px] font-bold uppercase tracking-wide text-muted'}>Lo que sigue</span>
+        <span className={tocaCliente ? 'rounded-full bg-ink px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white' : 'rounded-full border border-line bg-cream px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-ink'}>{tocaCliente ? 'Te toca a ti' : 'Nos toca a nosotros'}</span>
+      </div>
+      <h2 className="mt-2 text-xl font-extrabold leading-tight">{pa.titulo}</h2>
+      <p className="mt-1 text-sm">{texto}</p>
+      {lime && op && (op.valor || op.urgencia) ? <div className="mt-2 text-xs text-ink/70">{op.valor ? `hasta ${fmtMXN(op.valor)} al año` : ''}{op.valor && op.urgencia ? ' · ' : ''}{op.urgencia ? `antes del ${fmtFecha(op.urgencia)}` : ''}</div> : null}
+
+      {pa.cta === 'curp' ? <div className="mt-3"><MisionCta mision={{ codigo: 'curp', cta: 'curp', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}
+      {pa.cta === 'consulta_imss' ? <div className="mt-3"><MisionCta mision={{ codigo: 'info_oficial', cta: 'consulta_imss', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}
+      {pa.cta === 'curp_revisar' ? (
+        <>
+          {identidad?.curp ? <div className="mt-3 rounded-xl bg-cream p-3"><div className="text-[11px] text-muted">La CURP que tenemos</div><div className="font-mono text-base font-bold tracking-wide">{identidad.curp}</div></div> : null}
+          <div className="mt-3 space-y-2">
+            {identidad ? <CurpAcciones identidad={identidad} /> : null}
+            <HablarBoton texto={pa.boton ?? 'Mi CURP está bien, ayúdenme'} mensaje={pa.mensaje_wa} />
+          </div>
+        </>
+      ) : null}
+      {pa.cta === 'chat' ? <div className="mt-3"><HablarBoton texto={pa.boton ?? 'Escribir por WhatsApp'} mensaje={pa.mensaje_wa} oscuro /></div> : null}
+      {pa.cta === 'avanzar' ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <HablarBoton texto={pa.boton ?? 'Quiero avanzar'} mensaje={pa.mensaje_wa} oscuro />
+          {tieneSemilla ? <Link href="/mejor-jugada" className="rounded-xl border border-ink/25 px-4 py-2.5 text-sm font-bold text-ink">Ver los números →</Link> : null}
+        </div>
+      ) : null}
+      {pa.cta === 'tramite' ? (
+        <>
+          {tramite.length > 0 ? (
+            <ul className="mt-3 divide-y divide-line border-t border-line">
+              {tramite.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-2.5">
+                  <span className={t.hecho ? 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-600 text-[11px] font-bold text-white' : 'h-5 w-5 shrink-0 rounded-full border-2 border-line'}>{t.hecho ? '✓' : ''}</span>
+                  <div className="flex-1"><div className="text-sm font-semibold">{t.item}</div><div className="text-xs text-muted">{t.hecho ? 'Listo' : t.quien === 'cliente' ? 'Te toca a ti' : 'Lo llevamos nosotros'}</div></div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {faltaCliente ? <Link href="/mi?tab=documentos" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Subir un documento</Link> : null}
+            <HablarBoton texto={pa.boton ?? 'Preguntar por mi trámite'} mensaje={pa.mensaje_wa} oscuro={!faltaCliente} />
+          </div>
+        </>
+      ) : null}
+      {pa.pie ? <p className={lime ? 'mt-3 text-xs text-ink/70' : 'mt-3 text-xs text-muted'}>{pa.pie}</p> : null}
+    </section>
+  );
 }
