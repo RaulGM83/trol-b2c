@@ -32,7 +32,7 @@ export type ResultadoRedaccion =
  * este documento. Van juntos aquí para que el redactor no tenga que saber de
  * dónde salió cada uno — eso lo decide quien lo llama.
  */
-export type Ajustes = { vigentes?: string | null; ensayo?: string | null };
+export type Ajustes = { vigentes?: string | null; ensayo?: string | null; fichas?: string | null };
 
 /**
  * El modelo devuelve JSON, pero a veces lo envuelve en ```json o deja una coma

@@ -25,6 +25,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
             <Link href="/trabajo/tareas" className="rounded-lg px-2 py-1 hover:bg-cream">Tareas</Link>
             <Link href="/trabajo/embudo" className="rounded-lg px-2 py-1 hover:bg-cream">Embudo</Link>
             <Link href="/trabajo/eventos" className="rounded-lg px-2 py-1 hover:bg-cream">Actividad</Link>
+            <Link href="/trabajo/fichas" className="rounded-lg px-2 py-1 hover:bg-cream">Conocimiento</Link>
             <Link href="/trabajo/aliados" className="rounded-lg px-2 py-1 hover:bg-cream">Aliados</Link>
             <NavGestion admin={(miembro.roles ?? []).includes('admin')} />
           </nav>

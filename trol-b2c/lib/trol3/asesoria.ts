@@ -2,6 +2,7 @@
 // (components/trol3/AsesoriaSesion) y "Presentar" (app/presentar/[id]), para que lo que se
 // comparte en la videollamada y lo que ve el asesor salgan del mismo sitio.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Ficha } from '@/lib/trol3/fichas';
 
 export const PASOS: { n: number; titulo: string; corto: string }[] = [
   { n: 1, titulo: 'Su situación', corto: 'Situación' },
@@ -26,12 +27,14 @@ export type Propuesta = { texto?: string; pension_con_plan?: number; costo?: num
 export type VistaAsesoria = {
   cliente: Record<string, any>; numeros: Record<string, any>; experto: string | null; parada: number | null;
   hallazgos: { item: string; severidad: string; titulo: string; detalle: string }[]; en_orden: number | null;
-  oportunidades: { id: string; codigo: string; estado: string; nivel: number; nombre: string; frase: string | null; motivo: string | null; urgencia: string | null; valor: number | null; nombre_interno: string; propuesta: Propuesta | null }[];
+  oportunidades: { id: string; codigo: string; estado: string; nivel: number; nombre: string; frase: string | null; motivo: string | null; urgencia: string | null; valor: number | null; nombre_interno: string; propuesta: Propuesta | null; ficha: string | null }[];
   historial: { empleador?: string; fecha_inicio?: string; fecha_fin?: string; salario_base?: number }[];
   escenarios: { id: string; tipo: string; creado_en: string; inputs: any; resultado: any }[];
   sesion: Sesion | null;
   /** 169 · El diagnóstico de esta sesión (o el último del cliente si aún no se liga). */
   diagnostico: { id: string; estado: 'borrador' | 'revisado' | 'entregado'; entregado_en: string | null; estrategia: string | null; acuerdos: string | null; ligado: boolean | null; pagado: boolean } | null;
+  /** 170 · Todas las fichas activas, para el panel contextual. */
+  fichas: Ficha[];
   pendientes: { id: string; titulo: string; vence_el: string | null; responsable: string }[];
 };
 

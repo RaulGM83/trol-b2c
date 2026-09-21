@@ -7,6 +7,7 @@ import { PropuestaForm } from '@/components/trol3/RelacionPanel';
 import { PASOS, PASO_CLIENTE, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
 import { CompartirContext } from '@/lib/trol3/compartir';
 import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
+import { FichaPanel } from '@/components/trol3/FichaPanel';
 
 const dark = 'rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50';
 const line = 'rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold disabled:opacity-50';
@@ -26,6 +27,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const [estrategia, setEstrategia] = useState<string>(vista.diagnostico?.estrategia ?? '');
   const [msgDiag, setMsgDiag] = useState<string | null>(null);
   // 3b · la herramienta abierta dentro del paso 3 (null = los caminos)
+  const [fichaCod, setFichaCod] = useState<string | null>(null); // 170 · ficha abierta al lado
   const [herr, setHerr] = useState<'calculadora' | 'infonavit' | null>(null);
   const [pending, start] = useTransition();
   // Modo "Compartiendo": la pantalla de trabajo es la que ve el cliente en la videollamada.
@@ -33,7 +35,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const [compartiendo, setCompartiendo] = useState(false);
   const llave = `trol:compartiendo:${personaId}`;
   useEffect(() => { try { if (window.sessionStorage.getItem(llave) === '1') setCompartiendo(true); } catch { /* sin storage: arranca apagado */ } }, [llave]);
-  const alternar = () => setCompartiendo((v) => { try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ } return !v; });
+  const alternar = () => setCompartiendo((v) => { setFichaCod(null); try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ } return !v; });
 
   if (!ses) {
     const previa = vista.sesion;
@@ -54,6 +56,14 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const c = vista.cliente; const num = vista.numeros;
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
   const cams = caminos(vista);
+  // 170 · Fichas a la mano según el paso: temas al leer su situación; las de sus oportunidades al hablar de ellas.
+  const fichas = vista.fichas ?? [];
+  const codsOps = new Set(vista.oportunidades.map((o) => o.ficha).filter(Boolean) as string[]);
+  const leyCli = c.ley === 'Ley97' ? 'Ley97' : 'Ley73';
+  const fichasPaso = paso === 1 ? fichas.filter((f) => f.tipo === 'tema' && !(leyCli === 'Ley97' && (f.codigo === 'T2' || f.codigo === 'T3')))
+    : paso === 2 || paso === 4 ? fichas.filter((f) => codsOps.has(f.codigo))
+    : paso === 3 ? fichas.filter((f) => f.codigo === 'T3' || f.codigo === 'O5' || f.codigo === 'O7' || codsOps.has(f.codigo)).slice(0, 6) : [];
+  const fichaAbierta = !compartiendo && fichaCod ? fichas.find((f) => f.codigo === fichaCod) ?? null : null;
   const ancho = paso === 3 && herr !== null; // con herramienta abierta, el paso usa todo el ancho
   const HERR: { k: 'calculadora' | 'infonavit'; titulo: string; sub: string }[] = [
     { k: 'calculadora', titulo: 'Calculadora', sub: 'Edad, semanas, Modalidad 40, UMAs' },
@@ -96,6 +106,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         {compartiendo ? null : <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-wide text-amber-800">Guion</div>
           <p className="mt-1 text-sm leading-relaxed">{guion(paso, vista)}</p>
+          {fichasPaso.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-amber-200 pt-2 text-[11px]"><span className="font-bold uppercase tracking-wide text-amber-800">Fichas a la mano</span>{fichasPaso.map((f) => <button key={f.codigo} type="button" onClick={() => setFichaCod(f.codigo)} className="rounded-full border border-amber-300 bg-white px-2.5 py-0.5 font-semibold hover:bg-amber-100">{f.codigo} · {f.titulo}</button>)}</div> : null}
         </div>}
 
         {paso === 1 && (
@@ -130,7 +141,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
               ))}
               {vista.oportunidades.map((o) => (
                 <li key={o.id} className="rounded-xl border border-line p-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-sm font-bold">{o.nombre}</div>{compartiendo ? null : <div className="text-[11px] text-muted">{o.nombre_interno} · {o.estado}{o.valor ? ` · valor est. ${mxn(o.valor)}` : ''}</div>}</div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-sm font-bold">{o.nombre}</div>{compartiendo ? null : <div className="flex items-center gap-2 text-[11px] text-muted"><span>{o.nombre_interno} · {o.estado}{o.valor ? ` · valor est. ${mxn(o.valor)}` : ''}</span>{o.ficha ? <button type="button" onClick={() => setFichaCod(o.ficha)} className="rounded-full bg-lime px-2.5 py-0.5 text-[11px] font-bold text-ink">Ficha {o.ficha}</button> : null}</div>}</div>
                   <p className="mt-1 text-sm">{o.frase ?? (compartiendo ? null : <span className="text-muted">Sin frase para el cliente todavía (falta su ficha).</span>)}</p>
                   {o.motivo && !compartiendo ? <p className="mt-1 text-xs text-muted">Por qué lo detectamos: {o.motivo}</p> : null}
                   {o.urgencia ? <p className="mt-1 text-xs font-semibold text-amber-700">Fecha límite: {fechaLarga(o.urgencia)}</p> : null}
@@ -277,6 +288,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         </div>
       </div>
     </div>
+    {fichaAbierta ? <FichaPanel ficha={fichaAbierta} fichas={fichas} onAbrir={setFichaCod} onCerrar={() => setFichaCod(null)} /> : null}
     </CompartirContext.Provider>
   );
 }

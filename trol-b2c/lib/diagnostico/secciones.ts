@@ -111,9 +111,15 @@ export const PROMPT_VERSION = '2026.09.10.1'
  */
 export function conAjustes(
   base: string,
-  { vigentes, ensayo }: { vigentes?: string | null; ensayo?: string | null } = {},
+  { vigentes, ensayo, fichas }: { vigentes?: string | null; ensayo?: string | null; fichas?: string | null } = {},
 ): string {
   const partes = [base]
+  // 170 · Cómo explica Trol las oportunidades de ESTE cliente. Es tono y orden, no datos: las cifras siguen viniendo de los hechos.
+  if (fichas?.trim()) {
+    partes.push(
+      `\n# CÓMO EXPLICA TROL LAS OPORTUNIDADES DE ESTE CLIENTE\nUsa estas explicaciones como guía de enfoque, orden y palabras al hablar de cada oportunidad. No copies literal, no cites cifras de aquí que no estén en los datos del cliente, y sigue sin usar markdown.\n\n${fichas.trim()}`,
+    )
+  }
   if (vigentes?.trim()) {
     partes.push(
       `\n# AJUSTES VIGENTES\nLo que sigue corrige lo anterior. Si algo se contradice, manda esto.\n\n${vigentes.trim()}`,

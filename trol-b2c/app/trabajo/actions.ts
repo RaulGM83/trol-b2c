@@ -180,6 +180,28 @@ export async function marcarAsesoria(id: string, personaId: string, x: { paso?: 
   return ok();
 }
 
+/** 170 · "Cómo explicarlo" de las fichas de las oportunidades abiertas del cliente. Nunca `solo_asesor`. Si falla, el redactor sigue sin ellas. */
+async function fichasParaRedactor(personaId: string): Promise<string | null> {
+  const { data, error } = await t3().rpc('fichas_para_redactor', { p_persona: personaId });
+  return error ? null : ((data as string | null) ?? null);
+}
+
+/** 170 · Guarda una ficha de conocimiento. Sólo admin (lo impone el RLS); queda historial del texto anterior. */
+export async function guardarFicha(codigo: string, campos: Record<string, string | null>) {
+  const m = await requireMiembro();
+  if (!(m.roles ?? []).includes('admin')) return fail('Sólo un administrador puede editar las fichas.');
+  const PERMITIDOS = ['titulo', 'frase', 'cuando_aplica', 'como_explicarlo', 'preguntas', 'documentos', 'solo_asesor', 'en_diagnostico'];
+  const cambio: Record<string, string | null> = {};
+  for (const k of PERMITIDOS) if (k in campos) cambio[k] = campos[k]?.trim() ? campos[k]!.trim() : null;
+  if ('frase' in cambio && !cambio.frase) return fail('“En una frase” no puede quedar vacía.');
+  if ('titulo' in cambio && !cambio.titulo) return fail('El título no puede quedar vacío.');
+  const { data, error } = await t3().from('fichas').update(cambio).eq('codigo', codigo).select('codigo');
+  if (error) return fail(error);
+  if (!data?.length) return fail('No se guardó: no existe la ficha o no tienes permiso.');
+  revalidatePath('/trabajo/fichas');
+  return ok();
+}
+
 /** 169 · Arma el diagnóstico desde la asesoría (paso 4) y lo deja ligado a la sesión. */
 export async function armarDiagnosticoAsesoria(asesoriaId: string, personaId: string, escenarioIds: string[]) {
   await requireMiembro();
@@ -1200,7 +1222,8 @@ export async function generarBorradorDiagnostico(
     }
 
     const vigentes = await instruccionesVigentes();
-    const r = await redactarDiagnostico(hechos, { ajustes: { vigentes: vigentes?.texto } });
+    const fichasCaso = await fichasParaRedactor(personaId);
+    const r = await redactarDiagnostico(hechos, { ajustes: { vigentes: vigentes?.texto, fichas: fichasCaso } });
     if (r.ok) {
       const { error: e2 } = await t3().rpc('guardar_diagnostico', {
         p_diagnostico: id, p_narrativa: r.narrativa, p_acuerdos: null,
@@ -1236,7 +1259,7 @@ export async function regenerarNarrativa(diagnosticoId: string, personaId: strin
 
     const vigentes = await instruccionesVigentes();
     const r = await redactarDiagnostico(hechos, {
-      ajustes: { vigentes: vigentes?.texto, ensayo: (d as Any)?.ensayo ?? null },
+      ajustes: { vigentes: vigentes?.texto, ensayo: (d as Any)?.ensayo ?? null, fichas: await fichasParaRedactor(personaId) },
     });
     if (!r.ok) return fail(new Error(r.error));
     const { error: e2 } = await t3().rpc('guardar_diagnostico', {
