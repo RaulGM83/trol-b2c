@@ -22,6 +22,8 @@ import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CobroPanel } from '@/components/trol3/CobroPanel';
 import { RegistroRapido, ActivarCard, PropuestaForm, type Puede } from '@/components/trol3/RelacionPanel';
+import { AsesoriaSesion } from '@/components/trol3/AsesoriaSesion';
+import type { VistaAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
@@ -41,9 +43,9 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
 
 // 167 · La primera pestaña es la relación con el cliente; las demás se agrupan por lo que el
 // asesor está haciendo (asesorar · tramitar · consultar datos), no por tipo de dato.
-const GRUPO_TAB: Record<string, string> = { relacion: '', calculadoras: 'Asesoría', infonavit: 'Asesoría', diagnostico: 'Asesoría', viraal: 'Asesoría', oportunidades: 'Trámite', documentos: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
-const ORDEN_TAB = ['relacion', 'calculadoras', 'infonavit', 'diagnostico', 'viraal', 'oportunidades', 'documentos', 'resumen', 'bitacora'];
-const TABS_BASE: [string, string][] = [['relacion', 'Relación'], ['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+const GRUPO_TAB: Record<string, string> = { relacion: '', asesoria: '', calculadoras: 'Herramientas', infonavit: 'Herramientas', diagnostico: 'Herramientas', viraal: 'Herramientas', oportunidades: 'Trámite', documentos: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
+const ORDEN_TAB = ['relacion', 'asesoria', 'calculadoras', 'infonavit', 'diagnostico', 'viraal', 'oportunidades', 'documentos', 'resumen', 'bitacora'];
+const TABS_BASE: [string, string][] = [['relacion', 'Relación'], ['asesoria', 'Asesoría'], ['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -266,6 +268,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
     db.from('personas').select('tako_visto_en, app_visto_en').eq('id', params.id).maybeSingle(),
   ]);
   const pa = (paradaCli ?? null) as Any | null;
+  // 168 · La asesoría en cinco pasos: una sola lectura, la misma que usa /presentar.
+  const vistaAsesoria = tab === 'asesoria' ? (((await db.rpc('asesoria_vista', { p_persona: params.id })).data ?? null) as VistaAsesoria | null) : null;
   const chatAbierto = !!(perRel as Any)?.tako_visto_en && Date.now() - new Date((perRel as Any).tako_visto_en).getTime() < 24 * 3600e3;
 
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
@@ -459,7 +463,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 {tocaCliente ? <p className="mt-2 text-xs text-muted">La pelota está de su lado. Si lleva días sin moverse, actívalo desde la derecha.</p> : null}
                 {(pa?.hallazgos ?? []).length ? <ul className="mt-3 space-y-1 border-t border-line pt-3 text-sm">{(pa.hallazgos as Any[]).map((h) => <li key={h.item} className="flex items-start gap-2"><span className={h.severidad === 'alta' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500' : 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-400'} /><span>{h.titulo}</span></li>)}</ul> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Link href={href('diagnostico')} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Empezar asesoría</Link>
+                  <Link href={href('asesoria')} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">{'Empezar asesoría'}</Link>
                   <Link href={href('oportunidades')} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold">Ver trámite y oportunidades</Link>
                 </div>
               </section>
@@ -505,6 +509,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
           </div>
         );
       })()}
+
+      {tab === 'asesoria' && vistaAsesoria ? (
+        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico') }} />
+      ) : null}
 
       {tab === 'resumen' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

@@ -54,7 +54,7 @@ export function CarteraAcciones({ fila, takoUrl, porActivar = false }: { fila: F
         ) : m === 'escribio' ? (
           <>{chat}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'atendido_chat'), 'Anotado: atendido.')}>Ya lo atendí</button></>
         ) : m === 'cita' ? (
-          <Link href={`/trabajo/p/${fila.persona_id}?tab=diagnostico`} className={dark}>Preparar asesoría</Link>
+          <Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria`} className={dark}>Preparar asesoría</Link>
         ) : m === 'tramite' ? (
           <Link href={`/trabajo/p/${fila.persona_id}?tab=oportunidades`} className={dark}>Ver trámite</Link>
         ) : m === 'contactar' ? (

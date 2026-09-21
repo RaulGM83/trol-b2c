@@ -159,6 +159,27 @@ export async function activarLote(items: { opId: string; personaId: string }[]) 
   return enviados ? ok({ texto: `Salieron ${enviados} de ${items.length}.${resumen}` }) : fail(`No salió ninguno.${resumen}`);
 }
 
+/** 168 · Abre (o retoma) la sesión de asesoría del cliente. */
+export async function abrirAsesoria(personaId: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('asesoria_abrir', { p_persona: personaId });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ id: (data as Any)?.id });
+}
+
+/** 168 · Avanza de paso, guarda la nota del paso, prende/apaga costos, marca el camino recomendado o cierra. */
+export async function marcarAsesoria(id: string, personaId: string, x: { paso?: number; nota?: string; mostrarCostos?: boolean; escenario?: string; cerrar?: boolean }) {
+  await requireMiembro();
+  const { error } = await t3().rpc('asesoria_marcar', {
+    p_id: id, p_paso: x.paso ?? null, p_nota: x.nota ?? null, p_mostrar_costos: x.mostrarCostos ?? null, p_escenario: x.escenario ?? null, p_cerrar: x.cerrar ?? false,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath(`/presentar/${personaId}`);
+  if (x.cerrar) revalidatePath('/trabajo/cartera');
+  return ok();
+}
+
 export type CambioOportunidad = { motivo?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota?: string | null };
 /** Cambia la etapa de una oportunidad (ciclo unificado, migración 084): historial, timestamps y nota en bitácora los pone la función SQL. */
 export async function cambiarEstadoOportunidad(opId: string, personaId: string, estado: string, extra?: string | CambioOportunidad) {
