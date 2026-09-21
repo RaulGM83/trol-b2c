@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { requireMiembro, t3, type Any } from '@/lib/trol3/server';
 import { TareasPanel, type MiembroOpcion, type Tarea } from '@/components/trol3/TareasPanel';
+import { CarteraTabs } from '@/components/trol3/CarteraTabs';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Mis pendientes · Trol equipo' };
 
 // ---------------------------------------------------------------------------
 // Tareas del equipo (114).
@@ -69,8 +71,8 @@ export default async function TareasPage({
 
   return (
     <div>
+      <div className="mb-4 space-y-3"><h1 className="text-2xl font-extrabold">Mis pendientes</h1><CarteraTabs activa="pendientes" pendientes={conteos.mias} vencidas={abiertas.filter((t) => t.vencida && t.responsable_id === miembro.id).length} /></div>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <h1 className="mr-3 text-xl font-extrabold">Tareas</h1>
         {FILTROS.map(([k, label]) => (
           <Link
             key={k}

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireMiembro, t3, fmtNum, type Any } from '@/lib/trol3/server';
 import { CarteraAcciones, type FilaCartera } from '@/components/trol3/CarteraAcciones';
 import { PorActivarLista } from '@/components/trol3/PorActivarLista';
+import { CarteraTabs } from '@/components/trol3/CarteraTabs';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi cartera · Trol equipo' };
@@ -14,6 +15,7 @@ const PARADAS = ['Información', 'Diagnóstico', 'Plan', 'Trámite', 'Pensión']
 const MOTIVO: Record<string, [string, string]> = {
   escribio: ['Escribió', 'bg-red-100 text-red-900'],
   cita: ['Cita', 'bg-lime text-ink'],
+  tarea: ['Pendiente vencido', 'bg-red-100 text-red-900'],
   tramite: ['Trámite: nos toca', 'bg-amber-100 text-amber-900'],
   contactar: ['Buscarle hoy', 'bg-amber-100 text-amber-900'],
   propuesta: ['Propuesta sin respuesta', 'bg-amber-100 text-amber-900'],
@@ -79,10 +81,12 @@ export default async function Cartera({ searchParams }: { searchParams: { vista?
   const m = await requireMiembro();
   const vista = searchParams.vista === 'equipo' ? 'equipo' : 'mios';
   const db = t3();
-  const [{ data: cartera, error }, { data: activar, error: errAct }] = await Promise.all([
+  const [{ data: cartera, error }, { data: activar, error: errAct }, { data: misTareas }] = await Promise.all([
     db.rpc('mi_cartera', { p_vista: vista }),
     db.rpc('cartera_por_activar', { p_nombre: searchParams.grupo ?? null, p_limit: 20 }),
+    db.from('v_tareas').select('id,vencida').eq('estado', 'pendiente').eq('responsable_id', m.id).limit(200),
   ]);
+  const nPend = (misTareas ?? []).length; const nVenc = ((misTareas ?? []) as Any[]).filter((t) => t.vencida).length;
   const c = (cartera ?? {}) as Any;
   const meToca: Any[] = c.me_toca ?? [];
   const leToca: Any[] = c.le_toca ?? [];
@@ -111,6 +115,7 @@ export default async function Cartera({ searchParams }: { searchParams: { vista?
           <Link href={href({ vista: 'equipo' })} className={vista === 'equipo' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Todo el equipo</Link>
         </div>
       </div>
+      <CarteraTabs activa="clientes" pendientes={nPend} vencidas={nVenc} />
       {error ? <p className="text-sm text-red-600">No se pudo cargar la cartera: {error.message}</p> : null}
 
       <div className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">

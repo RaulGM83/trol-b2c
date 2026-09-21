@@ -16,11 +16,28 @@ const ITEMS: [string, string][] = [
 // impide en la base; esto es para no enseñar una puerta que no abre.
 const ITEMS_ADMIN: [string, string][] = [['/trabajo/redactor', 'Redactor']];
 
+// Fase 5 · "Negocio": cómo va la operación y el embudo. Lo ve todo el equipo.
+const ITEMS_NEGOCIO: [string, string][] = [
+  ['/trabajo/hoy', 'Operación'],
+  ['/trabajo/lista', 'Oportunidades'],
+  ['/trabajo/embudo', 'Embudo'],
+  ['/trabajo/embudo-mi', 'Embudo de /mi'],
+  ['/trabajo/eventos', 'Actividad'],
+  ['/trabajo/personas', 'Todos los clientes'],
+];
+
+export function NavNegocio({ aviso = 0 }: { aviso?: number }) {
+  return <NavDesplegable titulo="Negocio" items={ITEMS_NEGOCIO} aviso={aviso} />;
+}
+
 export function NavGestion({ admin = false }: { admin?: boolean }) {
+  return <NavDesplegable titulo="Gestión" items={admin ? [...ITEMS, ...ITEMS_ADMIN] : ITEMS} />;
+}
+
+function NavDesplegable({ titulo, items, aviso = 0 }: { titulo: string; items: [string, string][]; aviso?: number }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const items = admin ? [...ITEMS, ...ITEMS_ADMIN] : ITEMS;
   const activa = items.some(([h]) => pathname?.startsWith(h));
 
   useEffect(() => { setOpen(false); }, [pathname]);
@@ -33,9 +50,9 @@ export function NavGestion({ admin = false }: { admin?: boolean }) {
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen((v) => !v)} className={`rounded-lg px-2 py-1 hover:bg-cream ${activa ? 'font-semibold' : ''}`}>Gestión ▾</button>
+      <button onClick={() => setOpen((v) => !v)} className={`rounded-lg px-2 py-1 hover:bg-cream ${activa ? 'font-semibold' : ''}`}>{titulo}{aviso > 0 ? <span className="ml-1 rounded-full bg-lime px-1.5 text-[10px] font-bold text-ink">{aviso}</span> : null} ▾</button>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-xl border border-line bg-white p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-20 mt-1 w-44 rounded-xl border border-line bg-white p-1 shadow-lg">
           {items.map(([h, l]) => <Link key={h} href={h} className="block rounded-lg px-2 py-1 hover:bg-cream" onClick={() => setOpen(false)}>{l}</Link>)}
         </div>
       )}

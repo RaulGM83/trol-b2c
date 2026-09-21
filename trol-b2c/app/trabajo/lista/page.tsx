@@ -93,7 +93,7 @@ export default async function ListaTrabajo({ searchParams }: { searchParams: Rec
 
       <section>
         <div className="mb-3 flex items-baseline justify-between">
-          <h1 className="text-xl font-extrabold">Lista de trabajo</h1>
+          <h1 className="text-xl font-extrabold">Oportunidades</h1>
           <span className="text-xs text-muted">{count ?? 0} oportunidades · página {page}</span>
         </div>
         {error && <p className="text-sm text-red-600">Error: {error.message}. ¿Está expuesto el esquema trol3 en la Data API?</p>}

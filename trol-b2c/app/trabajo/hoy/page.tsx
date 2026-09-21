@@ -4,7 +4,7 @@ import { CitasEquipo, type CitaEquipo } from '@/components/trol3/Citas';
 import { ReunionesSinExpediente, type ReunionRow } from '@/components/trol3/Reuniones';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Hoy · Trol equipo' };
+export const metadata = { title: 'Operación · Trol equipo' };
 
 const fmtFecha = (s?: string | null) => (s ? new Date(s).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) : '—');
 const fmtMXN = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
@@ -43,7 +43,7 @@ export default async function TrabajoHoy() {
 
   return (
     <section className="space-y-5">
-      <h1 className="text-xl font-extrabold">Hoy</h1>
+      <div><h1 className="text-xl font-extrabold">Operación</h1><p className="mt-1 text-sm text-muted">Lo que es de todos y de nadie: citas del equipo, reuniones sin expediente, lo que está atorado y el pulso de la experiencia del cliente. Tu trabajo del día vive en Mi cartera.</p></div>
 
       <div className="rounded-2xl border border-line bg-white p-5">
         <h2 className="text-sm font-bold">Citas {((citas ?? []) as CitaEquipo[]).some((c) => c.sin_expediente) ? <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px]">hay citas sin expediente</span> : null}</h2>
