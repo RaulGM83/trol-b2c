@@ -15,7 +15,7 @@ const fechaLarga = (iso?: string | null) => (iso ? new Date(`${String(iso).slice
  * pasó, no obliga a nada. Lo que el asesor ve aquí trae guion, valores internos y notas;
  * "Presentar" abre la versión limpia para compartir pantalla.
  */
-export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode }) {
+export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramientas }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode; herramientas?: { calculadora?: ReactNode; infonavit?: ReactNode; mesa?: ReactNode } }) {
   const router = useRouter();
   const ses = vista.sesion && vista.sesion.estado === 'abierta' ? vista.sesion : null;
   const [paso, setPaso] = useState<number>(ses?.paso ?? 1);
@@ -23,6 +23,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { person
   const [msg, setMsg] = useState<string | null>(null);
   const [estrategia, setEstrategia] = useState<string>(vista.diagnostico?.estrategia ?? '');
   const [msgDiag, setMsgDiag] = useState<string | null>(null);
+  // 3b · la herramienta abierta dentro del paso 3 (null = los caminos)
+  const [herr, setHerr] = useState<'calculadora' | 'infonavit' | 'mesa' | null>(null);
   const [pending, start] = useTransition();
 
   if (!ses) {
@@ -38,13 +40,20 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { person
     );
   }
 
-  const ir = (n: number) => { setPaso(n); setNota(ses.notas?.[String(n)] ?? ''); start(async () => { await marcarAsesoria(ses.id, personaId, { paso: n }); router.refresh(); }); };
+  const ir = (n: number) => { setPaso(n); setHerr(null); setNota(ses.notas?.[String(n)] ?? ''); start(async () => { await marcarAsesoria(ses.id, personaId, { paso: n }); router.refresh(); }); };
   const guardarNota = () => { if ((ses.notas?.[String(paso)] ?? '') === nota) return; start(async () => { const r = await marcarAsesoria(ses.id, personaId, { paso, nota }); setMsg(r.ok ? 'Nota guardada.' : (r as { error?: string }).error ?? 'No se guardó.'); }); };
   const vistos = new Set(ses.pasos_vistos ?? []);
   const c = vista.cliente; const num = vista.numeros;
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
   const ts = tramos(vista.historial);
   const cams = caminos(vista);
+  const ancho = paso === 3 && herr !== null; // con herramienta abierta, el paso usa todo el ancho
+  const HERR: { k: 'calculadora' | 'infonavit' | 'mesa'; titulo: string; sub: string }[] = [
+    { k: 'calculadora', titulo: 'Calculadora', sub: 'Edad, semanas, Modalidad 40, UMAs' },
+    { k: 'infonavit', titulo: 'Infonavit', sub: 'Qué hacer con su subcuenta' },
+    { k: 'mesa', titulo: 'Mesa de financiamiento', sub: 'Costo y pagos del proyecto' },
+  ];
+  const herrOk = HERR.filter((h) => herramientas?.[h.k]);
   // 169 · pasos 4 y 5: el camino recomendado, el diagnóstico de esta sesión y la propuesta.
   const recom = cams.find((k) => k.id === ses.escenario_recomendado) ?? null;
   const diag = vista.diagnostico;
@@ -54,8 +63,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { person
   const armar = () => start(async () => { setMsgDiag('Armando el diagnóstico: junta los hechos y redacta. Tarda cerca de un minuto…'); const r = (await armarDiagnosticoAsesoria(ses.id, personaId, idsParaDiag)) as { ok: boolean; error?: string; aviso?: string | null }; setMsgDiag(r.ok ? (r.aviso ?? 'Diagnóstico armado.') : (r.error ?? 'No se pudo armar.')); if (r.ok) router.refresh(); });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
-      <nav className="space-y-1">
+    <div className={ancho ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}>
+      <nav className={ancho ? 'hidden' : 'space-y-1'}>
         {PASOS.map((p) => (
           <button key={p.n} type="button" onClick={() => ir(p.n)} className={p.n === paso ? 'flex w-full items-center gap-2.5 rounded-xl bg-white p-2.5 text-left shadow-sm ring-1 ring-line' : 'flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left hover:bg-white'}>
             <span className={p.n === paso ? 'h-6 w-6 shrink-0 rounded-full border-[3px] border-ink bg-lime' : vistos.has(p.n) ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white' : 'h-6 w-6 shrink-0 rounded-full border-2 border-line bg-white'}>{p.n !== paso && vistos.has(p.n) ? '✓' : ''}</span>
@@ -122,7 +131,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { person
           </section>
         )}
 
-        {paso === 3 && (
+        {paso === 3 && herr === null && (
           <>
             <section className="rounded-2xl border border-line bg-white p-5">
               <h3 className="text-sm font-bold">Caminos cerrados <span className="font-normal text-muted">· {cams.length}</span></h3>
@@ -144,13 +153,22 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot }: { person
               ) : <p className="mt-1 text-sm text-muted">Todavía no hay ninguno. Ábrelo en una herramienta, mueve las palancas y aprieta “Cerrar escenario”: aparece aquí.</p>}
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h3 className="text-sm font-bold">Herramientas de este paso</h3>
+              <h3 className="text-sm font-bold">Herramientas de este paso <span className="font-normal text-muted">· se abren aquí mismo, sin salir de la asesoría</span></h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <Link href={hrefTab.calculadoras} className="rounded-xl border border-line p-3 hover:bg-cream"><span className="block text-sm font-bold">Calculadora</span><span className="block text-xs text-muted">Edad, semanas, Modalidad 40, UMAs</span></Link>
-                {hrefTab.infonavit ? <Link href={hrefTab.infonavit} className="rounded-xl border border-line p-3 hover:bg-cream"><span className="block text-sm font-bold">Infonavit</span><span className="block text-xs text-muted">Qué hacer con su subcuenta</span></Link> : null}
-                <Link href={hrefTab.viraal} className="rounded-xl border border-line p-3 hover:bg-cream"><span className="block text-sm font-bold">Mesa de financiamiento</span><span className="block text-xs text-muted">Costo y pagos del proyecto</span></Link>
+                {herrOk.map((h) => <button key={h.k} type="button" onClick={() => setHerr(h.k)} className="rounded-xl border border-line p-3 text-left hover:bg-cream"><span className="block text-sm font-bold">{h.titulo}</span><span className="block text-xs text-muted">{h.sub}</span></button>)}
               </div>
             </section>
+          </>
+        )}
+
+        {paso === 3 && herr !== null && (
+          <>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white p-2">
+              <button type="button" className={dark} onClick={() => { setHerr(null); router.refresh(); }}>← Volver a los caminos{cams.length ? ` (${cams.length})` : ''}</button>
+              {herrOk.map((h) => <button key={h.k} type="button" onClick={() => setHerr(h.k)} className={h.k === herr ? 'rounded-lg bg-lime px-3 py-2 text-xs font-bold' : 'rounded-lg px-3 py-2 text-xs font-bold hover:bg-cream'}>{h.titulo}</button>)}
+              <span className="ml-auto pr-2 text-[11px] text-muted">Cierra el escenario en la herramienta y vuelve: aparece como camino.</span>
+            </div>
+            {herramientas?.[herr]}
           </>
         )}
 

@@ -391,6 +391,80 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
   const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
 
+  // 3b · Las herramientas viven en su pestaña Y dentro del paso 3 de la asesoría: una sola pieza, dos puertas.
+  const calcPanel = (
+        <section className="rounded-2xl border border-line bg-white p-2 sm:p-5">
+          {semilla ? (
+            <>
+              <CalculadoraClient
+                consultaId={e.legacy_cliente_id ?? e.persona_id}
+                clienteNombre={[e.nombre, e.apellidos].filter(Boolean).join(' ') || semilla.perfil.nombre}
+                semilla={semilla}
+                branding={{ colorPrimario: '#26282b', colorAcento: '#d1f069', logoUrl: null }}
+                backHref={href('resumen')}
+                backLabel="← Volver al resumen"
+                fechaSisec={fechaSisecTxt}
+                calculoGeneradoAt={semillaAt}
+                mod40Aplica={mod40AplicaLegacy ?? !!(e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
+                calculoPensional={datosMap.get('semilla')?.valor}
+                historialLaboral={historialLaboral}
+                limiteInscripcionMod40={limiteMod40}
+                serieINPC={serieINPC}
+                saldosCorregidos={saldosCorregidos}
+                guardarScope={e.legacy_cliente_id ? 'cliente' : null}
+                rescate={rescateSupuestos}
+                cerrarEscenario={{ personaId: e.persona_id }}
+              />
+              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={`${href('resumen')}#detalle`} className="underline">Resumen → Detalle</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
+            </>
+          ) : (
+            <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
+          )}
+        </section>
+  );
+  const infPanel = (
+        baseInfonavit && supInfonavit ? (
+          <AsesoriaInfonavit
+            personaId={e.persona_id}
+            historial={historialInf}
+            faltantes={baseInfonavit.faltantes}
+            desdeSemilla={baseInfonavit.desdeSemilla}
+            cliente={{
+              nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
+              ley: e.ley ?? '—',
+              edad: e.edad ?? null,
+              cotiza: e.status_empleo === 'empleado',
+              creditoVigente: e.credito_infonavit ?? null,
+            }}
+            base={baseInfonavit.titular}
+            origen={baseInfonavit.origen}
+            saldo={{ capa: e.saldo_infonavit_capa ?? null, estimado: e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado), vigente: e.saldo_infonavit_vigente ?? null }}
+            proyectos={proyectosInf}
+            supuestos={supInfonavit}
+          />
+        ) : (
+          <section className="rounded-2xl border border-line bg-white p-5 text-sm text-muted">
+            Faltan los supuestos globales de la asesoría Infonavit. Cárgalos en <Link href="/trabajo/proyectos" className="underline">Inmuebles</Link>.
+          </section>
+        )
+  );
+  const mesaPanel = (
+        <div className="space-y-2">
+          {avisoSaldoEstimado && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">La liquidez de la mesa incluye {e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} de Infonavit que <b>nadie ha confirmado</b>: es nuestro estimado. Confírmalo en <Link href={href('resumen')} className="underline">Resumen</Link> antes de comprometer un plan de pagos.</p>}
+          <MesaViraal
+            personaId={e.persona_id}
+            prefill={viraalPrefill}
+            historial={viraalHist}
+            semilla={semilla}
+            saldosLiquidos={saldosLiq}
+            historialLaboral={historialLaboral}
+            limiteInscripcionMod40={limiteMod40}
+            serieINPC={serieINPC}
+            hoyIso={hoyIso}
+          />
+        </div>
+  );
+
   // 169 · El mismo panel vive en la pestaña Diagnóstico y en el paso 5 de la asesoría.
   const diagPanel = (
         <DiagnosticoPanel
@@ -533,7 +607,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       })()}
 
       {tab === 'asesoria' && vistaAsesoria ? (
-        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} />
+        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} herramientas={{ calculadora: calcPanel, infonavit: verTabInfonavit ? infPanel : null, mesa: mesaPanel }} />
       ) : null}
 
       {tab === 'resumen' && (
@@ -682,65 +756,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </div>
       )}
 
-      {tab === 'calculadoras' && (
-        <section className="rounded-2xl border border-line bg-white p-2 sm:p-5">
-          {semilla ? (
-            <>
-              <CalculadoraClient
-                consultaId={e.legacy_cliente_id ?? e.persona_id}
-                clienteNombre={[e.nombre, e.apellidos].filter(Boolean).join(' ') || semilla.perfil.nombre}
-                semilla={semilla}
-                branding={{ colorPrimario: '#26282b', colorAcento: '#d1f069', logoUrl: null }}
-                backHref={href('resumen')}
-                backLabel="← Volver al resumen"
-                fechaSisec={fechaSisecTxt}
-                calculoGeneradoAt={semillaAt}
-                mod40Aplica={mod40AplicaLegacy ?? !!(e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
-                calculoPensional={datosMap.get('semilla')?.valor}
-                historialLaboral={historialLaboral}
-                limiteInscripcionMod40={limiteMod40}
-                serieINPC={serieINPC}
-                saldosCorregidos={saldosCorregidos}
-                guardarScope={e.legacy_cliente_id ? 'cliente' : null}
-                rescate={rescateSupuestos}
-                cerrarEscenario={{ personaId: e.persona_id }}
-              />
-              <p className="mt-2 px-3 text-xs text-muted">Los ajustes de la calculadora (semanas ±, saldos reales) son escenarios; el dato oficial del expediente no cambia. Los saldos guardados se reflejan como “Declarado por asesor” en <Link href={`${href('resumen')}#detalle`} className="underline">Resumen → Detalle</Link>{avisoSaldoEstimado ? <> · <span className="text-amber-700">el saldo Infonavit que ves aquí es nuestro estimado, no un dato de su cuenta</span></> : null}.</p>
-            </>
-          ) : (
-            <div className="p-5 text-sm text-muted">Sin semilla de cálculo todavía. Pide la información del IMSS desde <Link href={href('resumen')} className="underline">Resumen → Pedir información</Link>{e.curp ? '' : ' (primero captura la CURP)'}.</div>
-          )}
-        </section>
-      )}
+      {tab === 'calculadoras' && calcPanel}
 
       {tab === 'diagnostico' && diagPanel}
 
-      {tab === 'infonavit' && (
-        baseInfonavit && supInfonavit ? (
-          <AsesoriaInfonavit
-            personaId={e.persona_id}
-            historial={historialInf}
-            faltantes={baseInfonavit.faltantes}
-            desdeSemilla={baseInfonavit.desdeSemilla}
-            cliente={{
-              nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
-              ley: e.ley ?? '—',
-              edad: e.edad ?? null,
-              cotiza: e.status_empleo === 'empleado',
-              creditoVigente: e.credito_infonavit ?? null,
-            }}
-            base={baseInfonavit.titular}
-            origen={baseInfonavit.origen}
-            saldo={{ capa: e.saldo_infonavit_capa ?? null, estimado: e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado), vigente: e.saldo_infonavit_vigente ?? null }}
-            proyectos={proyectosInf}
-            supuestos={supInfonavit}
-          />
-        ) : (
-          <section className="rounded-2xl border border-line bg-white p-5 text-sm text-muted">
-            Faltan los supuestos globales de la asesoría Infonavit. Cárgalos en <Link href="/trabajo/proyectos" className="underline">Inmuebles</Link>.
-          </section>
-        )
-      )}
+      {tab === 'infonavit' && infPanel}
 
       {tab === 'documentos' && (<div className="space-y-4"><ActasBloque personaId={e.persona_id} servicio={svcActas} tieneCurp={!!e.curp} abiertas={actasAbiertas} ultimas={actasUltimas} /><CobroPanel personaId={e.persona_id} productos={((prodsCobro ?? []) as Any[]).map((x) => ({ codigo: x.codigo, nombre: x.nombre, precio: Number(x.precio_mxn), tipo: x.tipo }))} /><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
 
@@ -767,22 +787,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         </section>
       )}
 
-      {tab === 'viraal' && (
-        <div className="space-y-2">
-          {avisoSaldoEstimado && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">La liquidez de la mesa incluye {e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} de Infonavit que <b>nadie ha confirmado</b>: es nuestro estimado. Confírmalo en <Link href={href('resumen')} className="underline">Resumen</Link> antes de comprometer un plan de pagos.</p>}
-          <MesaViraal
-            personaId={e.persona_id}
-            prefill={viraalPrefill}
-            historial={viraalHist}
-            semilla={semilla}
-            saldosLiquidos={saldosLiq}
-            historialLaboral={historialLaboral}
-            limiteInscripcionMod40={limiteMod40}
-            serieINPC={serieINPC}
-            hoyIso={hoyIso}
-          />
-        </div>
-      )}
+      {tab === 'viraal' && mesaPanel}
 
       {tab === 'bitacora' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
