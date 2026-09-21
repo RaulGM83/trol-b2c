@@ -17,8 +17,8 @@ export const metadata = { title: 'Mi cuenta · Trol' };
 
 // 157: tres puertas. Las claves viejas (?tab=misiones, puntos, asesorias, documentos…) siguen
 // vivas porque hay links repartidos; sólo cambia a qué puerta pertenecen.
-const TABS_VALIDAS = ['hoy', 'misiones', 'expediente', 'documentos', 'puntos', 'asesorias', 'calculadora', 'mas'];
-const NAV: [string, string, string[]][] = [['hoy', 'Hoy', ['hoy']], ['expediente', 'Mi pensión', ['expediente', 'documentos', 'calculadora']], ['mas', 'Más', ['mas', 'puntos', 'asesorias', 'misiones']]];
+const TABS_VALIDAS = ['hoy', 'expediente', 'documentos', 'puntos', 'asesorias', 'calculadora', 'mas'];
+const NAV: [string, string, string[]][] = [['hoy', 'Hoy', ['hoy']], ['expediente', 'Mi pensión', ['expediente', 'documentos', 'calculadora']], ['mas', 'Más', ['mas', 'puntos', 'asesorias']]];
 const PARADAS = ['Tu información', 'Tu diagnóstico', 'Tu plan', 'En trámite', 'Tu pensión'];
 // Las tareas de datos nunca son "lo que sigue": viven en "Afina tus números", dichas por lo que desbloquean.
 const AFINA: Record<string, [string, string]> = {
@@ -27,8 +27,6 @@ const AFINA: Record<string, [string, string]> = {
   contexto: ['Cuéntanos de ti', 'Tu meta y tus dependientes cambian qué te conviene. 2 minutos.'],
   afore: ['En qué AFORE estás', 'La AFORE correcta puede darte más rendimiento sin que hagas nada más.'],
 };
-const NIVEL: Record<number, [string, string]> = { 1: ['Poner en orden', 'Lo básico para que nada te reste pensión.'], 2: ['Aprovechar hoy', 'Lo que puedes ganar ahora mismo.'], 3: ['Crecer y proteger', 'Para llegar más lejos.'] };
-const ESTADO_MISION: Record<string, [string, string]> = { hecho: ['Hecho', 'bg-green-100 text-green-800'], pendiente: ['Pendiente', 'bg-cream text-ink'], en_proceso: ['En proceso', 'bg-amber-100 text-amber-800'], atencion: ['Requiere atención', 'bg-red-100 text-red-700'], bloqueado: ['Después', 'bg-gray-100 text-muted'], recomendada: ['Tu experto la recomienda', 'bg-lime text-ink'] };
 const BEN_LABEL: Record<string, string> = { calculadora: 'Calculadora completa', diagnostico_avanzado: 'Diagnóstico avanzado', sesion_experto: 'Sesión con experto', docs_premium: 'Documentos premium', seguimiento: 'Seguimiento de trámite' };
 const LEGACY_CODE: Record<string, string> = { calculadora: 'CALCULADORA_ADDON', diagnostico_avanzado: 'DIAGNOSTICO_AVANZADO', diagnostico_avanzado_sesion: 'DIAGNOSTICO_AVANZADO_SESION' };
 
@@ -66,7 +64,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   );
   const e = x as Any;
   const misiones: Any[] = (mis as Any[]) ?? [];
-  const tab = TABS_VALIDAS.includes(searchParams.tab ?? '') ? (searchParams.tab as string) : 'hoy';
+  // 'misiones' se jubiló (159): lo que tenía vive en Hoy. La clave sigue viva porque /encuesta regresa ahí.
+  const tabPedida = searchParams.tab === 'misiones' ? 'hoy' : (searchParams.tab ?? '');
+  const tab = TABS_VALIDAS.includes(tabPedida) ? tabPedida : 'hoy';
   const pa = (paradaData as Any | null) ?? null;
   const afina = misiones.filter((m) => AFINA[m.codigo] && m.estado === 'pendiente' && m.cta).slice(0, 3);
   // `editable` de mi_identidad() también es false cuando todavía no hay CURP; la tarjeta
@@ -214,47 +214,18 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </div>
       )}
 
-      {tab === 'misiones' && (
-        <div className="space-y-5">
-          {[1, 2, 3].map((n) => {
-            const ms = misiones.filter((m) => m.nivel === n);
-            if (!ms.length) return null;
-            return (
-              <section key={n}>
-                <h2 className="text-base font-extrabold">Nivel {n} · {NIVEL[n][0]}</h2>
-                <p className="mb-2 text-xs text-muted">{NIVEL[n][1]}</p>
-                <ul className="space-y-2">
-                  {ms.map((m) => {
-                    const st = ESTADO_MISION[m.estado] ?? ESTADO_MISION.pendiente;
-                    return (
-                      <li key={m.codigo} className={`rounded-2xl border bg-white p-4 ${m.estado === 'recomendada' ? 'border-lime' : m.estado === 'atencion' ? 'border-red-200' : 'border-line'} ${m.estado === 'bloqueado' ? 'opacity-60' : ''}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div><div className="font-bold">{m.titulo}</div><p className="mt-0.5 text-xs text-muted">{m.detalle ?? m.por_que}</p></div>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st[1]}`}>{st[0]}</span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-                          <span>{m.esfuerzo}{m.puntos ? ` · +${m.puntos} pts` : ''}{m.valor ? ` · hasta ${fmtMXN(m.valor)}/año` : ''}{m.urgencia ? ` · antes del ${fmtFecha(m.urgencia)}` : ''}</span>
-                          {m.estado !== 'hecho' && m.estado !== 'bloqueado' && <MisionCta mision={m} campos={faltan} identidad={identidad} compacto />}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
-      )}
-
       {tab === 'expediente' && (
         <div className="space-y-4">
+          {faltan.length > 0 ? (
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-bold">Afina tus números</h2>
+              <p className="mb-3 text-xs text-muted">Entre más sepamos de ti, más exactos son tus números. Lo que nos digas se guarda como tu versión; cuando tenemos el dato oficial, ese manda.</p>
+              <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
+            </section>
+          ) : null}
           <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="text-sm font-bold">Completa tus datos {faltan.length ? <span className="ml-1 rounded-full bg-lime px-2 py-0.5 text-[11px]">+{5 * Math.min(faltan.length, 8)} pts</span> : null}</h2>
-            <p className="mb-3 text-xs text-muted">Lo que declares se guarda como “tu versión”; cuando tenemos el dato oficial, ese manda. Cada dato suma puntos.</p>
-            <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
-          </section>
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <h2 className="text-sm font-bold">Lo que sabemos de ti</h2>
+            <h2 className="text-sm font-bold">Tus datos</h2>
+            <p className="text-xs text-muted">A la derecha, de dónde viene cada uno: oficial, calculado por Trol o lo que nos dijiste.</p>
             {[['identidad', 'Identidad'], ['imss', 'IMSS'], ['afore', 'AFORE'], ['infonavit', 'Infonavit'], ['issste', 'ISSSTE'], ['contexto', 'Sobre ti'], ['calculo', 'Cálculos de Trol']].map(([g, l]) => {
               const rows = datos.filter((d) => d.grupo === g);
               if (!rows.length) return null;
@@ -266,7 +237,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                       <tr key={d.campo} className="border-t border-line/70">
                         <td className="py-1 text-muted">{d.nombre}</td>
                         <td className="py-1 text-right font-medium">{d.tipo === 'bool' ? (d.valor === true ? 'Sí' : d.valor === false ? 'No' : String(d.valor)) : d.tipo === 'number' ? (/saldo|pension|costo|ingreso|infonavit|salario|expectativa|disponible/.test(d.campo) ? fmtMXN(Number(d.valor)) : fmtNum(Number(d.valor))) : d.tipo === 'date' ? fmtFecha(String(d.valor)) : String(d.valor)}</td>
-                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'oficial' : d.capa === 'calculado' ? 'Trol' : 'tú'}{d.vigente === false ? ' · antiguo' : ''}</td>
+                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'oficial' : d.capa === 'calculado' ? 'calculado' : 'nos dijiste'}{d.vigente === false ? ' · antiguo' : ''}</td>
                       </tr>
                     ))}
                   </tbody></table>
@@ -286,37 +257,64 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         </div>
       )}
 
-      {(tab === 'documentos' || tab === 'expediente') && (
-        <section className="mt-4 rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-bold">Tus documentos</h2>
-          <p className="mb-3 text-xs text-muted">Todo en un solo lugar: lo que ya tenemos, lo que puedes desbloquear y lo que podemos conseguir por ti.</p>
-          <ul className="space-y-2 text-sm">
-            {(e.catalogo_documentos ?? []).map((c: Any) => {
-              const tengo = (e.documentos ?? []).filter((d: Any) => d.tipo === c.tipo);
-              const ultimo = tengo[0];
-              const desbloqueado = c.gating === 'gratis' || (c.beneficio && beneficios.includes(c.beneficio));
-              return (
-                <li key={c.tipo} className="rounded-xl border border-line p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div><div className="font-semibold">{c.nombre}</div><div className="text-xs text-muted">{c.descripcion}</div>{ultimo ? <div className="mt-0.5 text-[11px] text-muted">Última versión: {fmtFecha(ultimo.fecha)}{tengo.length > 1 ? ` · ${tengo.length} versiones` : ''}</div> : null}</div>
-                    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                      {ultimo && (ultimo.url || desbloqueado) ? <a href={ultimo.url && /^https?:/.test(ultimo.url) ? ultimo.url : `/mi/doc/${ultimo.id}`} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a>
-                       : ultimo ? <DesbloquearDoc tipo={c.tipo} precio={c.precio} maxPct={c.max_pct_puntos} saldo={e.puntos} />
-                       : c.solicitable ? <SolicitarDoc tipo={c.tipo} precio={c.precio} /> : null}
+      {(tab === 'documentos' || tab === 'expediente') && (() => {
+        // 159: tres grupos en vez de una lista de trece. Lo que ya tiene, lo que puede subir él,
+        // y lo que conseguimos nosotros — con su precio y por el chat mientras no haya checkout.
+        const cat: Any[] = e.catalogo_documentos ?? [];
+        const de = (tipo: string): Any[] => (e.documentos ?? []).filter((d: Any) => d.tipo === tipo);
+        const abierto = (c: Any) => c.gating === 'gratis' || (c.beneficio && beneficios.includes(c.beneficio));
+        const tiene = cat.filter((c) => de(c.tipo).length > 0);
+        const subir = cat.filter((c) => de(c.tipo).length === 0 && c.sube_cliente);
+        const conseguimos = cat.filter((c) => de(c.tipo).length === 0 && !c.sube_cliente && c.solicitable);
+        const pedir = (c: Any) => <HablarBoton texto={`Lo quiero · ${fmtMXN(c.precio)}`} mensaje={`Hola, vengo de mi cuenta Trol (app.trol.mx). Quiero que me consigan: ${c.nombre} (${fmtMXN(c.precio)}). ¿Cómo lo pago?`} compacto />;
+        const fila = (c: Any, accion: React.ReactNode) => (
+          <li key={c.tipo} className="flex items-start justify-between gap-3 border-t border-line py-3">
+            <div><div className="text-sm font-semibold">{c.nombre}</div>{c.descripcion ? <div className="text-xs text-muted">{c.descripcion}</div> : null}{de(c.tipo)[0] ? <div className="mt-0.5 text-[11px] text-muted">Del {fmtFecha(de(c.tipo)[0].fecha)}{de(c.tipo).length > 1 ? ` · ${de(c.tipo).length} versiones` : ''}</div> : null}</div>
+            <div className="flex shrink-0 flex-col items-end gap-1 text-right">{accion}</div>
+          </li>
+        );
+        return (
+          <section className="mt-4 rounded-2xl border border-line bg-white p-5">
+            <h2 className="text-sm font-bold">Tus documentos</h2>
+            {tiene.length > 0 ? (
+              <>
+                <div className="mt-3 text-[11px] font-bold uppercase tracking-wide text-muted">Lo que ya tienes</div>
+                <ul className="mt-1">
+                  {tiene.map((c) => {
+                    const u = de(c.tipo)[0];
+                    return fila(c, <>
+                      {u.url || abierto(c) ? <a href={u.url && /^https?:/.test(u.url) ? u.url : `/mi/doc/${u.id}`} target="_blank" rel="noreferrer" className="rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white">Abrir</a> : <DesbloquearDoc tipo={c.tipo} precio={c.precio} maxPct={c.max_pct_puntos} saldo={e.puntos} />}
                       {c.sube_cliente ? <SubirDoc tipo={c.tipo} formatos={c.formatos ?? ['pdf']} parseable={!!c.parseable} compacto tieneCurp={!!e.persona?.curp} /> : null}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="mt-3 text-[11px] text-muted">Cada documento que subes suma 50 puntos. Si subes tu constancia de semanas del IMSS, actualizamos tus números con ella.</p>
-        </section>
-      )}
+                    </>);
+                  })}
+                </ul>
+              </>
+            ) : null}
+            {conseguimos.length > 0 ? (
+              <>
+                <div className="mt-4 text-[11px] font-bold uppercase tracking-wide text-muted">Lo que conseguimos por ti</div>
+                <ul className="mt-1">{conseguimos.map((c) => fila(c, c.precio ? pedir(c) : <SolicitarDoc tipo={c.tipo} precio={null} />))}</ul>
+              </>
+            ) : null}
+            {subir.length > 0 ? (
+              <>
+                <div className="mt-4 text-[11px] font-bold uppercase tracking-wide text-muted">Lo que puedes subir tú</div>
+                <ul className="mt-1">
+                  {subir.map((c) => fila(c, <>
+                    <SubirDoc tipo={c.tipo} formatos={c.formatos ?? ['pdf']} parseable={!!c.parseable} compacto tieneCurp={!!e.persona?.curp} />
+                    {c.solicitable && c.precio ? pedir(c) : null}
+                  </>))}
+                </ul>
+              </>
+            ) : null}
+            <p className="mt-3 border-t border-line pt-3 text-[11px] text-muted">Si subes tu constancia de semanas del IMSS, actualizamos tus números con ella.</p>
+          </section>
+        );
+      })()}
 
       {tab === 'calculadora' && (
         <div className="space-y-3">
-          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi cuenta</Link>
+          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi pensión</Link>
           {beneficios.includes('calculadora') && e.tiene_semilla ? (
             <CalculadoraEmbed />
           ) : (
@@ -384,7 +382,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
 async function CalculadoraEmbed() {
   const semilla = await getSemillaV2Cliente();
-  if (!semilla) return <section className="rounded-2xl border border-line bg-white p-5 text-sm">Tu semilla de cálculo aún no está lista; pide a tu experto que actualice tu información.</section>;
+  if (!semilla) return <section className="rounded-2xl border border-line bg-white p-5 text-sm">Todavía no tenemos tu información del IMSS lista para calcular. Escríbenos por tu chat y la actualizamos.</section>;
   return <CalculadoraPro semilla={semilla} embed />;
 }
 

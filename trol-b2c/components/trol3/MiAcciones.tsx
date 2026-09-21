@@ -99,13 +99,11 @@ export function MiAcciones({ tieneSemilla, cabecera, citas, beneficios = [], lin
           />
         )}
         {actualizacion?.en_curso && <span className="self-center text-xs text-muted">Estamos consultando tu información al IMSS.</span>}
-        {tieneSemilla && beneficios.includes('calculadora') && <Link href="/mi?tab=calculadora" className={btn}>Abrir mi calculadora</Link>}
-        <Link href="/mi?tab=asesorias" className={btn}>Ver asesorías y precios</Link>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-xs text-muted">{proxima ? `Tu próxima sesión: ${new Date(proxima.inicio).toLocaleString('es-MX')}` : 'Programa una sesión con tu experto:'}</span>
         {!proxima && linkCitas ? <a href={linkCitas} target="_blank" rel="noreferrer" className={btn}>Agendar mi asesoría</a> : null}
-        {!proxima && <HablarBoton texto={linkCitas ? 'Prefiero que me contacten' : 'Programar sesión'} mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi cuenta Trol (app.trol.mx)." compacto />}
+        {!proxima && !linkCitas && <HablarBoton texto="Programar sesión" mensaje="Hola, quiero programar una sesión con mi experto de Trol para revisar mi pensión. ¿Cuándo pueden contactarme? Vengo de mi cuenta Trol (app.trol.mx)." compacto />}
       </div>
       {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
     </section>
@@ -452,7 +450,7 @@ export function SolicitarDoc({ tipo, precio }: { tipo: string; precio: number | 
       <button disabled={pending || !!msg} className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-50" onClick={() => start(async () => {
         const { error } = await supabase.schema('trol3').rpc('mi_solicitar_documento', { p_tipo: tipo });
         setMsg(error ? error.message : 'Solicitado. Te avisamos cuando esté.'); router.refresh();
-      })}>{precio ? `Solicitar · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(precio)}` : 'Solicitar (gratis)'}</button>
+      })}>{precio ? `Solicitar · ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(precio)}` : 'Pedirlo · sin costo'}</button>
       {msg && <span className="text-[11px] text-green-700">{msg}</span>}
     </span>
   );
@@ -494,7 +492,7 @@ export function SubirDoc({ tipo, formatos = ['pdf'], parseable = false, compacto
           setMsg(r.ok ? (r.aviso ?? (r.procesando ? '¡Listo! +50 pts. Estamos leyendo tu constancia; en unos minutos se actualizan tus números.' : '¡Guardado! +50 pts.')) : r.error ?? 'No se pudo subir.');
           if (r.ok && r.falta_curp) setPedirCurp(true);
           if (r.ok && !r.falta_curp) { setArchivo(null); router.refresh(); }
-        })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mis números' : 'Subir (+50 pts)'}</button>
+        })}>{pending ? 'Subiendo…' : parseable ? 'Subir y actualizar mis números' : 'Subir'}</button>
       )}
       {msg && <span className="max-w-[220px] text-right text-[11px] text-green-700">{msg}</span>}
     </span>
