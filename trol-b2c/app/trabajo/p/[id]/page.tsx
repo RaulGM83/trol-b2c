@@ -20,6 +20,7 @@ import { CompartirLinks } from '@/components/trol3/CompartirLinks';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
+import { CobroPanel } from '@/components/trol3/CobroPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
@@ -118,7 +119,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const histPorOp = new Map<string, Any[]>();
   for (const h of (opHist ?? []) as Any[]) { const a = histPorOp.get(h.oportunidad_id) ?? []; a.push(h); histPorOp.set(h.oportunidad_id, a); }
   const miembroNombre = (id: string | null) => (miembros ?? []).find((x: Any) => x.id === id)?.nombre ?? null;
-  const [{ data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
+  const [{ data: prodsCobro }, { data: bens }, { data: catBen }, { data: catDocs }] = await Promise.all([db.from('productos').select('codigo,nombre,precio_mxn,tipo').eq('activo', true).gt('precio_mxn', 0).order('precio_mxn'), db.from('beneficios').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }), db.from('catalogo_beneficios').select('codigo,nombre').order('orden'), db.from('catalogo_documentos').select('tipo,nombre,formatos,parseable').eq('sube_asesor', true).order('orden')]);
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const { data: personaMeta } = await db.from('personas').select('created_at').eq('id', params.id).maybeSingle();
@@ -629,7 +630,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
         )
       )}
 
-      {tab === 'documentos' && (<div className="space-y-4"><ActasBloque personaId={e.persona_id} servicio={svcActas} tieneCurp={!!e.curp} abiertas={actasAbiertas} ultimas={actasUltimas} /><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
+      {tab === 'documentos' && (<div className="space-y-4"><ActasBloque personaId={e.persona_id} servicio={svcActas} tieneCurp={!!e.curp} abiertas={actasAbiertas} ultimas={actasUltimas} /><CobroPanel personaId={e.persona_id} productos={((prodsCobro ?? []) as Any[]).map((x) => ({ codigo: x.codigo, nombre: x.nombre, precio: Number(x.precio_mxn), tipo: x.tipo }))} /><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
 
       {tab === 'oportunidades' && (
         <section className="rounded-2xl border border-line bg-white p-5">

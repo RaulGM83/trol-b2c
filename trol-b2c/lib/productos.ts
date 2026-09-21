@@ -66,6 +66,16 @@ export const ASESORIAS: Producto[] = [
   PRODUCTOS.DIAGNOSTICO_AVANZADO_SESION,
 ];
 
+/**
+ * El producto que pidieron, o null si ese código no existe aquí. Para cobrar se usa ÉSTA:
+ * getProducto() cae a la calculadora ante cualquier código desconocido, y en un checkout
+ * eso es cobrarle $100 por otra cosa a quien venía a pagar, p.ej., 'actualizacion_datos'.
+ */
+export function buscarProducto(code: string | undefined): Producto | null {
+  return (code && PRODUCTOS[code]) || null;
+}
+
+/** Con respaldo a la calculadora. Sólo para pantallas que HABLAN de un producto; nunca para cobrar. */
 export function getProducto(code: string | undefined): Producto {
   return (code && PRODUCTOS[code]) || PRODUCTOS.CALCULADORA_ADDON;
 }

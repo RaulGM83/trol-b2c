@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation';
 import { Checkout } from '@/components/Checkout';
 import { createClient } from '@/lib/supabase/server';
 import { getSesionCliente } from '@/lib/cliente';
-import { getProducto } from '@/lib/productos';
+import { buscarProducto, PRODUCTOS } from '@/lib/productos';
+import { waLink } from '@/lib/whatsapp';
 import { getSaldoPuntos } from '@/lib/puntos';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,19 @@ export default async function CheckoutPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(`/checkout?p=${searchParams.p ?? ''}`)}`);
 
-  const producto = getProducto(searchParams.p);
+  // Sin ?p= es el link viejo de la calculadora. Con un ?p= que este catálogo no conoce
+  // NO se cobra otra cosa: hoy eso se paga por el chat, y se le dice.
+  const producto = searchParams.p ? buscarProducto(searchParams.p) : PRODUCTOS.CALCULADORA_ADDON;
+  if (!producto) {
+    return (
+      <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
+        <h1 className="text-lg font-extrabold">Esto se paga por tu chat de Trol</h1>
+        <p className="text-muted">Todavía no se puede pagar desde aquí. Escríbenos y te mandamos la forma de pago; en cuanto quede, lo activamos y te avisamos por WhatsApp.</p>
+        <a href={waLink(`Hola, vengo de mi cuenta Trol (app.trol.mx). Quiero pagar: ${searchParams.p}. ¿Cómo le hago?`)} className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir mi chat</a>
+        <p><a href="/mi" className="text-xs text-muted underline">← Volver a mi cuenta</a></p>
+      </main>
+    );
+  }
   // La asesoría básica es gratis: no pasa por checkout.
   if (producto.precioMXN === 0) redirect('/asesoria');
 

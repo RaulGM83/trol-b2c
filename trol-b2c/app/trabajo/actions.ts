@@ -458,6 +458,34 @@ export async function otorgarBeneficio(personaId: string, codigo: string, motivo
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
+/**
+ * 163 · "Cobrado": el cliente ya pagó por el chat y el experto lo registra. La base deja
+ * la orden, cumple (consulta o beneficio) y lo anota en la cuenta del cliente; aquí sólo se
+ * le confirma por WhatsApp. Va SIN plantilla: acaba de pagar por el chat, su ventana está
+ * abierta; y si no lo está, la nota en su cuenta ya quedó y no se reabre en frío por esto.
+ */
+export async function registrarCobro(personaId: string, producto: string, medio: string, referencia: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('registrar_cobro', { p_persona: personaId, p_producto: producto, p_medio: medio || 'transferencia', p_referencia: referencia || null });
+  if (error) {
+    const m = error.message ?? '';
+    return fail(
+      m.includes('cobro_duplicado') ? 'Ese cobro ya se registró hace un momento.'
+      : m.includes('no_se_pudo_pedir_la_consulta') ? `No se pudo pedir la consulta (${m.split(':').slice(1).join(':').trim() || 'sin motivo'}). El cobro NO quedó registrado.`
+      : m.includes('producto_sin_precio') ? 'Ese producto no tiene precio: no hay nada que cobrar.'
+      : error,
+    );
+  }
+  const r = data as Any;
+  let aviso = 'no se le pudo avisar por WhatsApp (su chat no está abierto); quedó anotado en su cuenta';
+  try {
+    const a = await avisar(personaId, 'pago_recibido', { payload: { producto: r?.nombre, sigue: r?.hizo } });
+    if (a.ok) aviso = 'se le confirmó por WhatsApp';
+  } catch { /* el cobro ya quedó; que falle el aviso no lo deshace */ }
+  revalidatePath(`/trabajo/p/${personaId}`);
+  const hizo = r?.hizo === 'consulta' ? 'ya se pidió la consulta' : r?.hizo === 'beneficio' ? 'ya quedó habilitado en su cuenta' : 'quedó registrado';
+  return ok({ texto: `Cobro registrado: ${hizo}; ${aviso}.` });
+}
 export async function revocarBeneficio(personaId: string, id: string) {
   await requireMiembro();
   const { error } = await t3().rpc('revocar_beneficio', { p_id: id });
