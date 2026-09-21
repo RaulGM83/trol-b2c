@@ -24,6 +24,86 @@ export async function tomarCabecera(personaId: string) {
   return ok({ cabecera: data });
 }
 
+/**
+ * 164 · Registrar un contacto con un clic desde la cartera. El equipo escribía a mano
+ * "Llamada sin respuesta" y "BUZON DE VOZ" 70 veces al mes; aquí es un botón y queda con
+ * `metadata.resultado`, que es lo que después se puede contar. Cualquier nota de asesor
+ * posterior al pase de Lukas saca al cliente de "escribió y nadie le ha contestado".
+ */
+export async function registrarContacto(personaId: string, resultado: 'contesto' | 'no_contesto' | 'buzon' | 'atendido_chat') {
+  const m = await requireMiembro();
+  const TEXTO: Record<string, [string, string]> = {
+    contesto: ['llamada', 'Llamada: contestó'],
+    no_contesto: ['llamada', 'Llamada sin respuesta'],
+    buzon: ['llamada', 'Llamada: buzón de voz'],
+    atendido_chat: ['wa', 'Atendido por WhatsApp'],
+  };
+  const t = TEXTO[resultado];
+  if (!t) return fail('Resultado no válido');
+  const { error } = await t3().rpc('registrar_interaccion', {
+    p_persona: personaId, p_canal: t[0], p_actor: 'asesor', p_actor_id: m.id, p_direccion: 'saliente',
+    p_contenido: t[1], p_visible_cliente: false, p_meta: { resultado, via: 'cartera' },
+  });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
+
+/**
+ * 164 · Activar a un cliente desde la cartera: le avisa de SU oportunidad por el único camino
+ * bueno (/avisar: dentro de su hilo si el chat sigue abierto; si no, con la plantilla que el
+ * catálogo le asigna a esa oportunidad). Tres candados, porque una plantilla cuesta, tiene
+ * tope por usuario en Meta y quema el número si se abusa:
+ *   · no_contactar / BAJA;
+ *   · una plantilla por persona cada 7 días;
+ *   · la oportunidad tiene que ser de esa persona y seguir abierta.
+ * Quien activa a alguien sin experto se lo queda: si no, la respuesta no le cae a nadie.
+ */
+export async function activarCliente(opId: string, personaId: string) {
+  const m = await requireMiembro();
+  const db = t3();
+  const { data, error } = await db
+    .from('oportunidades')
+    .select('codigo, estado, persona_id, catalogo_oportunidades(nombre, nombre_cliente, plantilla)')
+    .eq('id', opId)
+    .maybeSingle();
+  if (error) return fail(error);
+  const o = data as Any;
+  if (!o || o.persona_id !== personaId) return fail('Esa oportunidad no es de esta persona.');
+  if (!['detectada', 'presentada', 'interesada'].includes(o.estado)) return fail('Esa oportunidad ya no está abierta.');
+
+  const { data: nc } = await db.from('contactos').select('id').eq('persona_id', personaId).eq('no_contactar', true).limit(1);
+  if ((nc ?? []).length) return fail('Pidió que no le escribamos (BAJA). No se le manda nada.');
+
+  const hace7 = new Date(Date.now() - 7 * 86400e3).toISOString();
+  const { data: previas } = await db.from('interacciones').select('created_at')
+    .eq('persona_id', personaId).eq('metadata->>via', 'plantilla').eq('metadata->>enviado', '1')
+    .gt('created_at', hace7).order('created_at', { ascending: false }).limit(1);
+  if ((previas ?? []).length) {
+    const d = new Date((previas as Any[])[0].created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'America/Mexico_City' });
+    return fail(`Ya recibió una plantilla el ${d}. Hay que esperar 7 días entre una y otra; mientras, llámale.`);
+  }
+
+  const cat = o.catalogo_oportunidades as Any;
+  const nombre = cat?.nombre_cliente ?? cat?.nombre ?? o.codigo;
+  const plantilla = (cat?.plantilla as string | null) || undefined;
+  const r = await avisar(personaId, 'oportunidad_nueva', {
+    payload: { nombre, codigo: o.codigo },
+    resumen: `Encontramos algo en tu caso: ${nombre}.`,
+    plantilla,
+  });
+  if (!r.ok) {
+    revalidatePath('/trabajo/cartera');
+    return fail(plantilla
+      ? `No salió: ${r.error ?? r.motivo ?? 'sin detalle'}. Revisa que la plantilla ${plantilla} esté aprobada.`
+      : 'Su chat está cerrado y esta oportunidad no tiene plantilla para reabrirlo. Llámale.');
+  }
+  // Si nadie lo lleva, lo lleva quien lo activó.
+  try { await db.rpc('tomar_cabecera', { p_persona: personaId }); } catch { /* ya tenía experto */ }
+  revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ via: r.via, texto: r.via === 'plantilla' ? `Salió la plantilla ${plantilla}.` : 'Le llegó dentro de su chat, sin plantilla.' });
+}
+
 export type CambioOportunidad = { motivo?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota?: string | null };
 /** Cambia la etapa de una oportunidad (ciclo unificado, migración 084): historial, timestamps y nota en bitácora los pone la función SQL. */
 export async function cambiarEstadoOportunidad(opId: string, personaId: string, estado: string, extra?: string | CambioOportunidad) {
