@@ -55,12 +55,12 @@ export async function registrarContacto(personaId: string, resultado: 'contesto'
  * catálogo le asigna a esa oportunidad). Tres candados, porque una plantilla cuesta, tiene
  * tope por usuario en Meta y quema el número si se abusa:
  *   · no_contactar / BAJA;
- *   · una plantilla por persona cada 7 días;
+ *   · una plantilla por persona AL DÍA (trol3.config.plantilla_horas_minimo; lo decide puede_plantilla, 167);
  *   · la oportunidad tiene que ser de esa persona y seguir abierta.
  * Quien activa a alguien sin experto se lo queda: si no, la respuesta no le cae a nadie.
  */
 export async function activarCliente(opId: string, personaId: string) {
-  const m = await requireMiembro();
+  await requireMiembro();
   const db = t3();
   const { data, error } = await db
     .from('oportunidades')
@@ -72,21 +72,14 @@ export async function activarCliente(opId: string, personaId: string) {
   if (!o || o.persona_id !== personaId) return fail('Esa oportunidad no es de esta persona.');
   if (!['detectada', 'presentada', 'interesada'].includes(o.estado)) return fail('Esa oportunidad ya no está abierta.');
 
-  const { data: nc } = await db.from('contactos').select('id').eq('persona_id', personaId).eq('no_contactar', true).limit(1);
-  if ((nc ?? []).length) return fail('Pidió que no le escribamos (BAJA). No se le manda nada.');
-
-  const hace7 = new Date(Date.now() - 7 * 86400e3).toISOString();
-  const { data: previas } = await db.from('interacciones').select('created_at')
-    .eq('persona_id', personaId).eq('metadata->>via', 'plantilla').eq('metadata->>enviado', '1')
-    .gt('created_at', hace7).order('created_at', { ascending: false }).limit(1);
-  if ((previas ?? []).length) {
-    const d = new Date((previas as Any[])[0].created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'America/Mexico_City' });
-    return fail(`Ya recibió una plantilla el ${d}. Hay que esperar 7 días entre una y otra; mientras, llámale.`);
-  }
+  // BAJA y sin teléfono cortan todo. "Ya recibió una hoy" sólo corta la PLANTILLA: si su
+  // chat sigue abierto el aviso entra en su hilo, que no cuesta ni cuenta para el tope.
+  const bloqueo = await bloqueoPlantilla(personaId);
+  if (bloqueo && !bloqueo.startsWith('Ya recibió')) return fail(bloqueo);
 
   const cat = o.catalogo_oportunidades as Any;
   const nombre = cat?.nombre_cliente ?? cat?.nombre ?? o.codigo;
-  const plantilla = (cat?.plantilla as string | null) || undefined;
+  const plantilla = bloqueo ? undefined : ((cat?.plantilla as string | null) || undefined);
   const r = await avisar(personaId, 'oportunidad_nueva', {
     payload: { nombre, codigo: o.codigo },
     resumen: `Encontramos algo en tu caso: ${nombre}.`,
@@ -94,14 +87,76 @@ export async function activarCliente(opId: string, personaId: string) {
   });
   if (!r.ok) {
     revalidatePath('/trabajo/cartera');
-    return fail(plantilla
-      ? `No salió: ${r.error ?? r.motivo ?? 'sin detalle'}. Revisa que la plantilla ${plantilla} esté aprobada.`
+    return fail(bloqueo ? bloqueo
+      : plantilla ? `No salió: ${r.error ?? r.motivo ?? 'sin detalle'}. Revisa que la plantilla ${plantilla} esté aprobada.`
       : 'Su chat está cerrado y esta oportunidad no tiene plantilla para reabrirlo. Llámale.');
   }
   // Si nadie lo lleva, lo lleva quien lo activó.
   try { await db.rpc('tomar_cabecera', { p_persona: personaId }); } catch { /* ya tenía experto */ }
   revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ via: r.via, texto: r.via === 'plantilla' ? `Salió la plantilla ${plantilla}.` : 'Le llegó dentro de su chat, sin plantilla.' });
+}
+
+/** El candado de plantillas, dicho en palabras. null = se puede. La regla vive en la base (167). */
+async function bloqueoPlantilla(personaId: string): Promise<string | null> {
+  const { data, error } = await t3().rpc('puede_plantilla', { p_persona: personaId });
+  if (error) return error.message;
+  const p = data as { ok?: boolean; motivo?: string; ultima?: string | null } | null;
+  if (p?.ok) return null;
+  if (p?.motivo === 'no_contactar') return 'Pidió que no le escribamos (BAJA). No se le manda nada.';
+  if (p?.motivo === 'sin_telefono') return 'No tiene teléfono registrado.';
+  const h = p?.ultima ? Math.max(1, Math.round((Date.now() - new Date(p.ultima).getTime()) / 3600e3)) : null;
+  return `Ya recibió una plantilla${h ? ` hace ${h} h` : ''}. Es una al día; mientras, llámale.`;
+}
+
+/**
+ * 167 · Enviar propuesta: una sola acción. La base guarda lo que el asesor propone y pasa la
+ * oportunidad a 'presentada'; aquí se le avisa. Dentro de su hilo si el chat sigue abierto; si
+ * no, con la plantilla de esa oportunidad — y entonces sí aplica el candado de una al día. Si el
+ * aviso no sale, la propuesta YA quedó en su cuenta: se dice, no se deshace.
+ */
+export async function enviarPropuesta(opId: string, personaId: string, texto: string, pension: number | null, costo: number | null) {
+  await requireMiembro();
+  const db = t3();
+  const { data, error } = await db.rpc('enviar_propuesta', { p_op: opId, p_texto: texto, p_pension: pension, p_costo: costo });
+  if (error) return fail(error.message?.includes('falta_texto') ? 'Escribe la propuesta.' : error.message?.includes('oportunidad_cerrada') ? 'Esa oportunidad ya no está abierta.' : error);
+  const r = data as Any;
+  if (r?.persona_id !== personaId) return fail('La oportunidad no es de esta persona.');
+  const bloqueo = await bloqueoPlantilla(personaId);
+  let aviso: string;
+  const duro = !!bloqueo && !bloqueo.startsWith('Ya recibió'); // BAJA o sin teléfono: no se le escribe por ningún camino
+  if (duro) aviso = `no se le avisó por WhatsApp: ${bloqueo}`;
+  else try {
+    const a = await avisar(personaId, 'oportunidad_nueva', {
+      payload: { nombre: r.nombre, codigo: r.codigo, propuesta: true },
+      resumen: `Tu experto te mandó una propuesta: ${r.nombre}. Mírala en tu cuenta.`,
+      plantilla: bloqueo ? undefined : ((r.plantilla as string | null) || undefined),
+    });
+    aviso = a.ok ? (a.via === 'plantilla' ? `se le avisó con la plantilla ${r.plantilla}` : 'se le avisó dentro de su chat')
+      : bloqueo ? `no se le pudo avisar por WhatsApp (chat cerrado y ${bloqueo.charAt(0).toLowerCase()}${bloqueo.slice(1)})`
+      : 'no se le pudo avisar por WhatsApp (su chat está cerrado)';
+  } catch { aviso = 'no se le pudo avisar por WhatsApp'; }
+  try { await db.rpc('tomar_cabecera', { p_persona: personaId }); } catch { /* ya tenía experto */ }
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera');
+  return ok({ texto: `La propuesta ya está en su cuenta como “Tu plan”; ${aviso}.` });
+}
+
+/**
+ * 167 · Lote chico desde "Por activar": hasta 20, uno por uno y en serie, cada quien con SU
+ * oportunidad y SU plantilla. No es una campaña: las campañas siguen saliendo por cola_envios.
+ */
+export async function activarLote(items: { opId: string; personaId: string }[]) {
+  await requireMiembro();
+  if (!items.length) return fail('No hay nadie seleccionado.');
+  if (items.length > 20) return fail('El lote es de 20 como máximo.');
+  let enviados = 0; const fallas: string[] = [];
+  for (const it of items) {
+    const r = await activarCliente(it.opId, it.personaId) as { ok: boolean; error?: string };
+    if (r.ok) enviados += 1; else fallas.push(r.error ?? 'sin detalle');
+  }
+  revalidatePath('/trabajo/cartera');
+  const resumen = fallas.length ? ` ${fallas.length} no salieron: ${[...new Set(fallas)].slice(0, 2).join(' · ')}` : '';
+  return enviados ? ok({ texto: `Salieron ${enviados} de ${items.length}.${resumen}` }) : fail(`No salió ninguno.${resumen}`);
 }
 
 export type CambioOportunidad = { motivo?: string | null; proveedor?: string | null; contactar_despues?: string | null; nota?: string | null };

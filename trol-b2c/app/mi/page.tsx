@@ -444,7 +444,14 @@ function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla }: { pa: Any; 
       </div>
       <h2 className="mt-2 text-xl font-extrabold leading-tight">{pa.titulo}</h2>
       <p className="mt-1 text-sm">{texto}</p>
-      {lime && op && (op.valor || op.urgencia) ? <div className="mt-2 text-xs text-ink/70">{op.valor ? `hasta ${fmtMXN(op.valor)} al año` : ''}{op.valor && op.urgencia ? ' · ' : ''}{op.urgencia ? `antes del ${fmtFecha(op.urgencia)}` : ''}</div> : null}
+      {/* 167 · Los números de la propuesta de su asesor, si los puso. Mandan sobre el "hasta X al año" del motor. */}
+      {lime && op && (op.pension_con_plan || op.costo) ? (
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+          {op.pension_con_plan ? <div><div className="text-[11px] uppercase tracking-wide text-ink/70">Tu pensión pasaría a</div><div className="text-2xl font-extrabold">{fmtMXN(Number(op.pension_con_plan))}<span className="text-sm font-normal text-ink/70">/mes</span></div></div> : null}
+          {op.costo ? <div><div className="text-[11px] uppercase tracking-wide text-ink/70">Lo que cuesta</div><div className="text-2xl font-extrabold">{fmtMXN(Number(op.costo))}</div></div> : null}
+        </div>
+      ) : null}
+      {lime && op && !op.pension_con_plan && (op.valor || op.urgencia) ? <div className="mt-2 text-xs text-ink/70">{op.valor ? `hasta ${fmtMXN(op.valor)} al año` : ''}{op.valor && op.urgencia ? ' · ' : ''}{op.urgencia ? `antes del ${fmtFecha(op.urgencia)}` : ''}</div> : null}
 
       {pa.cta === 'curp' ? <div className="mt-3"><MisionCta mision={{ codigo: 'curp', cta: 'curp', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}
       {pa.cta === 'consulta_imss' ? <div className="mt-3"><MisionCta mision={{ codigo: 'info_oficial', cta: 'consulta_imss', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}

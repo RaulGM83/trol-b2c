@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3, fmtNum, type Any } from '@/lib/trol3/server';
 import { CarteraAcciones, type FilaCartera } from '@/components/trol3/CarteraAcciones';
+import { PorActivarLista } from '@/components/trol3/PorActivarLista';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mi cartera · Trol equipo' };
@@ -45,7 +46,7 @@ function RutaMini({ parada }: { parada: number | null }) {
   );
 }
 
-function Fila({ f, porActivar = false }: { f: Any; porActivar?: boolean }) {
+function Fila({ f }: { f: Any }) {
   const mot = MOTIVO[f.motivo as string];
   const uc = f.ultimo_contacto as Any | null;
   const quien = uc ? (uc.actor === 'cliente' ? 'él/ella' : uc.actor === 'bot' ? 'Lukas' : 'nosotros') : null;
@@ -69,7 +70,7 @@ function Fila({ f, porActivar = false }: { f: Any; porActivar?: boolean }) {
           {f.no_contactar ? <span className="font-semibold text-red-600"> · NO CONTACTAR</span> : null}
         </div>
       </div>
-      <CarteraAcciones fila={f as FilaCartera} takoUrl={takoUrl(f.telefono)} porActivar={porActivar} />
+      <CarteraAcciones fila={f as FilaCartera} takoUrl={takoUrl(f.telefono)} />
     </li>
   );
 }
@@ -124,14 +125,14 @@ export default async function Cartera({ searchParams }: { searchParams: { vista?
 
       <div className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">
         <h2 className="text-sm font-bold">Por activar <span className="font-normal text-muted">· sin experto, con algo encontrado</span></h2>
-        <p className="mt-1 text-xs text-muted">Ya tienen su información y nadie se las ha explicado. Elige un grupo: salen los 20 más calientes (los que escribieron hace poco y los que tienen fecha límite van primero). A quien actives se vuelve tuyo.</p>
+        <p className="mt-1 text-xs text-muted">Ya tienen su información y nadie se las ha explicado. Elige un grupo: salen los 20 más calientes (los que escribieron hace poco y los que tienen fecha límite van primero). Actívalos de uno en uno o en lote; a quien actives se vuelve tuyo. Una plantilla por persona al día.</p>
         {errAct ? <p className="mt-2 text-sm text-red-600">{errAct.message}</p> : null}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {grupos.map((g) => (
             <Link key={g.nombre} href={href({ grupo: g.nombre })} className={g.nombre === pa.grupo ? 'rounded-full bg-ink px-3 py-1 text-[11px] font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 text-[11px] font-semibold'}>{g.nombre} · {fmtNum(Number(g.n))}</Link>
           ))}
         </div>
-        <ul className="mt-2">{((pa.filas ?? []) as Any[]).map((f) => <Fila key={f.persona_id} f={f} porActivar />)}</ul>
+        <PorActivarLista filas={(pa.filas ?? []) as never} />
       </div>
     </section>
   );

@@ -21,6 +21,7 @@ import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CobroPanel } from '@/components/trol3/CobroPanel';
+import { RegistroRapido, ActivarCard, PropuestaForm, type Puede } from '@/components/trol3/RelacionPanel';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
@@ -38,7 +39,11 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-const TABS_BASE: [string, string][] = [['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+// 167 · La primera pestaña es la relación con el cliente; las demás se agrupan por lo que el
+// asesor está haciendo (asesorar · tramitar · consultar datos), no por tipo de dato.
+const GRUPO_TAB: Record<string, string> = { relacion: '', calculadoras: 'Asesoría', infonavit: 'Asesoría', diagnostico: 'Asesoría', viraal: 'Asesoría', oportunidades: 'Trámite', documentos: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
+const ORDEN_TAB = ['relacion', 'calculadoras', 'infonavit', 'diagnostico', 'viraal', 'oportunidades', 'documentos', 'resumen', 'bitacora'];
+const TABS_BASE: [string, string][] = [['relacion', 'Relación'], ['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const m = await requireMiembro();
@@ -251,10 +256,17 @@ export default async function Expediente({ params, searchParams }: { params: { i
     });
   }
   const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;
-  const TABS: [string, string][] = verTabInfonavit
-    ? [...TABS_BASE.slice(0, 2), ['infonavit', 'Infonavit'] as [string, string], ...TABS_BASE.slice(2)]
-    : TABS_BASE;
-  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'resumen';
+  const TABS: [string, string][] = (verTabInfonavit ? [...TABS_BASE, ['infonavit', 'Infonavit'] as [string, string]] : TABS_BASE)
+    .slice().sort((a, b) => ORDEN_TAB.indexOf(a[0]) - ORDEN_TAB.indexOf(b[0]));
+  const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'relacion';
+  // 167 · La misma parada que el cliente ve en su cuenta, y si hoy se le puede mandar plantilla.
+  const [{ data: paradaCli }, { data: puedePl }, { data: perRel }] = await Promise.all([
+    db.rpc('parada_cliente', { p_persona: params.id }),
+    db.rpc('puede_plantilla', { p_persona: params.id }),
+    db.from('personas').select('tako_visto_en, app_visto_en').eq('id', params.id).maybeSingle(),
+  ]);
+  const pa = (paradaCli ?? null) as Any | null;
+  const chatAbierto = !!(perRel as Any)?.tako_visto_en && Date.now() - new Date((perRel as Any).tako_visto_en).getTime() < 24 * 3600e3;
 
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   // Link legible del expediente (nombre-últimos4tel), como el de referidos; /e/ acepta slug o uuid.
@@ -397,13 +409,102 @@ export default async function Expediente({ params, searchParams }: { params: { i
           </div>
         </div>
         <nav className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3 text-sm">
-          {TABS.map(([t, l]) => (
-            <Link key={t} href={href(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? 'bg-ink font-semibold text-white' : 'hover:bg-cream'}`}>
+          {TABS.map(([t, l], k) => (
+            <span key={t} className="flex items-center gap-1">
+            {GRUPO_TAB[t] && GRUPO_TAB[t] !== GRUPO_TAB[TABS[k - 1]?.[0] ?? ''] ? <span className="ml-3 mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">{GRUPO_TAB[t]}</span> : null}
+            <Link href={href(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? 'bg-ink font-semibold text-white' : 'hover:bg-cream'}`}>
               {l}{t === 'oportunidades' && opsAbiertas.length ? <span className="ml-1 rounded-full bg-lime px-1.5 text-[10px] text-ink">{opsAbiertas.length}</span> : null}{t === 'resumen' && alertas.length ? <span className="ml-1 rounded-full bg-amber-200 px-1.5 text-[10px] text-ink">{alertas.length}</span> : null}
             </Link>
+            </span>
           ))}
         </nav>
       </div>
+
+      {tab === 'relacion' && (() => {
+        // 167 · Dónde va la relación, con la MISMA parada que él ve en su cuenta; qué sigue y
+        // de quién es la pelota; la historia en un solo hilo; y las dos formas de moverlo:
+        // activarlo y mandarle una propuesta.
+        const PAR = ['Tu información', 'Tu diagnóstico', 'Tu plan', 'En trámite', 'Tu pensión'];
+        const cur = Math.min(Math.max(Number(pa?.parada ?? 1), 1), 5) - 1;
+        const tocaCliente = pa?.toca === 'cliente';
+        const opsProp = opsAbiertas.filter((o: Any) => ['detectada', 'presentada', 'interesada'].includes(o.estado) && !['entender_situacion', 'asesoria_avanzada', 'referidos'].includes(o.codigo))
+          .map((o: Any) => ({ id: o.id as string, nombre: ((catMap.get(o.codigo) as Any)?.nombre_cliente ?? (catMap.get(o.codigo) as Any)?.nombre ?? o.codigo) as string, estado: o.estado as string, propuesta: (o.propuesta ?? null) as Any }));
+        const opTop = pa?.oportunidad?.id ? { id: pa.oportunidad.id as string, nombre: pa.oportunidad.nombre as string, plantilla: ((catMap.get(pa.oportunidad.codigo) as Any)?.plantilla ?? null) as string | null } : null;
+        const takoChat = tel ? `https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}` : null;
+        const QUIEN: Record<string, string> = { cliente: 'Él/ella', bot: 'Lukas', asesor: 'Equipo', sistema: 'Trol', aliado: 'Aliado' };
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+            <div className="space-y-4">
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Dónde va la relación</div>
+                <div className="mt-3 flex items-center px-[calc(10%-11px)]">
+                  {PAR.map((_, i) => (
+                    <span key={i} className={i < 4 ? 'flex flex-1 items-center' : 'flex items-center'}>
+                      <span className={i < cur ? 'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white' : i === cur ? 'h-[22px] w-[22px] shrink-0 rounded-full border-[3px] border-ink bg-lime' : 'h-[22px] w-[22px] shrink-0 rounded-full border-2 border-line bg-white'}>{i < cur ? '✓' : ''}</span>
+                      {i < 4 ? <span className={i < cur ? 'h-[3px] flex-1 bg-ink' : 'h-[3px] flex-1 bg-line'} /> : null}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-5 text-center text-xs">{PAR.map((p, i) => <span key={p} className={i === cur ? 'font-bold' : i < cur ? '' : 'text-muted'}>{p}</span>)}</div>
+                {pa?.frase ? <p className="mt-3 text-sm text-muted">Lo que él lee: “{pa.frase}”</p> : null}
+              </section>
+
+              <section className="rounded-2xl border-2 border-ink bg-white p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-muted">Lo que sigue</span>
+                  <span className={tocaCliente ? 'rounded-full border border-line bg-cream px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide' : 'rounded-full bg-ink px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white'}>{tocaCliente ? 'Le toca al cliente' : 'Nos toca a nosotros'}</span>
+                </div>
+                <h2 className="mt-2 text-lg font-extrabold">{pa?.titulo ?? 'Sin parada calculada'}</h2>
+                {pa?.texto ? <p className="mt-1 text-sm">{pa.texto}</p> : null}
+                {tocaCliente ? <p className="mt-2 text-xs text-muted">La pelota está de su lado. Si lleva días sin moverse, actívalo desde la derecha.</p> : null}
+                {(pa?.hallazgos ?? []).length ? <ul className="mt-3 space-y-1 border-t border-line pt-3 text-sm">{(pa.hallazgos as Any[]).map((h) => <li key={h.item} className="flex items-start gap-2"><span className={h.severidad === 'alta' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500' : 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-400'} /><span>{h.titulo}</span></li>)}</ul> : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link href={href('diagnostico')} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Empezar asesoría</Link>
+                  <Link href={href('oportunidades')} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold">Ver trámite y oportunidades</Link>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <h2 className="mb-3 text-sm font-bold">Historia con {e.nombre ?? 'el cliente'}</h2>
+                <RegistroRapido personaId={e.persona_id} />
+                <ul className="mt-3">
+                  {(inter ?? []).slice(0, 25).map((i: Any) => (
+                    <li key={i.id} className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 border-t border-line py-2.5">
+                      <div className="text-[11px] text-muted">{fmtFecha(i.created_at)}<br />{fmtHora(i.created_at)}</div>
+                      <div className={i.actor_tipo === 'cliente' ? 'rounded-lg bg-lime/25 px-2.5 py-1.5' : i.visible_cliente ? 'rounded-lg bg-cream px-2.5 py-1.5' : ''}>
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{QUIEN[i.actor_tipo] ?? i.actor_tipo} · {i.canal === 'wa' || i.canal === 'bot' ? 'WhatsApp' : i.canal}{i.visible_cliente ? ' · lo ve en su cuenta' : ''}</div>
+                        <div className="whitespace-pre-wrap text-sm">{i.contenido}</div>
+                      </div>
+                    </li>
+                  ))}
+                  {!inter?.length ? <li className="border-t border-line py-3 text-sm text-muted">Sin historia todavía.</li> : null}
+                </ul>
+                {(inter ?? []).length > 25 ? <Link href={href('bitacora')} className="mt-2 inline-block text-xs underline">Ver toda la bitácora</Link> : null}
+              </section>
+            </div>
+
+            <aside className="space-y-4">
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Lo que ve en su cuenta</div>
+                <div className="mt-3 space-y-2 rounded-xl bg-cream p-3">
+                  <div className="rounded-xl bg-ink p-3 text-white">
+                    <div className="text-[10px] text-white/60">Hoy te tocaría → Podrías lograr</div>
+                    <div className="text-lg font-extrabold">{e.pension_base ? fmtMXN(e.pension_base) : '—'} <span className="text-white/40">→</span> <span className="text-lime">{e.pension_maxima ? fmtMXN(e.pension_maxima) : '—'}</span></div>
+                  </div>
+                  <div className="rounded-xl border-2 border-ink bg-white p-3">
+                    <div className="text-[10px] font-bold uppercase text-muted">Lo que sigue · {tocaCliente ? 'te toca a ti' : 'nos toca a nosotros'}</div>
+                    <div className="text-sm font-extrabold">{pa?.titulo ?? '—'}</div>
+                  </div>
+                  {pa?.aviso?.texto ? <div className="rounded-xl bg-lime px-3 py-2 text-xs"><b>Último aviso:</b> {pa.aviso.texto}</div> : null}
+                </div>
+                <p className="mt-2 text-[11px] text-muted">{(perRel as Any)?.app_visto_en ? `Abrió su cuenta por última vez el ${fmtFecha((perRel as Any).app_visto_en)}.` : 'Todavía no ha abierto su cuenta.'}</p>
+              </section>
+              <ActivarCard personaId={e.persona_id} chatAbierto={chatAbierto} takoUrl={takoChat} op={opTop} puede={(puedePl ?? null) as Puede | null} />
+              <PropuestaForm personaId={e.persona_id} ops={opsProp} pensionBase={e.pension_base == null ? null : Number(e.pension_base)} />
+            </aside>
+          </div>
+        );
+      })()}
 
       {tab === 'resumen' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

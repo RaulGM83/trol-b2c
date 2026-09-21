@@ -32,7 +32,7 @@ export function CarteraAcciones({ fila, takoUrl, porActivar = false }: { fila: F
     if (!fila.oportunidad_id) return;
     const aviso = fila.chat_abierto
       ? `Le llegará dentro de su chat: “Encontramos algo en tu caso: ${fila.oportunidad}”.`
-      : `Su chat está cerrado: saldrá la plantilla de “${fila.oportunidad}”. Sólo se puede una cada 7 días.`;
+      : `Su chat está cerrado: saldrá la plantilla de “${fila.oportunidad}”. Sólo se puede una al día.`;
     if (!window.confirm(`${aviso}\n\n¿La mandamos?`)) return;
     run(() => activarCliente(fila.oportunidad_id as string, fila.persona_id), 'Enviado.');
   };
