@@ -57,7 +57,7 @@ export async function avisarOportunidad(opId: string, personaId: string) {
   await requireMiembro();
   const { data, error } = await t3()
     .from('oportunidades')
-    .select('codigo, estado, persona_id, catalogo_oportunidades(nombre, plantilla)')
+    .select('codigo, estado, persona_id, catalogo_oportunidades(nombre, nombre_cliente, plantilla)')
     .eq('id', opId)
     .maybeSingle();
   if (error) return fail(error);
@@ -65,7 +65,8 @@ export async function avisarOportunidad(opId: string, personaId: string) {
   if (!o) return fail('No encontramos esa oportunidad');
   if (o.persona_id !== personaId) return fail('La oportunidad no es de esta persona');
   const cat = o.catalogo_oportunidades as Any;
-  const nombre = cat?.nombre ?? o.codigo;
+  // 158: al cliente se le habla con `nombre_cliente`; `nombre` es el nuestro (segmento, umbral, aliado).
+  const nombre = cat?.nombre_cliente ?? cat?.nombre ?? o.codigo;
   // 148: la plantilla de reapertura la decide el catálogo. Si esta oportunidad
   // no tiene una aprobada, el aviso sólo entra si su chat sigue vivo: no se
   // reabre en frío con una plantilla genérica que no dice de qué se trata.

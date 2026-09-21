@@ -103,6 +103,12 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
       {tab === 'hoy' && (
         <div className="space-y-4">
+          {pa?.aviso?.texto ? (
+            <div className="rounded-2xl bg-lime px-4 py-3 text-sm text-ink">
+              <b>Te escribimos {cuandoFue(String(pa.aviso.fecha))} por WhatsApp:</b> {pa.aviso.texto}
+            </div>
+          ) : null}
+
           {pa ? <Ruta parada={Number(pa.parada)} frase={pa.frase ?? ''} /> : null}
 
           <section className="rounded-3xl bg-ink p-5 text-white">
@@ -389,6 +395,13 @@ async function CalculadoraEmbed() {
 function SalidaChat({ mensaje }: { mensaje: string }) {
   const tel = process.env.NEXT_PUBLIC_WHATSAPP_TROL || '5215555555555';
   return <a href={`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`} className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Escribirnos por WhatsApp</a>;
+}
+
+/** 160 · La franja dice "hoy" o "ayer" con el calendario de México, no con 24 horas exactas. */
+function cuandoFue(iso: string): string {
+  const dia = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+  const dias = Math.round((new Date(dia(new Date())).getTime() - new Date(dia(new Date(iso))).getTime()) / 86400000);
+  return dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : 'hace dos días';
 }
 
 /** 157 · "Aquí vas": las cinco paradas. Sustituye a la barra de misiones, que medía nuestra captura y no su avance. */
