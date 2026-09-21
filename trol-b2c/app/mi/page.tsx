@@ -18,7 +18,7 @@ export const metadata = { title: 'Mi cuenta · Trol' };
 // 157: tres puertas. Las claves viejas (?tab=misiones, puntos, asesorias, documentos…) siguen
 // vivas porque hay links repartidos; sólo cambia a qué puerta pertenecen.
 const TABS_VALIDAS = ['hoy', 'expediente', 'documentos', 'puntos', 'asesorias', 'calculadora', 'mas'];
-const NAV: [string, string, string[]][] = [['hoy', 'Hoy', ['hoy']], ['expediente', 'Mi pensión', ['expediente', 'documentos', 'calculadora']], ['mas', 'Más', ['mas', 'puntos', 'asesorias']]];
+const NAV: [string, string, string[]][] = [['hoy', 'Mi pensión', ['hoy']], ['expediente', 'Mis datos', ['expediente', 'documentos', 'calculadora']], ['mas', 'Beneficios', ['mas', 'puntos', 'asesorias']]];
 const PARADAS = ['Tu información', 'Tu diagnóstico', 'Tu plan', 'En trámite', 'Tu pensión'];
 // Las tareas de datos nunca son "lo que sigue": viven en "Afina tus números", dichas por lo que desbloquean.
 const AFINA: Record<string, [string, string]> = {
@@ -186,6 +186,14 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
               </div>
             </section>
           ) : null}
+
+          {(e.interacciones ?? []).length ? (
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-bold">Tu historial con Trol</h2>
+              <p className="mb-2 text-xs text-muted">Lo que te avisamos por WhatsApp y lo que ha hecho tu experto, en un solo lugar.</p>
+              <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).slice(0, 5).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}{i.canal === 'wa' ? ' · por WhatsApp' : ''}</div>{i.contenido}</li>)}</ul>
+            </section>
+          ) : null}
         </div>
       )}
 
@@ -202,15 +210,6 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
           <MiAcciones actualizacion={(actualizacion as ActualizacionImss | null) ?? null} tieneSemilla={!!e.tiene_semilla} cabecera={e.persona?.cabecera?.nombre ?? null} citas={e.citas ?? []} beneficios={beneficios} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
 
-          <Explicaciones items={explLey.slice(0, 4)} leidas={(leidas as string[]) ?? []} titulo="Entiende tu pensión en 1 minuto" />
-
-          {(e.interacciones ?? []).length ? (
-            <section className="rounded-2xl border border-line bg-white p-5">
-              <h2 className="text-sm font-bold">Tu historial con Trol</h2>
-              <p className="mb-2 text-xs text-muted">Lo que te avisamos por WhatsApp y lo que ha hecho tu experto, en un solo lugar.</p>
-              <ul className="mt-2 space-y-2 text-sm">{(e.interacciones ?? []).slice(0, 5).map((i: Any, k: number) => <li key={k} className="rounded-lg bg-cream/70 p-2"><div className="text-[11px] text-muted">{fmtFecha(i.fecha)}{i.canal === 'wa' ? ' · por WhatsApp' : ''}</div>{i.contenido}</li>)}</ul>
-            </section>
-          ) : null}
         </div>
       )}
 
@@ -314,7 +313,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
       {tab === 'calculadora' && (
         <div className="space-y-3">
-          <Link href={href('expediente')} className="text-xs text-muted underline">← Mi pensión</Link>
+          <Link href={href('expediente')} className="text-xs text-muted underline">← Mis datos</Link>
           {beneficios.includes('calculadora') && e.tiene_semilla ? (
             <CalculadoraEmbed />
           ) : (
