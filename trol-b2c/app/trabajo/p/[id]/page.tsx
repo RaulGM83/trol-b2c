@@ -43,8 +43,8 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
 
 // 167 · La primera pestaña es la relación con el cliente; las demás se agrupan por lo que el
 // asesor está haciendo (asesorar · tramitar · consultar datos), no por tipo de dato.
-const GRUPO_TAB: Record<string, string> = { relacion: '', asesoria: '', calculadoras: 'Herramientas', infonavit: 'Herramientas', diagnostico: 'Herramientas', viraal: 'Herramientas', oportunidades: 'Trámite', documentos: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
-const ORDEN_TAB = ['relacion', 'asesoria', 'calculadoras', 'infonavit', 'diagnostico', 'viraal', 'oportunidades', 'documentos', 'resumen', 'bitacora'];
+const GRUPO_TAB: Record<string, string> = { relacion: '', asesoria: '', calculadoras: 'Herramientas', infonavit: 'Herramientas', diagnostico: 'Herramientas', oportunidades: 'Trámite', documentos: 'Trámite', viraal: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
+const ORDEN_TAB = ['relacion', 'asesoria', 'calculadoras', 'infonavit', 'diagnostico', 'oportunidades', 'documentos', 'viraal', 'resumen', 'bitacora'];
 const TABS_BASE: [string, string][] = [['relacion', 'Relación'], ['asesoria', 'Asesoría'], ['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
 
 export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
@@ -391,7 +391,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // El saldo Infonavit sin confirmar (o vencido) mueve liquidez y crédito: avisarlo donde se usa.
   const avisoSaldoEstimado = e.saldo_infonavit != null && (e.saldo_infonavit_capa === 'calculado' || e.saldo_infonavit_vigente === false);
 
-  // 3b · Las herramientas viven en su pestaña Y dentro del paso 3 de la asesoría: una sola pieza, dos puertas.
+  // 3b · Calculadora e Infonavit viven en su pestaña Y dentro del paso 3 de la asesoría: una sola pieza, dos puertas.
+  // La mesa de financiamiento NO es asesoría: es trabajo de back para Viraal (Raul, 21-sep). Vive en Trámite.
   const calcPanel = (
         <section className="rounded-2xl border border-line bg-white p-2 sm:p-5">
           {semilla ? (
@@ -607,7 +608,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       })()}
 
       {tab === 'asesoria' && vistaAsesoria ? (
-        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', viraal: href('viraal'), diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} herramientas={{ calculadora: calcPanel, infonavit: verTabInfonavit ? infPanel : null, mesa: mesaPanel }} />
+        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} herramientas={{ calculadora: calcPanel, infonavit: verTabInfonavit ? infPanel : null }} />
       ) : null}
 
       {tab === 'resumen' && (

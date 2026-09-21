@@ -9,6 +9,7 @@
 // Las señales NUNCA bloquean: son material de conversación, no un semáforo.
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useCompartiendo } from '@/lib/trol3/compartir';
 import { calcularAsesoriaInfonavit, sobreprecioMinimo } from '@trol/pension-core';
 import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAsesoria, declararAsesor } from '@/app/trabajo/actions';
 import { ETIQUETA_FALTANTE, type FaltanteInfonavit, DIAS_MES } from '@/lib/infonavit/prefill';
@@ -189,6 +190,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [msgFalta, setMsgFalta] = useState<string | null>(null);
   const [resolviendo, resolver] = useTransition();
   const pendientes = faltantes.filter((f) => !(f === 'conserva_valor' && pmgDecidida));
+  const compartiendo = useCompartiendo(); // asesoría compartiendo pantalla: el PnL del aliado no se pinta
   const [aliadoVende, setAliadoVende] = useState(true);
   const [aliadoRenta, setAliadoRenta] = useState(true);
 
@@ -446,7 +448,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               )}
             </div>
             <p className="mt-1 text-[10px] text-muted">
-              Manda en la propuesta, en el escenario resumido y en el PnL interno. El sugerido es el de mayor
+              Manda en la propuesta{compartiendo ? ' y' : ','} en el escenario resumido{compartiendo ? '' : ' y en el PnL interno'}. El sugerido es el de mayor
               ventaja al corte; si el cliente tiene una fecha en mente, ésa pesa más.
             </p>
           </div>
@@ -796,7 +798,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
           )}
 
           {/* ---------------- Interno ---------------- */}
-          {pnl && (
+          {pnl && !compartiendo && (
             <section className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/40 p-5">
               <button onClick={() => setVerInterno(!verInterno)} className="flex w-full items-center justify-between text-left">
                 <span className="text-xs font-bold uppercase tracking-wide text-amber-800">Vista interna · PnL del aliado — no compartir con el cliente</span>

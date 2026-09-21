@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireMiembro, t3 } from '@/lib/trol3/server';
-import { PASOS, PASO_CLIENTE, caminos, mxn, tramos, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { PASOS, PASO_CLIENTE, caminos, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Tu asesoría · Trol' };
@@ -21,7 +22,6 @@ export default async function Presentar({ params, searchParams }: { params: { id
   const c = v.cliente; const num = v.numeros;
   const nombre = [c.nombre, c.apellidos].filter(Boolean).join(' ');
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
-  const ts = tramos(v.historial);
   const cams = caminos(v).filter((k) => k.pension != null).slice(0, 3);
   const maxPension = Math.max(1, ...cams.map((k) => Number(k.pension)), Number(num.pension_base ?? 0));
   const costos = !!v.sesion?.mostrar_costos;
@@ -49,11 +49,10 @@ export default async function Presentar({ params, searchParams }: { params: { id
             </div>
             {brecha && brecha > 0 ? <p className="max-w-3xl text-xl leading-relaxed">Entre una y otra hay <b>{mxn(brecha)} cada mes</b>. Hoy vemos qué te separa de ahí.</p> : null}
             <p className="text-base text-muted">{[c.ley === 'Ley73' ? 'Ley 73' : c.ley === 'Ley97' ? 'Ley 97' : null, c.semanas ? `${Math.round(Number(c.semanas)).toLocaleString('es-MX')} semanas cotizadas` : null, c.edad ? `${c.edad} años` : null].filter(Boolean).join(' · ')}</p>
-            {ts.length ? (
-              <section>
+            {v.historial?.length ? (
+              <section className="max-w-5xl">
                 <h2 className="text-lg font-bold">Tu historia laboral</h2>
-                <ul className="mt-2 max-w-3xl divide-y divide-line text-lg">{ts.slice(-10).map((t, i) => <li key={i} className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 py-2"><span className="font-mono text-base text-muted">{t.desde}{t.hasta !== t.desde ? `–${t.hasta}` : ''}</span><span className="truncate">{t.empleador}</span></li>)}</ul>
-                {ts.length > 10 ? <p className="mt-1 text-sm text-muted">y {ts.length - 10} tramos anteriores.</p> : null}
+                <HistoriaLaboral historial={v.historial} grande />
               </section>
             ) : null}
           </>

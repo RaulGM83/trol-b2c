@@ -1,10 +1,12 @@
 'use client';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { abrirAsesoria, armarDiagnosticoAsesoria, guardarDiagnostico, ligarDiagnosticoAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
 import { PropuestaForm } from '@/components/trol3/RelacionPanel';
-import { PASOS, caminos, guion, mxn, tramos, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { PASOS, PASO_CLIENTE, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { CompartirContext } from '@/lib/trol3/compartir';
+import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
 
 const dark = 'rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50';
 const line = 'rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold disabled:opacity-50';
@@ -15,7 +17,7 @@ const fechaLarga = (iso?: string | null) => (iso ? new Date(`${String(iso).slice
  * pasó, no obliga a nada. Lo que el asesor ve aquí trae guion, valores internos y notas;
  * "Presentar" abre la versión limpia para compartir pantalla.
  */
-export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramientas }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode; herramientas?: { calculadora?: ReactNode; infonavit?: ReactNode; mesa?: ReactNode } }) {
+export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramientas }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode; herramientas?: { calculadora?: ReactNode; infonavit?: ReactNode } }) {
   const router = useRouter();
   const ses = vista.sesion && vista.sesion.estado === 'abierta' ? vista.sesion : null;
   const [paso, setPaso] = useState<number>(ses?.paso ?? 1);
@@ -24,8 +26,14 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const [estrategia, setEstrategia] = useState<string>(vista.diagnostico?.estrategia ?? '');
   const [msgDiag, setMsgDiag] = useState<string | null>(null);
   // 3b · la herramienta abierta dentro del paso 3 (null = los caminos)
-  const [herr, setHerr] = useState<'calculadora' | 'infonavit' | 'mesa' | null>(null);
+  const [herr, setHerr] = useState<'calculadora' | 'infonavit' | null>(null);
   const [pending, start] = useTransition();
+  // Modo "Compartiendo": la pantalla de trabajo es la que ve el cliente en la videollamada.
+  // Esconde lo que es del equipo (guion, notas, valores internos, PnL); lo demás es transparente.
+  const [compartiendo, setCompartiendo] = useState(false);
+  const llave = `trol:compartiendo:${personaId}`;
+  useEffect(() => { try { if (window.sessionStorage.getItem(llave) === '1') setCompartiendo(true); } catch { /* sin storage: arranca apagado */ } }, [llave]);
+  const alternar = () => setCompartiendo((v) => { try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ } return !v; });
 
   if (!ses) {
     const previa = vista.sesion;
@@ -45,13 +53,11 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const vistos = new Set(ses.pasos_vistos ?? []);
   const c = vista.cliente; const num = vista.numeros;
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
-  const ts = tramos(vista.historial);
   const cams = caminos(vista);
   const ancho = paso === 3 && herr !== null; // con herramienta abierta, el paso usa todo el ancho
-  const HERR: { k: 'calculadora' | 'infonavit' | 'mesa'; titulo: string; sub: string }[] = [
+  const HERR: { k: 'calculadora' | 'infonavit'; titulo: string; sub: string }[] = [
     { k: 'calculadora', titulo: 'Calculadora', sub: 'Edad, semanas, Modalidad 40, UMAs' },
     { k: 'infonavit', titulo: 'Infonavit', sub: 'Qué hacer con su subcuenta' },
-    { k: 'mesa', titulo: 'Mesa de financiamiento', sub: 'Costo y pagos del proyecto' },
   ];
   const herrOk = HERR.filter((h) => herramientas?.[h.k]);
   // 169 · pasos 4 y 5: el camino recomendado, el diagnóstico de esta sesión y la propuesta.
@@ -63,50 +69,54 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const armar = () => start(async () => { setMsgDiag('Armando el diagnóstico: junta los hechos y redacta. Tarda cerca de un minuto…'); const r = (await armarDiagnosticoAsesoria(ses.id, personaId, idsParaDiag)) as { ok: boolean; error?: string; aviso?: string | null }; setMsgDiag(r.ok ? (r.aviso ?? 'Diagnóstico armado.') : (r.error ?? 'No se pudo armar.')); if (r.ok) router.refresh(); });
 
   return (
-    <div className={ancho ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}>
+    <CompartirContext.Provider value={compartiendo}>
+    <div className={`${ancho ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}${compartiendo ? ' [&_.text-sm]:text-base [&_.text-xs]:text-sm' : ''}`}>
       <nav className={ancho ? 'hidden' : 'space-y-1'}>
         {PASOS.map((p) => (
           <button key={p.n} type="button" onClick={() => ir(p.n)} className={p.n === paso ? 'flex w-full items-center gap-2.5 rounded-xl bg-white p-2.5 text-left shadow-sm ring-1 ring-line' : 'flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left hover:bg-white'}>
             <span className={p.n === paso ? 'h-6 w-6 shrink-0 rounded-full border-[3px] border-ink bg-lime' : vistos.has(p.n) ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white' : 'h-6 w-6 shrink-0 rounded-full border-2 border-line bg-white'}>{p.n !== paso && vistos.has(p.n) ? '✓' : ''}</span>
-            <span><span className="block text-[10px] text-muted">Paso {p.n}</span><span className={p.n === paso ? 'block text-sm font-bold' : 'block text-sm'}>{p.titulo}</span></span>
+            <span><span className="block text-[10px] text-muted">Paso {p.n}</span><span className={p.n === paso ? 'block text-sm font-bold' : 'block text-sm'}>{compartiendo ? PASO_CLIENTE[p.n] : p.titulo}</span></span>
           </button>
         ))}
-        <label className="mt-3 flex items-start gap-2 rounded-xl border border-dashed border-line p-2.5 text-xs">
+        {compartiendo ? null : <label className="mt-3 flex items-start gap-2 rounded-xl border border-dashed border-line p-2.5 text-xs">
           <input type="checkbox" className="mt-0.5" checked={ses.mostrar_costos} onChange={(e) => start(async () => { await marcarAsesoria(ses.id, personaId, { mostrarCostos: e.target.checked }); router.refresh(); })} />
           <span><b>Mostrar costos al presentar.</b> Apagado, el cliente compara pensiones; lo que cuesta sale hasta la recomendación.</span>
-        </label>
+        </label>}
       </nav>
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="text-xl font-extrabold">{paso} · {PASOS[paso - 1].titulo}</h2><p className="text-xs text-muted">Asesoría iniciada el {fechaLarga(ses.iniciada_en)}</p></div>
+          <div><h2 className="text-xl font-extrabold">{paso} · {compartiendo ? PASO_CLIENTE[paso] : PASOS[paso - 1].titulo}</h2>{compartiendo ? null : <p className="text-xs text-muted">Asesoría iniciada el {fechaLarga(ses.iniciada_en)}</p>}</div>
+          <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={alternar} aria-pressed={compartiendo} title="Esconde guion, notas y valores internos mientras compartes tu pantalla" className={compartiendo ? 'flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white' : 'flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold'}><span className={compartiendo ? 'h-2 w-2 rounded-full bg-lime' : 'h-2 w-2 rounded-full bg-line'} />{compartiendo ? 'Compartiendo · salir' : 'Compartir pantalla'}</button>
           <a href={`/presentar/${personaId}?paso=${paso}`} target="_blank" rel="noreferrer" className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Presentar al cliente ↗</a>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        {compartiendo ? null : <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-wide text-amber-800">Guion</div>
           <p className="mt-1 text-sm leading-relaxed">{guion(paso, vista)}</p>
-        </div>
+        </div>}
 
         {paso === 1 && (
           <>
             <section className="rounded-2xl bg-ink p-5 text-white">
               <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
-                <div><div className="text-[11px] uppercase tracking-wide text-white/60">Hoy le tocaría</div><div className="text-3xl font-extrabold">{mxn(num.pension_base)}</div></div>
-                <div><div className="text-[11px] uppercase tracking-wide text-lime">Podría lograr</div><div className="text-3xl font-extrabold text-lime">{mxn(num.pension_maxima)}</div></div>
+                <div><div className="text-[11px] uppercase tracking-wide text-white/60">{compartiendo ? 'Hoy te tocaría' : 'Hoy le tocaría'}</div><div className="text-3xl font-extrabold">{mxn(num.pension_base)}</div></div>
+                <div><div className="text-[11px] uppercase tracking-wide text-lime">{compartiendo ? 'Podrías lograr' : 'Podría lograr'}</div><div className="text-3xl font-extrabold text-lime">{mxn(num.pension_maxima)}</div></div>
                 {brecha && brecha > 0 ? <div className="pb-1 text-sm text-white/80">Brecha: <b className="text-lime">{mxn(brecha)}</b> al mes</div> : null}
               </div>
               <div className="mt-3 text-xs text-white/60">{[c.ley === 'Ley73' ? 'Ley 73' : c.ley === 'Ley97' ? 'Ley 97' : null, c.semanas ? `${Math.round(Number(c.semanas)).toLocaleString('es-MX')} semanas ${c.semanas_capa === 'validado' ? 'oficiales' : 'declaradas'}` : null, c.edad ? `${c.edad} años` : null, c.status_empleo ? `cotiza: ${c.status_empleo}` : null, c.datos_al ? `datos del IMSS al ${fechaLarga(c.datos_al)}` : null].filter(Boolean).join(' · ')}</div>
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h3 className="text-sm font-bold">Lo que le preocupa</h3>
-              <p className="mt-1 text-sm">{c.dolor_principal ? `“${c.dolor_principal}”` : <span className="text-muted">No lo ha dicho. Pregúntaselo y anótalo abajo.</span>}</p>
+              <h3 className="text-sm font-bold">{compartiendo ? 'Lo que te preocupa' : 'Lo que le preocupa'}</h3>
+              <p className="mt-1 text-sm">{c.dolor_principal ? `“${c.dolor_principal}”` : <span className="text-muted">{compartiendo ? 'Cuéntanos qué es lo que más te preocupa de tu pensión.' : 'No lo ha dicho. Pregúntaselo y anótalo abajo.'}</span>}</p>
               {c.expectativa_pension ? <p className="mt-1 text-xs text-muted">Espera recibir {mxn(c.expectativa_pension)} al mes.</p> : null}
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
-              <h3 className="text-sm font-bold">Su historia laboral <span className="font-normal text-muted">· {ts.length} {ts.length === 1 ? 'tramo' : 'tramos'}</span></h3>
-              {ts.length ? <ul className="mt-2 divide-y divide-line text-sm">{ts.map((t, i) => <li key={i} className="grid grid-cols-[110px_minmax(0,1fr)_70px] gap-3 py-1.5"><span className="font-mono text-xs text-muted">{t.desde}{t.hasta !== t.desde ? `–${t.hasta}` : ''}</span><span className="truncate">{t.empleador}</span><span className="text-right text-xs text-muted">{t.anios >= 1 ? `${t.anios} años` : '< 1 año'}</span></li>)}</ul>
-                : <p className="mt-1 text-sm text-muted">Sin historia laboral: falta su información oficial del IMSS. <Link href={hrefTab.resumen} className="underline">Pedirla en Datos</Link>.</p>}
+              <h3 className="text-sm font-bold">{compartiendo ? 'Tu historia laboral' : 'Su historia laboral'} <span className="font-normal text-muted">· {vista.historial.length} {vista.historial.length === 1 ? 'movimiento' : 'movimientos'}, con fecha de alta y baja</span></h3>
+              {vista.historial.length ? <HistoriaLaboral historial={vista.historial} grande={compartiendo} />
+                : <p className="mt-1 text-sm text-muted">Sin historia laboral: falta su información oficial del IMSS. {compartiendo ? null : <Link href={hrefTab.resumen} className="underline">Pedirla en Datos</Link>}</p>}
             </section>
           </>
         )}
@@ -120,9 +130,9 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
               ))}
               {vista.oportunidades.map((o) => (
                 <li key={o.id} className="rounded-xl border border-line p-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-sm font-bold">{o.nombre}</div><div className="text-[11px] text-muted">{o.nombre_interno} · {o.estado}{o.valor ? ` · valor est. ${mxn(o.valor)}` : ''}</div></div>
-                  <p className="mt-1 text-sm">{o.frase ?? <span className="text-muted">Sin frase para el cliente todavía (falta su ficha).</span>}</p>
-                  {o.motivo ? <p className="mt-1 text-xs text-muted">Por qué lo detectamos: {o.motivo}</p> : null}
+                  <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-sm font-bold">{o.nombre}</div>{compartiendo ? null : <div className="text-[11px] text-muted">{o.nombre_interno} · {o.estado}{o.valor ? ` · valor est. ${mxn(o.valor)}` : ''}</div>}</div>
+                  <p className="mt-1 text-sm">{o.frase ?? (compartiendo ? null : <span className="text-muted">Sin frase para el cliente todavía (falta su ficha).</span>)}</p>
+                  {o.motivo && !compartiendo ? <p className="mt-1 text-xs text-muted">Por qué lo detectamos: {o.motivo}</p> : null}
                   {o.urgencia ? <p className="mt-1 text-xs font-semibold text-amber-700">Fecha límite: {fechaLarga(o.urgencia)}</p> : null}
                 </li>
               ))}
@@ -144,7 +154,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
                         <div className="flex items-center justify-between gap-2"><div className="text-sm font-bold">{k.etiqueta}</div>{rec ? <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold">Recomendado</span> : null}</div>
                         <div className="text-xs text-muted">{k.tipo}{k.edad ? ` · retiro a los ${k.edad}` : ''}</div>
                         <div className="mt-2 text-2xl font-extrabold">{mxn(k.pension)}<span className="text-xs font-normal text-muted"> al mes</span></div>
-                        <div className="text-xs text-muted">{k.costo ? `Inversión total: ${mxn(k.costo)}` : 'Sin inversión'}{k.viable ? '' : ' · no alcanza pensión'}</div>
+                        {compartiendo && !ses.mostrar_costos ? null : <div className="text-xs text-muted">{k.costo ? `Inversión total: ${mxn(k.costo)}` : 'Sin inversión'}{k.viable ? '' : ' · no alcanza pensión'}</div>}
                         {!rec ? <button disabled={pending} className={`${line} mt-3`} onClick={() => start(async () => { await marcarAsesoria(ses.id, personaId, { escenario: k.id }); router.refresh(); })}>Es el que recomiendo</button> : null}
                       </div>
                     );
@@ -154,7 +164,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
               <h3 className="text-sm font-bold">Herramientas de este paso <span className="font-normal text-muted">· se abren aquí mismo, sin salir de la asesoría</span></h3>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {herrOk.map((h) => <button key={h.k} type="button" onClick={() => setHerr(h.k)} className="rounded-xl border border-line p-3 text-left hover:bg-cream"><span className="block text-sm font-bold">{h.titulo}</span><span className="block text-xs text-muted">{h.sub}</span></button>)}
               </div>
             </section>
@@ -166,13 +176,13 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white p-2">
               <button type="button" className={dark} onClick={() => { setHerr(null); router.refresh(); }}>← Volver a los caminos{cams.length ? ` (${cams.length})` : ''}</button>
               {herrOk.map((h) => <button key={h.k} type="button" onClick={() => setHerr(h.k)} className={h.k === herr ? 'rounded-lg bg-lime px-3 py-2 text-xs font-bold' : 'rounded-lg px-3 py-2 text-xs font-bold hover:bg-cream'}>{h.titulo}</button>)}
-              <span className="ml-auto pr-2 text-[11px] text-muted">Cierra el escenario en la herramienta y vuelve: aparece como camino.</span>
+              {compartiendo ? null : <span className="ml-auto pr-2 text-[11px] text-muted">Cierra el escenario en la herramienta y vuelve: aparece como camino.</span>}
             </div>
             {herramientas?.[herr]}
           </>
         )}
 
-        {paso === 4 && (
+        {paso === 4 && !compartiendo && (
           <>
             {recom ? (
               <section className="rounded-2xl border-2 border-ink bg-lime/10 p-5">
@@ -214,7 +224,30 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
           </>
         )}
 
-        {paso === 5 && (
+        {(paso === 4 || paso === 5) && compartiendo && (
+          <section className="rounded-2xl border border-line bg-white p-6">
+            {paso === 4 ? (
+              recom ? (
+                <>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted">El camino que te recomendamos</div>
+                  <div className="mt-1 text-2xl font-extrabold">{recom.etiqueta}</div>
+                  <div className="mt-2 text-4xl font-extrabold">{mxn(recom.pension)}<span className="text-sm font-normal text-muted"> al mes</span></div>
+                  {num.pension_base && recom.pension ? <p className="mt-1 text-sm">Son <b>{mxn(Number(recom.pension) - Number(num.pension_base))} más cada mes</b> que como estás hoy.</p> : null}
+                  {recom.costo ? <p className="mt-1 text-sm">Inversión total: <b>{mxn(recom.costo)}</b>{recom.edad ? ` · retiro a los ${recom.edad}` : ''}</p> : null}
+                  {diagListo && diag?.estrategia ? <p className="mt-4 whitespace-pre-wrap border-t border-line pt-4 text-sm leading-relaxed">{diag.estrategia}</p> : null}
+                </>
+              ) : <p className="text-sm text-muted">Estamos por marcar el camino que te recomendamos.</p>
+            ) : (
+              <>
+                {diagListo && diag?.acuerdos?.trim() ? <p className="whitespace-pre-wrap text-sm leading-relaxed">{diag.acuerdos.trim()}</p> : <p className="text-sm text-muted">Lo que acordemos hoy queda escrito en tu diagnóstico y en tu cuenta Trol.</p>}
+                {vista.pendientes.length ? <ul className="mt-4 divide-y divide-line border-t border-line">{vista.pendientes.map((t) => <li key={t.id} className="flex flex-wrap items-baseline justify-between gap-x-6 py-2 text-sm"><b>{t.titulo}</b><span className="text-xs text-muted">{[t.responsable ? `${t.responsable}, de Trol` : null, t.vence_el ? `para el ${fechaLarga(t.vence_el)}` : null].filter(Boolean).join(' · ')}</span></li>)}</ul> : null}
+              </>
+            )}
+            <p className="mt-4 text-xs text-muted">Para escribir o enviar, sal del modo compartir.</p>
+          </section>
+        )}
+
+        {paso === 5 && !compartiendo && (
           <>
             {diagListo && diag ? (
               <>
@@ -230,19 +263,20 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
           </>
         )}
 
-        <section className="rounded-2xl border border-line bg-white p-5">
+        {compartiendo ? null : <section className="rounded-2xl border border-line bg-white p-5">
           <label className="block text-sm font-bold">Notas de este paso <span className="font-normal text-muted">· sólo las ve el equipo</span>
             <textarea value={nota} onChange={(e) => setNota(e.target.value)} onBlur={guardarNota} rows={3} placeholder="Lo que dijo, lo que le hizo ruido, lo que hay que revisar…" className="mt-2 block w-full rounded-lg border border-line px-3 py-2 text-sm font-normal" />
           </label>
           {msg ? <p className="mt-1 text-xs text-muted">{msg}</p> : null}
-        </section>
+        </section>}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {paso > 1 ? <button type="button" className={line} onClick={() => ir(paso - 1)}>← {PASOS[paso - 2].titulo}</button> : <span />}
-          {paso < 5 ? <button type="button" className={dark} onClick={() => ir(paso + 1)}>Siguiente: {PASOS[paso].titulo} →</button>
-            : <button type="button" disabled={pending} className={dark} onClick={() => { if (window.confirm('¿Cerramos la asesoría? Queda registrada en su historia.')) start(async () => { await marcarAsesoria(ses.id, personaId, { cerrar: true }); router.refresh(); }); }}>Cerrar asesoría</button>}
+          {paso > 1 ? <button type="button" className={line} onClick={() => ir(paso - 1)}>← {compartiendo ? PASO_CLIENTE[paso - 1] : PASOS[paso - 2].titulo}</button> : <span />}
+          {paso < 5 ? <button type="button" className={dark} onClick={() => ir(paso + 1)}>Siguiente: {compartiendo ? PASO_CLIENTE[paso + 1] : PASOS[paso].titulo} →</button>
+            : compartiendo ? <span /> : <button type="button" disabled={pending} className={dark} onClick={() => { if (window.confirm('¿Cerramos la asesoría? Queda registrada en su historia.')) start(async () => { await marcarAsesoria(ses.id, personaId, { cerrar: true }); router.refresh(); }); }}>Cerrar asesoría</button>}
         </div>
       </div>
     </div>
+    </CompartirContext.Provider>
   );
 }
