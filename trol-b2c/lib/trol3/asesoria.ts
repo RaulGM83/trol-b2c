@@ -3,6 +3,7 @@
 // comparte en la videollamada y lo que ve el asesor salgan del mismo sitio.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Ficha } from '@/lib/trol3/fichas';
+import type { PreparacionVista } from '@/lib/trol3/copiloto-botones';
 
 export const PASOS: { n: number; titulo: string; corto: string }[] = [
   { n: 1, titulo: 'Su situación', corto: 'Situación' },
@@ -19,7 +20,9 @@ export const PASO_CLIENTE: Record<number, string> = {
 
 export type Sesion = {
   id: string; estado: 'abierta' | 'cerrada'; paso: number; pasos_vistos: number[]; mostrar_costos: boolean;
-  escenario_recomendado: string | null; notas: Record<string, string>; diagnostico_id: string | null; iniciada_en: string; cerrada_en: string | null;
+  escenario_recomendado: string | null; notas: Record<string, string>; diagnostico_id: string | null;
+  /** 172 · copiloto: lo que ya preparó y lo que ya contestó en esta sesión. */
+  preparacion: PreparacionVista | null; copiloto: Record<string, { texto: string; en: string }> | null; iniciada_en: string; cerrada_en: string | null;
 };
 
 export type Propuesta = { texto?: string; pension_con_plan?: number; costo?: number; enviada_en?: string };

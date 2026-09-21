@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { guardarFicha } from '@/app/trabajo/actions';
 import { SECCIONES_FICHA, type Ficha } from '@/lib/trol3/fichas';
 import { FichaTexto } from '@/components/trol3/FichaTexto';
+import { ProponerObjecion } from '@/components/trol3/ProponerObjecion';
 
 const dark = 'rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50';
 const line = 'rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold disabled:opacity-50';
@@ -75,6 +76,7 @@ export function FichasBiblioteca({ fichas, inicial, puedeEditar }: { fichas: Fic
                 : <div key={s.k}><div className="text-[10px] font-bold uppercase tracking-wide text-muted">{s.titulo}</div><FichaTexto texto={v} className="mt-1" /></div>;
             })}
           </div>
+          {editando ? null : <div className="mt-5 border-t border-line pt-4"><ProponerObjecion key={ficha.codigo} ficha={ficha.codigo} /></div>}
           {editando ? <p className="mt-4 text-[11px] text-muted">Formato: <code>1.</code> lista numerada · <code>-</code> viñeta · <code>**negritas**</code> · <code>*cursivas*</code>. Referencias como “ver T2” u “O4” se vuelven botones en la asesoría.</p> : null}
         </article>
       ) : <p className="text-sm text-muted">No hay fichas.</p>}

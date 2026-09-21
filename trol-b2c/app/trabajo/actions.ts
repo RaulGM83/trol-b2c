@@ -186,6 +186,59 @@ async function fichasParaRedactor(personaId: string): Promise<string | null> {
   return error ? null : ((data as string | null) ?? null);
 }
 
+/** 172 · Copiloto: "prepárame la asesoría". Se guarda en la sesión; sólo se vuelve a pagar si se pide de nuevo. */
+export async function prepararAsesoriaCopiloto(asesoriaId: string, personaId: string) {
+  await requireMiembro();
+  try {
+    const { prepararAsesoria } = await import('@/lib/trol3/copiloto');
+    const { data: vista, error } = await t3().rpc('asesoria_vista', { p_persona: personaId });
+    if (error || !vista) return fail(error ?? 'No se pudo leer el caso.');
+    const r = await prepararAsesoria(vista as Any);
+    if (!r.ok) return fail(r.error);
+    const { error: e2 } = await t3().from('asesorias').update({ preparacion: r.preparacion, updated_at: new Date().toISOString() }).eq('id', asesoriaId).eq('persona_id', personaId);
+    if (e2) return fail(e2);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ preparacion: r.preparacion });
+  } catch (e) { return fail(e); }
+}
+
+/** 172 · Copiloto: una pregunta preparada del paso. La respuesta queda en la sesión por clave. */
+export async function preguntarCopiloto(asesoriaId: string, personaId: string, paso: number, clave: string) {
+  await requireMiembro();
+  try {
+    const { preguntaPreparada } = await import('@/lib/trol3/copiloto');
+    const { data: vista, error } = await t3().rpc('asesoria_vista', { p_persona: personaId });
+    if (error || !vista) return fail(error ?? 'No se pudo leer el caso.');
+    const r = await preguntaPreparada(vista as Any, paso, clave);
+    if (!r.ok) return fail(r.error);
+    const previo = (((vista as Any).sesion?.copiloto ?? {}) as Record<string, unknown>);
+    const { error: e2 } = await t3().from('asesorias').update({ copiloto: { ...previo, [clave]: { texto: r.texto, en: new Date().toISOString() } }, updated_at: new Date().toISOString() }).eq('id', asesoriaId).eq('persona_id', personaId);
+    if (e2) return fail(e2);
+    return ok({ texto: r.texto });
+  } catch (e) { return fail(e); }
+}
+
+/** 172 · Un asesor propone una objeción para una ficha; llega a la bandeja de Conocimiento. */
+export async function proponerObjecion(ficha: string | null, pregunta: string, respuesta: string, personaId?: string | null) {
+  await requireMiembro();
+  const { error } = await t3().rpc('fichas_proponer', { p_ficha: ficha ?? '', p_pregunta: pregunta, p_respuesta: respuesta || null, p_persona: personaId ?? null });
+  if (error) return fail(/pregunta_muy_corta/.test(error.message) ? 'Escribe la pregunta del cliente completa.' : error);
+  revalidatePath('/trabajo/fichas');
+  return ok();
+}
+
+/** 172 · Sólo admin: aprobar (con correcciones) o descartar una objeción propuesta. */
+export async function decidirPropuestaFicha(id: string, decision: 'aprobar' | 'descartar', x?: { ficha?: string; pregunta?: string; respuesta?: string }) {
+  await requireMiembro();
+  const { error } = await t3().rpc('fichas_propuesta_decidir', { p_id: id, p_decision: decision, p_ficha: x?.ficha ?? null, p_pregunta: x?.pregunta ?? null, p_respuesta: x?.respuesta ?? null });
+  if (error) {
+    const m = error.message;
+    return fail(/solo_admin/.test(m) ? 'Sólo un administrador decide.' : /falta_ficha/.test(m) ? 'Elige a qué ficha va.' : /falta_respuesta/.test(m) ? 'Falta la respuesta oficial.' : /ya_decidida/.test(m) ? 'Ya estaba decidida.' : error);
+  }
+  revalidatePath('/trabajo/fichas');
+  return ok();
+}
+
 /** 170 · Guarda una ficha de conocimiento. Sólo admin (lo impone el RLS); queda historial del texto anterior. */
 export async function guardarFicha(codigo: string, campos: Record<string, string | null>) {
   const m = await requireMiembro();

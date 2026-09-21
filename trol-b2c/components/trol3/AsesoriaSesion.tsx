@@ -8,6 +8,7 @@ import { PASOS, PASO_CLIENTE, caminos, guion, mxn, type VistaAsesoria } from '@/
 import { CompartirContext } from '@/lib/trol3/compartir';
 import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
 import { FichaPanel } from '@/components/trol3/FichaPanel';
+import { Copiloto } from '@/components/trol3/Copiloto';
 
 const dark = 'rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50';
 const line = 'rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold disabled:opacity-50';
@@ -108,6 +109,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
           <p className="mt-1 text-sm leading-relaxed">{guion(paso, vista)}</p>
           {fichasPaso.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-amber-200 pt-2 text-[11px]"><span className="font-bold uppercase tracking-wide text-amber-800">Fichas a la mano</span>{fichasPaso.map((f) => <button key={f.codigo} type="button" onClick={() => setFichaCod(f.codigo)} className="rounded-full border border-amber-300 bg-white px-2.5 py-0.5 font-semibold hover:bg-amber-100">{f.codigo} · {f.titulo}</button>)}</div> : null}
         </div>}
+
+        {compartiendo ? null : <Copiloto key={paso} asesoriaId={ses.id} personaId={personaId} paso={paso} preparacion={ses.preparacion ?? null} respuestas={ses.copiloto ?? {}} fichasValidas={fichas.map((f) => f.codigo)} onFicha={setFichaCod} />}
 
         {paso === 1 && (
           <>
@@ -288,7 +291,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         </div>
       </div>
     </div>
-    {fichaAbierta ? <FichaPanel ficha={fichaAbierta} fichas={fichas} onAbrir={setFichaCod} onCerrar={() => setFichaCod(null)} /> : null}
+    {fichaAbierta ? <FichaPanel ficha={fichaAbierta} fichas={fichas} personaId={personaId} onAbrir={setFichaCod} onCerrar={() => setFichaCod(null)} /> : null}
     </CompartirContext.Provider>
   );
 }

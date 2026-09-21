@@ -74,6 +74,9 @@ export async function extraerPropuestas(reunionId: string): Promise<{ ok: boolea
   const listaCampos = proponibles.map((c) => `- ${c.campo} (${c.nombre}; tipo ${c.tipo}${c.opciones?.length ? `; opciones: ${c.opciones.join(' | ')}` : ''})`).join('\n');
   const { data: actuales } = await t3.from('v_mejor_dato').select('campo,valor').eq('persona_id', r.persona_id).in('campo', proponibles.map((c) => c.campo));
   const yaSabemos = ((actuales ?? []) as any[]).map((d) => `- ${d.campo} = ${JSON.stringify(d.valor)}`).join('\n') || '(nada)';
+  // 172 · Las fichas aprenden: la misma lectura propone objeciones reales para la bandeja de Conocimiento.
+  const { data: fichasRows } = await t3.from('fichas').select('codigo,titulo,frase').eq('activa', true).order('orden');
+  const fichasLista = ((fichasRows ?? []) as any[]).map((f) => `- ${f.codigo}: ${f.titulo} — ${String(f.frase).slice(0, 140)}`).join('\n') || '(sin fichas)';
 
   const system = `Eres el asistente de un asesor pensional en México (El Trol Financiero). Lees el resumen y la transcripción de una reunión con un cliente y devuelves PROPUESTAS para su expediente, en JSON estricto. Nunca inventes: sólo propones lo que el cliente dijo o el asesor acordó, y citas la frase textual como evidencia. Si no hay evidencia, no propones.
 
@@ -82,7 +85,8 @@ Devuelve exactamente este JSON:
   "datos": [ { "campo": "<uno de la lista>", "valor": <número | texto | true/false>, "evidencia": "frase textual" } ],
   "tareas": [ { "texto": "qué hay que hacer", "quien": "trol" | "cliente", "vence_el": "YYYY-MM-DD" | null, "detalle": "contexto breve" } ],
   "prioridades": [ "qué le importa más al cliente, en sus palabras" ],
-  "notas": [ "hecho relevante para la asesoría que no cabe en ningún campo" ]
+  "notas": [ "hecho relevante para la asesoría que no cabe en ningún campo" ],
+  "objeciones": [ { "pregunta": "la duda u objeción del cliente, en sus palabras", "respuesta": "cómo la contestó el asesor, resumido en 1 a 3 frases; null si no la contestó", "ficha": "<código de la lista de fichas> | null", "evidencia": "frase textual del cliente" } ]
 }
 
 Reglas:
@@ -93,7 +97,9 @@ ${listaCampos}
 - No propongas un dato si ya lo sabemos con el mismo valor. Lo que ya sabemos:
 ${yaSabemos}
 - Tareas: una por compromiso concreto (documentos que traerá el cliente, llamadas, trámites). "quien" es quién la ejecuta.
-- Máximo 12 datos, 10 tareas, 5 prioridades, 6 notas. Español de México.`;
+- "objeciones": sólo dudas u objeciones REALES del cliente sobre su pensión o sobre lo que se le propone (no logística de la llamada). "ficha" es el código del tema al que pertenece según esta lista; si no cabe en ninguna, null:
+${fichasLista}
+- Máximo 12 datos, 10 tareas, 5 prioridades, 6 notas, 6 objeciones. Español de México.`;
 
   const user = `TÍTULO: ${r.titulo ?? ''}\nFECHA: ${r.inicio ?? ''}\n\nRESUMEN DE GRANOLA:\n${r.resumen_md ?? ''}\n\nTRANSCRIPCIÓN:\n${(r.transcripcion_texto ?? '').slice(0, 60000)}`;
 
@@ -142,6 +148,12 @@ ${yaSabemos}
   const finales = props.map((p) => { const d = decididas.get(clave(p)); return d ? { ...p, estado: d.estado, ...('aplicado_en' in d ? { aplicado_en: (d as any).aplicado_en, aplicado_por: (d as any).aplicado_por, ref_id: (d as any).ref_id } : {}) } : p; });
 
   await t3.from('reuniones').update({ propuestas: finales, extraccion_estado: 'lista', extraccion_error: null, modelo: MODELO_REDACTOR, updated_at: new Date().toISOString() }).eq('id', reunionId);
+
+  // 172 · Objeciones → bandeja de Conocimiento. Releer no duplica (índice único por reunión + pregunta).
+  const codsFicha = new Set(((fichasRows ?? []) as any[]).map((f) => f.codigo));
+  const objs = (Array.isArray(out.objeciones) ? out.objeciones : []).filter((o: any) => typeof o?.pregunta === 'string' && o.pregunta.trim().length >= 8).slice(0, 6)
+    .map((o: any) => ({ ficha_codigo: codsFicha.has(String(o.ficha)) ? String(o.ficha) : null, pregunta: String(o.pregunta).trim().slice(0, 300), respuesta: o.respuesta ? String(o.respuesta).trim().slice(0, 700) : null, evidencia: o.evidencia ? String(o.evidencia).slice(0, 300) : null, origen: 'reunion', reunion_id: reunionId, persona_id: r.persona_id }));
+  if (objs.length) await t3.from('fichas_propuestas').upsert(objs, { onConflict: 'reunion_id,pregunta_hash', ignoreDuplicates: true });
 
   // Lo blando se aplica solo, como 'sistema'.
   let auto = 0;
