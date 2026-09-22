@@ -11,3 +11,6 @@
 # OS
 .DS_Store
 campanas/
+_claude_tmp/
+_to_delete/
+respaldo-hubspot/
