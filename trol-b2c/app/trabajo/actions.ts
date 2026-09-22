@@ -581,6 +581,27 @@ export async function reevaluar(personaId: string) {
 
 const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
 
+/** 179 · Alta en un evento: alta + CURP + consulta + cortesía + experto, en una llamada. */
+export async function altaEnEvento(codigo: string, telefono: string, nombre: string, curp: string | null, consentimiento: boolean) {
+  await requireMiembro();
+  if (!consentimiento) return fail('Falta que acepte los Términos y el Aviso de Privacidad.');
+  const { data, error } = await t3().rpc('alta_en_evento', { p_codigo: codigo, p_telefono: telefono, p_nombre: nombre, p_curp: curp, p_consentimiento: true });
+  if (error) return fail(/sin_consentimiento/.test(error.message) ? 'Falta que acepte los Términos y el Aviso de Privacidad.' : /curp_invalida/.test(error.message) ? 'La CURP no es válida.' : /telefono_invalido/.test(error.message) ? 'El teléfono debe tener 10 dígitos.' : error);
+  const r = data as { persona_id: string; nueva: boolean; ya_existia: boolean; motivo?: string };
+  revalidatePath('/trabajo/evento'); revalidatePath('/trabajo/cartera');
+  return ok({ persona_id: r.persona_id, ya_existia: r.ya_existia, motivo: r.motivo ?? null });
+}
+
+/** 179 · El acceso directo a su cuenta como QR, para que lo escanee desde su teléfono. */
+export async function qrCuentaEvento(personaId: string) {
+  await requireMiembro();
+  const { data: url, error } = await t3().rpc('mi_link_asesor', { p_persona: personaId });
+  if (error || !url) return fail(error ?? 'Sin link.');
+  const { qrConLogo } = await import('@/lib/marca/qr');
+  const svg = await qrConLogo(String(url), { tam: 480 });
+  return ok({ svg, url: String(url) });
+}
+
 /** Quién es dueño de un teléfono, para avisar en el alta antes de que `alta_por_telefono` lo reutilice. */
 export type DuenoTelefono = { persona_id: string; nombre: string | null; apellidos: string | null; curp: string | null; etapa: string | null };
 
