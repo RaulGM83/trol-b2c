@@ -1,6 +1,6 @@
 # Trol 3.0 — Contexto para continuar en un chat nuevo
 
-Punto de entrada único. Actualizado **21-sep-2026 (noche)**. Los detalles de cada tema viven en los docs `claude/11` … `claude/82`; aquí está el mapa.
+Punto de entrada único. Actualizado **23-sep-2026 (mañana, antes de Finnosummit)**. Los detalles de cada tema viven en los docs `claude/11` … `claude/83`; aquí está el mapa.
 
 ---
 
@@ -32,6 +32,9 @@ Instrucciones de trabajo del proyecto (respetarlas):
   - **Plantillas con candado** (**167**): `trol3.config.plantilla_horas_minimo='24'` (**una plantilla por persona al día**), `puede_plantilla(persona)` → `{ok, motivo: no_contactar|sin_telefono|muy_pronto, ultima, horas}`.
   - **Asesoría en cinco pasos** (**168, 169**, `claude/76`–`79`): tabla `trol3.asesorias` (una abierta por persona; `paso`, `pasos_vistos`, `escenario_recomendado`, `mostrar_costos`, `notas`, `diagnostico_id`, **`preparacion`**, **`copiloto`**). `asesoria_abrir`, `asesoria_marcar` (al cerrar → etapa `asesorado` + `evaluar_persona_seguro`), `asesoria_ligar_diagnostico`, **`asesoria_vista(persona)`** = todo lo que pintan el asesor y "Presentar": cliente, números, experto, parada, hallazgos, oportunidades (con `frase`, `ficha`, `propuesta`), historial, escenarios, sesión, `diagnostico {estado, estrategia, acuerdos, ligado, pagado}`, `pendientes[]`, `fichas[]`.
   - **Fichas de conocimiento** (**170–173**, `claude/73`, `80`, `81`): `trol3.fichas` (T1–T4 tema, O1–O11 oportunidad; `oportunidades text[]`; secciones en markdown ligero; **`solo_asesor` nunca sale al cliente**), `fichas_historial` (texto anterior de cada edición). **Edita sólo admin.** `fichas_para_redactor(persona)` = frase + "cómo explicarlo" de sus oportunidades abiertas. **`fichas_propuestas`** = bandeja de objeciones (origen `reunion`/`asesor`; `ficha_codigo null` = falta escribir la ficha); `fichas_proponer(...)`, `fichas_propuesta_decidir(...)` (admin; aprobar = se agrega a "Qué te van a preguntar").
+  - **Trol en evento** (**179–181**, `claude/83`): código de invitación tipo `evento` (`finnosummit`, `app.trol.mx/i/finnosummit` → WhatsApp de Lukas con `ref:finnosummit`), canal `evento` (política de proveedor **Jordan** para siempre), **`alta_en_evento(codigo, telefono, nombre, curp, consentimiento)`** = alta atribuida + experto + CURP + consulta + diagnóstico avanzado de cortesía + evento `consentimiento` con el texto leído (sin consentimiento no hay alta), `evento_registrados(codigo)`. **180: `otorgar_beneficio` estaba roto con sesión de miembro** (cast de `actor_tipo`); "habilitar de cortesía" nunca había funcionado.
+  - **Proveedor de consultas por canal** (`canales.politica_proveedor`, la lee `pedir_consulta`; asesor siempre Jordan). **182: TODOS los canales en `jordan_first` el 23–24 sep**; lo anterior está en `trol3.config.politica_proveedor_antes_finnosummit`. **⚠️ El 25-sep aplicar `20260925_185_regresar_politica_proveedor_PENDIENTE.sql`.**
+  - **Costo de consultas** (183/184): sólo cuesta lo que llega `completada`; `error`, `cancelada` y `sin_resultado` quedan en $0 (trigger + histórico corregido). Análisis ago–sep (23-sep): **Belvo 300 consultas, $353, mediana del SISEC 236 días de viejo en sep (sólo 18 % fresco)** — Belvo devuelve el reporte congelado del link, sirve sólo para gente nueva; 285 de 300 las pidió el sistema (refresh de campañas: dinero que no compró información nueva); 68 "sin resultado" nunca se reintentaron por Jordan. **Jordan 153 consultas, $1,222, 85 completadas todas del día, 44 % no termina bien.**
   - **Segmentos de gestoría** (`v_segmentos_gestoria`, `v_segmento_mod10_viraal`). **Campañas** (099–108b): `v_segmentos_campana`, `c1`–`c5`, `r1a`…`r_menor59`. **Pausadas desde ~11-sep; el equipo trabaja gestoría y reactivación Mod 10.**
   - **Datos a utilizar** (109–109c), **Asesoría Infonavit** (110–112), **Escenarios** (113–121), **Tareas** (114), **Diagnósticos** (115, 119–121, 139), **Redactor** (117–120; desde 170 recibe las fichas del caso como guía de enfoque).
   - **Aliados referidores** (122–128b): ver §2bis.
@@ -47,11 +50,12 @@ Instrucciones de trabajo del proyecto (respetarlas):
   - **Embudo de `/mi`** (162): `trol3.v_embudo_mi` (cerrada a `authenticated`; la página la lee con el cliente de servicio).
   - **Bajas**: `public.registrar_baja`. **Cola de envíos**: `trol3.cola_envios`. **Insertar filas = enviar.**
 - **Edge Function `api-trol`** (header `x-trol-key`), versión 22. Rutas: `/alta`, `/expediente`, `/declarar`, `/declarar-varios`, `/interaccion`, `/handoff`, `/consulta`, `/consulta/resultado`, `/mi-link`, `/cita`, `/eventos/pendientes`, `/eventos/ack`, **`/avisar`** (system-event; cae a plantilla sólo si le pasan una). ⚠️ **Se despliega SIEMPRE con `verify_jwt = false`.**
-- **App web `trol-b2c`** (Next.js 14, Tailwind). Repo **`RaulGM83/trol-b2c`**, Vercel Pro. Carpeta local `~/Claude/Projects/b2c experiencia`. **Último commit conocido: `84449e0`** (4b); la fase 5 quedó escrita y con `tsc` limpio, pendiente de build + commit de Raul.
+- **App web `trol-b2c`** (Next.js 14, Tailwind). Repo **`RaulGM83/trol-b2c`**, Vercel Pro. Carpeta local `~/Claude/Projects/b2c experiencia`. **Último commit conocido: `1b2ffaf`** (175–178). Lo del 22–23 sep (evento, tarjeta, 179–184) está escrito y con `tsc` limpio, **pendiente de build + commit** (§4.2).
   - **`/mi` = "tu cuenta Trol"** (`claude/70`): pestañas **Mi pensión · Mis datos · Beneficios · "Mi chat"**. `LoQueSigue` muestra la propuesta del asesor (texto, pensión con plan, costo). Lukas no dice montos: la cuenta es el único lugar donde viven los números.
   - **`/trabajo`** (rehecho el 21-sep, `claude/72`–`82`):
     - **Menú:** **Mi cartera · Conocimiento · Aliados · Negocio ▾ · Gestión ▾** + buscador. El logo lleva a Mi cartera.
     - **Mi cartera** (`/trabajo/cartera`): pestañas **Clientes** (bandejas) · **Mis pendientes** (= `/trabajo/tareas`, fuera del menú). Contacto de un clic (`registrarContacto`), "Mandar plantilla" con candados, lote de 20.
+    - **Negocio ▾ → Evento** (`/trabajo/evento`, 179): registro en mano desde el teléfono (nombre · WhatsApp · CURP · casilla de consentimiento obligatoria) → QR de su cuenta (mi_link con logo: lo escanea y entra en su teléfono sin contraseña) · QR al chat con Lukas · lista con estado de consulta (se refresca sola), "Pedir en vivo" si el IMSS no devolvió nada.
     - **Negocio ▾**: Operación (= `/trabajo/hoy`: citas del equipo, reuniones sin expediente, requiere acción, pulso B2C) · Oportunidades (= `/trabajo/lista`) · Embudo · **Embudo de /mi** (`/trabajo/embudo-mi`, nuevo) · Actividad · Todos los clientes (= `/trabajo`, que también es la página de resultados del buscador). **No se borró ninguna ruta.**
     - **Expediente `/trabajo/p/[id]`**: pestañas **Relación** (default: parada del cliente, registro rápido, Activar, **Enviar propuesta**) · **Asesoría** · *Herramientas* (calculadoras, infonavit, diagnóstico) · *Trámite* (oportunidades, documentos, **viraal = mesa de financiamiento: es back para Viraal, NO asesoría**) · *Datos* (resumen, bitácora). `calcPanel`/`infPanel`/`mesaPanel`/`diagPanel`: una pieza, dos puertas.
     - **Asesoría** (`components/trol3/AsesoriaSesion.tsx`, `lib/trol3/asesoria.ts`): 1 Su situación (números, dolor, **historia laboral con alta y baja al día**, huecos sin cotizar) · 2 Lo que encontramos (frase de la ficha + botón "Ficha O5") · 3 Escenarios (caminos cerrados; **calculadora e Infonavit se abren dentro del paso**, ancho completo) · 4 Recomendación (armar/ligar diagnóstico, "el porqué" = `estrategia_oportunidades`, Enviar propuesta con números sugeridos) · 5 Acuerdos (= `DiagnosticoPanel`; **"Entregado" exige beneficio `diagnostico_avanzado`**). Navegación libre. Cerrar → `asesorado`.
@@ -64,6 +68,7 @@ Instrucciones de trabajo del proyecto (respetarlas):
   - **PDF del diagnóstico** (139, `claude/48`–`50`).
 - **Auth (Supabase)**: SMTP Resend, PKCE. **Motor `pension-core`**: `FACTOR_RETIRO = 0.81` sólo RCV. **Storage:** bucket privado `expediente`. **Legacy `public`**: dual-write sigue.
 - **n8n cloud**: Calculos (`6Ry0jm62ahFNmibR`), citas GCal (`S6BxXRbTgundrEwe`), nudges + cola (`WGweHnnPEeWMZsUg`), avisos a asesoras (`aygBu2V6cpnL3NEF`), Identidad Belvo v2, Waterfall PDF, ISSSTE, Portal Consulta Processor, B2B Gateway.
+- **Material Finnosummit**: `b2c experiencia/claude/finnosummit/` — tarjeta 90×50 mm (`tarjeta-finnosummit.pdf` vectorial + PNG/JPG a 2400 dpi), QR con logo, logos PNG 4000 px. Frente: promoción + QR + línea legal; reverso: contacto de Raúl (CEO, 55 3566 5896).
 - **Bot Tako**: Lukas **prompt v20.3 pegado**; **`tako/prompt-lukas-v20.4.md` escrito y SIN PEGAR** (agrega a §15.6 `numeros_actualizados`, `pago_recibido` y `oportunidad_nueva` con `propuesta: true`). Regla dura: nunca montos.
 
 ### 2bis. Aliados: dos relaciones con la misma palabra (`claude/51`)
@@ -95,7 +100,7 @@ La comisión sale del `honorario_trol` de la oportunidad ganada; el aliado no ve
 
 ### Migraciones aplicadas (vivas)
 
-038–163 (ver versiones anteriores) · **164–166** cartera · **167** propuesta + candado de plantilla + `parada_cliente` · **168** asesorías · **169** asesoría termina en algo · **170** fichas · **171** las 15 fichas v1 · **172** copiloto + bandeja · **173** índice único completo (PostgREST no infiere índices parciales en `ON CONFLICT`) · **174** tareas vencidas en la cartera.
+038–163 (ver versiones anteriores) · **164–166** cartera · **167** propuesta + candado de plantilla + `parada_cliente` · **168** asesorías · **169** asesoría termina en algo · **170** fichas · **171** las 15 fichas v1 · **172** copiloto + bandeja · **173** índice único completo (PostgREST no infiere índices parciales en `ON CONFLICT`) · **174** tareas vencidas en la cartera · **175–178** compra y crédito Infonavit vía Trol (automático con plan en la calculadora; proveedor "Trol" a secas; 10 marcados) · **179** Trol en evento · **180** `otorgar_beneficio` arreglado · **181** consentimiento en el alta en evento · **182** todo por Jordan 23–24 sep · **183/184** error/cancelada/sin_resultado sin costo. **185 escrita y NO aplicada** (regreso de política, 25-sep).
 
 Todas exportadas a `trol3_backend/migrations/` y verificadas por MD5 (`md5(array_to_string(statements, E'\n'))` vs `md5sum` del archivo **sin** salto final extra). 158–160, 167, 169, 170 y 174 parchan funciones vivas con `replace()` sobre `pg_get_functiondef` y ancla contada: el archivo es el parche, no la función completa.
 
@@ -105,13 +110,20 @@ Faltan de exportar: los `create or replace` del 4-sep de `public.registrar_baja`
 
 ## 4\. Pendientes (en el orden acordado)
 
+### Esta semana
+0. **23–24 sep: Finnosummit.** Registro en mano en Negocio → Evento; QR de respaldo. Probado por Raul: el QR abre WhatsApp y Lukas responde. **Pendiente de probar**: registro en mano + escaneo del QR de la cuenta con otro teléfono (necesita el build/push, ver 2).
+0b. **25-sep: aplicar la 185** (regresa la política de proveedor por canal a Belvo salvo `evento`). Y con los registrados: `select * from trol3.evento_registrados('finnosummit')`; embudo en `v_embudo_codigo where codigo='finnosummit'`.
+0c. **Diagnóstico del QR → WhatsApp**: el código del sitio lleva 182 clics (32 de móvil real) y 1 alta atribuida. Con los datos del evento se sabrá si la gente no manda el mensaje o si Lukas no pasa el `ref:`.
+0d. Reintento automático Belvo `sin_resultado` → Jordan (una condición en el trigger de resultado), y no usar Belvo para refresh (sólo gente nueva). Mostrar "datos del IMSS al …" en cartera/asesoría cuando el SISEC tenga > 90 días.
+0e. Lukas no menciona el aviso de privacidad antes de pedir la CURP: una línea en el prompt (v20.5) cuando se pegue la v20.4.
+
 ### Lo siguiente (Raul, 21-sep): **Granola — empieza a usarlo esta semana**
 
 1. `trol3.reuniones` tiene **0 filas**: cargar `GRANOLA_API_KEY` (workspace) en Vercel, registrar el webhook (curl en `claude/62`), cargar `GRANOLA_WEBHOOK_SECRET`, redeploy; prueba real con una reunión agendada por la liga de citas. Revisar de punta a punta: casado con cita/persona, propuestas en el expediente, "sin expediente" en Negocio → Operación, y **objeciones llegando a la bandeja de Conocimiento**.
 
 ### Para encender (todo está construido; falta un gesto de Raul)
 
-2. **Build + commit de la fase 5** (comando en el chat del 21-sep).
+2. **Build + commit de lo del 22–23 sep** (pantalla del evento, consentimiento, tarjeta, migraciones 179–184): `cd trol-b2c && npm run build && cd .. && rm -f .git/index.lock && git add trol-b2c trol3_backend/migrations claude/finnosummit && git commit -m "179-184: Trol en evento, tarjeta Finnosummit, todo por Jordan 23-24 sep, costos de consulta" && git push`.
 3. **Pegar `tako/prompt-lukas-v20.4.md` en Tako** — antes de que el equipo use "Cobrado" o "Enviar propuesta" (si no, a Lukas le llegan como evento desconocido).
 4. Después: `update trol3.config set valor='on' where clave='avisar_numeros_actualizados';`
 5. **Probar con el número de Raul** lo que manda WhatsApp real y nunca se ha probado de punta a punta: "Mandar plantilla", "Enviar propuesta", "Cobrado". (`/avisar` jamás ha enviado una plantilla con éxito: todo lo registrado es `system_event`.)
@@ -162,6 +174,7 @@ Proyecto "Trol 3.0" + conector Supabase (`orgagfdxygtjiwqvgckw`) · Cowork con l
 - **Git desde Cowork**: sin identidad ni red; **commit y push los hace Raul**. Cada `git status`/`git log` deja `.git/index.lock` huérfano: `mv -n` a `_to_delete/`; el comando que se le pasa a Raul lleva `rm -f .git/index.lock`.
 - **`node_modules` compilado para macOS**: `next build` falla en la VM. **`tsc` sí corre**: `timeout 175 node node_modules/typescript/bin/tsc --noEmit -p .` (~2 min), filtrar por archivo; `TS2307 @trol/pension-core` y `TS7006` de AsesoriaInfonavit son preexistentes.
 - **Escribir al repo desde Cowork**: python en `device_bash` con reemplazos exactos que aborten si el ancla no aparece N veces. Los `.sql`: se escriben en el contenedor, se pega **idéntico** en `apply_migration`, se compara MD5 y se bajan con `device_commit_files`.
+- **Chat de archivos**: el servidor rechaza adjuntos de ~0.5 MB o más (400); los grandes van sólo a la carpeta del usuario con `device_commit_files`. **Imprentas**: el PNG debe llevar el dpi declarado (PIL `dpi=`), si no lo evalúan a ojo.
 - **Los archivos que Raul edita en una vista previa del chat no se guardan en su carpeta**: pedirle el archivo adjunto (pasó con las fichas, llegó como PDF).
 - **Server components**: no importar constantes con métodos desde módulos `'use client'`. Para compartir piezas de servidor con un componente cliente, pasarlas como **slots `ReactNode`** (así van `diagPanel`, `calcPanel`, `infPanel`); el contexto de React del cliente sí les llega (así se esconde el PnL).
 - **PostgREST + `ON CONFLICT`**: no infiere índices únicos **parciales**; usar índice completo (173).

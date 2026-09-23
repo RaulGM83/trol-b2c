@@ -1,4 +1,4 @@
--- 183 (APLICAR EL 25-SEP-2026, después de Finnosummit): regresa la política de proveedor
+-- 185 (APLICAR EL 25-SEP-2026, después de Finnosummit): regresa la política de proveedor
 -- por canal a como estaba antes de la 182. El canal `evento` se queda en Jordan.
 
 update trol3.canales c
