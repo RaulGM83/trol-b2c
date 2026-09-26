@@ -1828,3 +1828,56 @@ export async function guardarTerminosComision(
   revalidatePath('/trabajo/aliados/referidores');
   return ok();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 187 · Carriles (claude/84): Favoritos · Calientes · Tibios · Fríos.
+// Las reglas viven en la base (carril_de); aquí sólo se registran los gestos del asesor.
+
+export type MarcaCarril = 'frio' | 'descartado' | 'favorito';
+
+/** Enfriar (motivo obligatorio) · Descartar · Favorito (fecha opcional). Libera un lugar del tope. */
+export async function carrilMarcar(personaId: string, marca: MarcaCarril, motivo?: string | null, nota?: string | null, hasta?: string | null) {
+  await requireMiembro();
+  if (marca === 'frio' && !motivo) return fail('Di por qué lo enfrías: el motivo decide cuándo vuelve.');
+  const { data, error } = await t3().rpc('carril_marcar', { p_persona: personaId, p_marca: marca, p_motivo: motivo ?? null, p_nota: nota?.trim() || null, p_hasta: hasta || null });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ carril: data });
+}
+
+/**
+ * Despertar. Sin `para`: sale de Fríos y vuelve a Tibios por su potencial. Con `para` (admin/coach):
+ * hasta arriba de los Tibios de ese asesor con "te lo mandó Raúl"; `directo` lo mete a sus Calientes
+ * de hoy y la base sólo lo permite con trámite en proceso (decisión 17).
+ */
+export async function carrilDespertar(personaId: string, para?: string | null, nota?: string | null, directo = false) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('carril_despertar', { p_persona: personaId, p_para: para ?? null, p_nota: nota?.trim() || null, p_directo: directo });
+  if (error) return fail(error.message === 'directo_solo_tramites' ? 'Directo a Calientes sólo con un trámite en proceso.' : error);
+  revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ carril: data });
+}
+
+/** Asignar (admin/coach): trámites huérfanos o cualquier cliente, uno o varios. */
+export async function asignarCabecera(personaIds: string[], miembroId: string) {
+  await requireMiembro();
+  if (!personaIds.length) return fail('No hay nadie seleccionado.');
+  const { data, error } = await t3().rpc('asignar_cabecera', { p_personas: personaIds, p_miembro: miembroId });
+  if (error) return fail(error.message === 'solo_admin' ? 'Sólo admin o coach pueden asignar.' : error);
+  revalidatePath('/trabajo/cartera'); personaIds.forEach((p) => revalidatePath(`/trabajo/p/${p}`));
+  return ok({ n: data, texto: `${data} asignado${Number(data) === 1 ? '' : 's'}.` });
+}
+
+/** El reto del día en Tibios: cuántos voy a tocar hoy (≤ tope). */
+export async function fijarReto(meta: number) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('fijar_reto', { p_meta: Math.round(meta) });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/cartera');
+  return ok({ reto: data });
+}
+
+/** "No aplica" desde el renglón: cierra sólo esa oportunidad, con motivo. Si no le queda ninguna, queda descartado. */
+export async function noAplicaOportunidad(opId: string, personaId: string, motivo: string, nota?: string | null) {
+  return cambiarEstadoOportunidad(opId, personaId, 'no_aplica', { motivo, nota: nota ?? null });
+}
