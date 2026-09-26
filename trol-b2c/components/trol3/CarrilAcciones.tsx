@@ -28,7 +28,7 @@ const MOTIVOS_DESCARTE: [string, string][] = [['no_contactar', 'Pidió que no le
 const MOTIVOS_NO_APLICA: [string, string][] = [['ya_lo_hizo', 'Ya lo hizo por su cuenta'], ['no_cumple_requisitos', 'No cumple requisitos'], ['datos_imss_equivocados', 'Datos del IMSS equivocados'], ['no_le_conviene', 'No le conviene'], ['otro', 'Otro']];
 const FECHAS_FAVORITO: [string, string][] = [['', 'Sin fecha'], ['14', 'En 2 semanas'], ['30', 'En 1 mes'], ['90', 'En 3 meses'], ['fecha', 'Fecha…']];
 
-type Hoja = 'enfriar' | 'descartar' | 'noaplica' | 'favorito' | 'asignar' | 'despertar_para' | null;
+type Hoja = 'enfriar' | 'descartar' | 'noaplica' | 'favorito' | 'asignar' | 'despertar_para' | 'tocar' | null;
 const isoEn = (dias: number) => { const d = new Date(); d.setDate(d.getDate() + dias); return d.toISOString().slice(0, 10); };
 
 /**
@@ -59,10 +59,13 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
   const tel = fila.telefono ? `tel:+52${String(fila.telefono).replace(/\D/g, '').slice(-10)}` : null;
 
   // ── Tocar (Tibios): la acción concreta del toque que corresponde
+  // 188: con el chat cerrado se abre una hoja con dos plantillas —la de la oportunidad o la
+  // neutra que sólo reabre la conversación (claude/84)—; con el chat abierto sigue el confirm.
   const avisar = (etiqueta: string) => (
     <button disabled={pending || lleno || !opAbierta} title={lleno ? 'Tope del día: espera a que alguien reaccione o a mañana' : undefined} className={dark}
       onClick={() => {
-        const aviso = fila.chat_abierto ? `Le llegará dentro de su chat: “Encontramos algo en tu caso: ${fila.oportunidad}”.` : `Su chat está cerrado: saldrá la plantilla de “${fila.oportunidad}”. Sólo se puede una al día.`;
+        if (!fila.chat_abierto) { abrir('tocar'); setPick('oportunidad'); return; }
+        const aviso = `Le llegará dentro de su chat: “Encontramos algo en tu caso: ${fila.oportunidad}”.`;
         if (!window.confirm(`${aviso}${pozo ? '\nQueda como tuyo.' : ''}\n\n¿La mandamos? Pasa a Calientes por hoy.`)) return;
         run(() => activarCliente(fila.oportunidad_id as string, fila.persona_id), 'Enviado. Pasa a Calientes por hoy.');
       }}>{pozo ? `Tomar y ${etiqueta.toLowerCase()}` : etiqueta}</button>
@@ -115,11 +118,13 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
   }
 
   // ── Hojas (motivo / fecha / asesor)
-  const opciones = hoja === 'enfriar' ? MOTIVOS_FRIO : hoja === 'descartar' ? MOTIVOS_DESCARTE : hoja === 'noaplica' ? MOTIVOS_NO_APLICA : hoja === 'favorito' ? FECHAS_FAVORITO
+  const opciones: [string, string][] = hoja === 'enfriar' ? MOTIVOS_FRIO : hoja === 'descartar' ? MOTIVOS_DESCARTE : hoja === 'noaplica' ? MOTIVOS_NO_APLICA : hoja === 'favorito' ? FECHAS_FAVORITO
+    : hoja === 'tocar' ? [['oportunidad', `Con la oportunidad: “${fila.oportunidad ?? ''}”`], ['abrir', 'Sólo abrir la conversación']]
     : (hoja === 'asignar' || hoja === 'despertar_para') ? miembros.map((m) => [m.id, m.nombre?.split(' ')[0] ?? m.id] as [string, string]) : [];
-  const titulo = { enfriar: '¿Por qué lo enfrías? El motivo decide cuándo vuelve.', descartar: 'Descartar: no regresa por detonador, sólo si escribe.', noaplica: `Esta oportunidad no aplica porque… (cierra sólo “${fila.oportunidad ?? ''}”)`, favorito: 'Favorito: no cuenta en el tope. Con fecha, ese día vuelve a Calientes.', asignar: 'Asignar a…', despertar_para: 'Despertar para… (hasta arriba de sus Tibios, con tu nota)' }[hoja ?? 'enfriar'];
+  const titulo = { enfriar: '¿Por qué lo enfrías? El motivo decide cuándo vuelve.', descartar: 'Descartar: no regresa por detonador, sólo si escribe.', noaplica: `Esta oportunidad no aplica porque… (cierra sólo “${fila.oportunidad ?? ''}”)`, favorito: 'Favorito: no cuenta en el tope. Con fecha, ese día vuelve a Calientes.', asignar: 'Asignar a…', despertar_para: 'Despertar para… (hasta arriba de sus Tibios, con tu nota)', tocar: `Su chat está cerrado: saldrá una plantilla (una al día).${pozo ? ' Queda como tuyo.' : ''} Pasa a Calientes por hoy.` }[hoja ?? 'enfriar'];
   const listo = hoja === 'favorito' ? (pick !== 'fecha' || !!fecha) : !!pick;
   const guardar = () => {
+    if (hoja === 'tocar') run(() => activarCliente(fila.oportunidad_id as string, fila.persona_id, pick as 'oportunidad' | 'abrir'), 'Enviado. Pasa a Calientes por hoy.');
     if (hoja === 'enfriar') run(() => carrilMarcar(fila.persona_id, 'frio', pick, nota), 'A Fríos. Libera un lugar.');
     if (hoja === 'descartar') run(() => carrilMarcar(fila.persona_id, 'descartado', pick, nota), 'Descartado.');
     if (hoja === 'noaplica') run(() => noAplicaOportunidad(fila.oportunidad_id as string, fila.persona_id, pick, nota), 'Oportunidad cerrada.');
@@ -141,10 +146,13 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
             {opciones.map(([v, l]) => <button key={v || 'sin'} type="button" className={pick === v ? 'rounded-full bg-ink px-2.5 py-1 text-[11px] font-semibold text-white' : 'rounded-full border border-line bg-white px-2.5 py-1 text-[11px] font-semibold'} onClick={() => setPick(v)}>{l}</button>)}
             {hoja === 'favorito' && pick === 'fecha' ? <input type="date" aria-label="Fecha" className="rounded-lg border border-line bg-white px-2 py-1 text-xs" value={fecha} min={isoEn(1)} onChange={(e) => setFecha(e.target.value)} /> : null}
           </div>
-          {hoja !== 'asignar' ? <input aria-label="Nota" className="mt-2 w-full rounded-lg border border-line bg-white px-2 py-1 text-xs" placeholder={hoja === 'despertar_para' ? 'Nota para el asesor (opcional)' : 'Nota (opcional)'} value={nota} onChange={(e) => setNota(e.target.value)} /> : null}
+          {hoja === 'tocar' ? <p className="mt-2 text-[11px] text-muted">{pick === 'abrir'
+            ? 'Sale “Quedó pendiente ver tu caso a fondo. Tu experto de Trol quiere retomarlo contigo…” con el botón “Sí, platiquemos”. No menciona ninguna oportunidad; cuando conteste, Lukas te lo pasa.'
+            : 'Sale la plantilla de esa oportunidad (“Tu experto revisó tu caso y encontró algo que te conviene…”) con el link a su cuenta.'}</p> : null}
+          {hoja !== 'asignar' && hoja !== 'tocar' ? <input aria-label="Nota" className="mt-2 w-full rounded-lg border border-line bg-white px-2 py-1 text-xs" placeholder={hoja === 'despertar_para' ? 'Nota para el asesor (opcional)' : 'Nota (opcional)'} value={nota} onChange={(e) => setNota(e.target.value)} /> : null}
           <div className="mt-2 flex justify-end gap-1.5">
             <button type="button" className={quiet} onClick={() => setHoja(null)}>Cancelar</button>
-            <button type="button" disabled={pending || !listo} className={dark} onClick={guardar}>Guardar</button>
+            <button type="button" disabled={pending || !listo} className={dark} onClick={guardar}>{hoja === 'tocar' ? 'Mandar' : 'Guardar'}</button>
           </div>
         </div>
       ) : null}

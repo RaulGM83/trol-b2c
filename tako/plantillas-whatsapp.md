@@ -1,7 +1,7 @@
 # Plantillas de WhatsApp — Trol 3.0
 
-Ocho plantillas: una de reactivación, una de respaldo y seis de oportunidad. La
-última (`trol_refresco`) no se sube todavía.
+Nueve plantillas: una de reactivación, una de respaldo, seis de oportunidad y una
+neutra para retomar (`trol_retomar`, en revisión). `trol_refresco` ya se subió como Utilidad.
 
 ## Las tres reglas
 
@@ -157,6 +157,30 @@ Botón: `[Tengo una duda]`
 Regla dura: **no se manda a nadie cuyo SISEC no se haya refrescado en esa tanda.** Si
 sale a ciegas y el cliente entra y ve lo mismo, es la única de todas que nos cuesta
 credibilidad.
+
+---
+
+## 5. `trol_retomar` — el toque que sólo abre la conversación (26-sep)
+
+Categoría: **Utilidad** (dada de alta así; en revisión desde el 26-sep 17:06). Línea Tako Asesoría.
+
+> Quedó pendiente ver tu caso a fondo. Tu experto de Trol quiere retomarlo contigo: tu
+> cuenta sigue aquí {{1}} y, si te queda mejor, lo platicamos por este chat.
+
+Botón: `[Sí, platiquemos]` · Pie: `Responde BAJA para no recibir más mensajes.`
+
+Para qué: en Tibios, "Mandar plantilla" abre una hoja con dos opciones —la de la
+oportunidad (`trol_op_*`) o **ésta**, que no pitchea nada—. Sale con evento `retomar` y
+deja en el historial del cliente "Te escribimos para retomar tu caso." (`activarCliente(...,
+'abrir')`). "Quedó pendiente" es verdad para cualquier tibio: todos tienen diagnóstico a
+medias por definición del carril. El nombre de la asesora no puede ir (sería la segunda
+variable): se presenta ella al entrar.
+
+**Lukas, cuando aprietan "Sí, platiquemos"** (§14.4.1): no preguntar "¿cuál es tu duda?";
+saludo breve, `trolExpediente`, y `trolHandoff` con motivo "retomar: respondió al toque de
+su asesora". El toque lo dio una persona; la respuesta es para esa persona. Si en vez del
+botón le llega `[SYSTEM EVENT: retomar]` (chat que seguía abierto), mismo destino:
+retoma en una frase y pasa a la asesora.
 
 ---
 

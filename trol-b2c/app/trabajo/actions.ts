@@ -59,7 +59,11 @@ export async function registrarContacto(personaId: string, resultado: 'contesto'
  *   · la oportunidad tiene que ser de esa persona y seguir abierta.
  * Quien activa a alguien sin experto se lo queda: si no, la respuesta no le cae a nadie.
  */
-export async function activarCliente(opId: string, personaId: string) {
+/** 188 · Plantilla neutra para el toque "sólo abrir la conversación" (claude/84): no pitchea ninguna oportunidad. */
+const PLANTILLA_RETOMAR = 'trol_retomar';
+export type ModoToque = 'oportunidad' | 'abrir';
+
+export async function activarCliente(opId: string, personaId: string, modo: ModoToque = 'oportunidad') {
   await requireMiembro();
   const db = t3();
   const { data, error } = await db
@@ -79,10 +83,12 @@ export async function activarCliente(opId: string, personaId: string) {
 
   const cat = o.catalogo_oportunidades as Any;
   const nombre = cat?.nombre_cliente ?? cat?.nombre ?? o.codigo;
-  const plantilla = bloqueo ? undefined : ((cat?.plantilla as string | null) || undefined);
-  const r = await avisar(personaId, 'oportunidad_nueva', {
-    payload: { nombre, codigo: o.codigo },
-    resumen: `Encontramos algo en tu caso: ${nombre}.`,
+  // 188: "abrir" no pitchea la oportunidad: plantilla neutra, evento `retomar`, historial neutro.
+  const abrir = modo === 'abrir';
+  const plantilla = bloqueo ? undefined : abrir ? PLANTILLA_RETOMAR : ((cat?.plantilla as string | null) || undefined);
+  const r = await avisar(personaId, abrir ? 'retomar' : 'oportunidad_nueva', {
+    payload: abrir ? { motivo: 'retomar' } : { nombre, codigo: o.codigo },
+    resumen: abrir ? 'Te escribimos para retomar tu caso.' : `Encontramos algo en tu caso: ${nombre}.`,
     plantilla,
   });
   if (!r.ok) {
@@ -94,7 +100,7 @@ export async function activarCliente(opId: string, personaId: string) {
   // Si nadie lo lleva, lo lleva quien lo activó.
   try { await db.rpc('tomar_cabecera', { p_persona: personaId }); } catch { /* ya tenía experto */ }
   revalidatePath('/trabajo/cartera'); revalidatePath(`/trabajo/p/${personaId}`);
-  return ok({ via: r.via, texto: r.via === 'plantilla' ? `Salió la plantilla ${plantilla}.` : 'Le llegó dentro de su chat, sin plantilla.' });
+  return ok({ via: r.via, texto: r.via === 'plantilla' ? (abrir ? 'Salió la plantilla neutra: sólo abre la conversación.' : `Salió la plantilla ${plantilla}.`) : 'Le llegó dentro de su chat, sin plantilla.' });
 }
 
 /** El candado de plantillas, dicho en palabras. null = se puede. La regla vive en la base (167). */
