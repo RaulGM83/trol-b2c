@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { baseNoSabe, declararAsesor } from '@/app/trabajo/actions';
+import { baseNoSabe, declararAsesor, reevaluar } from '@/app/trabajo/actions';
 import { mxn, type BaseAsesoria, type BaseCampo, type BasePregunta } from '@/lib/trol3/asesoria';
 
 /**
@@ -37,6 +37,12 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
   const declarar = (campo: string, valor: unknown) => run(() => declararAsesor(personaId, campo, valor) as Promise<{ ok: boolean; error?: string }>);
   const noSabe = (campo: string, deshacer = false) => run(() => baseNoSabe(personaId, campo, deshacer) as Promise<{ ok: boolean; error?: string }>);
   const campo = (q: BasePregunta, c: string) => q.campos.find((x) => x.campo === c);
+  // 189c · Al salir del paso 0 se vuelve a correr el motor de oportunidades con lo que se acaba de
+  // afinar (Infonavit, AFORE, ahorros): lo que se enseña en el paso 2 ya sale con esos datos.
+  const seguir = () => start(async () => {
+    await reevaluar(personaId);
+    if (onSeguir) onSeguir(); else if (seguirHref) router.push(seguirHref);
+  });
   const falta = base.preguntas.filter((q) => q.estado === 'falta').length;
 
   const ley = h.ley === 'Ley73' ? 'Ley 73' : h.ley === 'Ley97' ? 'Ley 97' : null;
@@ -51,7 +57,8 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
           <Dato label="Régimen" v={ley ?? '—'} />
           <Dato label="Semanas cotizadas" v={h.semanas != null ? Math.round(Number(h.semanas)).toLocaleString('es-MX') : '—'} sub={!tu && h.semanas_capa ? (h.semanas_capa === 'validado' ? 'oficiales' : 'declaradas') : undefined} />
           {h.semanas_descontadas ? <Dato label="Semanas descontadas" v={Math.round(Number(h.semanas_descontadas)).toLocaleString('es-MX')} /> : null}
-          <Dato label="Edad" v={h.edad != null ? `${h.edad} años` : '—'} />
+          {h.semanas_recuperadas ? <Dato label="Semanas recuperadas" v={Math.round(Number(h.semanas_recuperadas)).toLocaleString('es-MX')} /> : null}
+          <Dato label="Edad" v={h.edad_decimal != null ? `${Number(h.edad_decimal).toFixed(1)} años` : h.edad != null ? `${h.edad} años` : '—'} />
           {derechos ? <Dato label="Derechos Ley 73" v={derechos} /> : null}
           <Dato label={tu ? 'Hoy te tocaría' : 'Hoy le tocaría'} v={h.pension_base ? mxn(h.pension_base) : '—'} sub={h.edad_base ? `a los ${h.edad_base}` : undefined} lime />
         </div>
@@ -89,9 +96,7 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
         {msg ? <p className="mt-2 text-xs text-red-600">{msg}</p> : null}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
           <p className="text-xs text-muted">{falta === 0 ? (tu ? 'Con esto ya podemos arrancar.' : 'Con esto ya se puede asesorar.') : tu ? `Faltan ${falta} por afinar; si no las sabes, seguimos con lo que estimamos.` : `Faltan ${falta}. “No sabe” también cuenta: se sigue con el estimado.`}</p>
-          {seguirHref
-            ? <a href={seguirHref} className="rounded-lg bg-lime px-4 py-2 text-sm font-bold text-ink">{falta === 0 ? 'Listo, vamos a tu situación →' : 'Seguir con lo que tenemos →'}</a>
-            : <button type="button" className="rounded-lg bg-lime px-4 py-2 text-sm font-bold text-ink" onClick={onSeguir}>{falta === 0 ? (tu ? 'Listo, vamos a tu situación →' : 'Listo para la asesoría →') : 'Seguir con lo que tenemos →'}</button>}
+          <button type="button" disabled={pending} className="rounded-lg bg-lime px-4 py-2 text-sm font-bold text-ink disabled:opacity-50" onClick={seguir}>{pending ? 'Actualizando su caso…' : falta === 0 ? (tu ? 'Listo, vamos a tu situación →' : 'Listo para la asesoría →') : 'Seguir con lo que tenemos →'}</button>
         </div>
       </section>
     </div>
@@ -181,8 +186,11 @@ function Expectativa({ q, declarar, noSabe, pending, tu }: { q: BasePregunta; de
 function Ahorros({ q, declarar, noSabe, pending, tu }: { q: BasePregunta; declarar: (campo: string, v: unknown) => void; noSabe: (campo: string, deshacer?: boolean) => void; pending: boolean; tu: boolean }) {
   const LBL: Record<string, string> = { ahorro_voluntario: 'Ahorro voluntario en la AFORE', plan_corporativo: 'Plan de retiro de la empresa', otros_planes: 'Otros (PPR, fondos, caja)' };
   const [vals, setVals] = useState<Record<string, string>>({});
-  const conAlgo = q.campos.some((c) => num(c.valor) != null && Number(c.valor) > 0);
-  const dijoNo = q.campos.some((c) => num(c.valor) === 0) && !conAlgo;
+  // 189c · cada opción trae saldo y aportación mensual (campo + '_mensual')
+  const saldos = q.campos.filter((c) => !c.campo.endsWith('_mensual'));
+  const mensual = (c: BaseCampo) => q.campos.find((x) => x.campo === `${c.campo}_mensual`);
+  const conAlgo = saldos.some((c) => num(c.valor) != null && Number(c.valor) > 0);
+  const dijoNo = saldos.some((c) => num(c.valor) === 0) && !conAlgo;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -190,17 +198,24 @@ function Ahorros({ q, declarar, noSabe, pending, tu }: { q: BasePregunta; declar
         <button type="button" disabled={pending} className={chip(q.estado === 'no_sabe')} onClick={() => noSabe('ahorro_voluntario', q.estado === 'no_sabe')}>{tu ? 'No sé' : 'No sabe'}</button>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        {q.campos.map((c) => (
+        {saldos.map((c) => { const m = mensual(c); return (
           <div key={c.campo} className="rounded-xl border border-line p-2.5">
             <div className="text-[11px] text-muted">{LBL[c.campo] ?? c.nombre}</div>
             <div className="mt-1 flex items-center gap-1.5">
+              <span className="w-14 text-[11px] text-muted">Saldo</span>
               {num(c.valor) != null ? <b className="text-sm">{mxn(c.valor)}</b> : num(c.estimado) != null ? <span className="text-xs text-muted">est. {mxn(c.estimado)}</span> : null}
-              <input type="number" inputMode="numeric" min={0} className="w-28 rounded-lg border border-line bg-white px-2 py-1 text-sm" placeholder="$" value={vals[c.campo] ?? ''} onChange={(e) => setVals((x) => ({ ...x, [c.campo]: e.target.value }))} />
+              <input type="number" inputMode="numeric" min={0} className="w-24 rounded-lg border border-line bg-white px-2 py-1 text-sm" placeholder="$" value={vals[c.campo] ?? ''} onChange={(e) => setVals((x) => ({ ...x, [c.campo]: e.target.value }))} />
               <button type="button" disabled={pending || num(vals[c.campo]) == null} className={quiet} onClick={() => { declarar(c.campo, num(vals[c.campo])); setVals((x) => ({ ...x, [c.campo]: '' })); }}>OK</button>
             </div>
+            {m ? <div className="mt-1 flex items-center gap-1.5">
+              <span className="w-14 text-[11px] text-muted">Al mes</span>
+              {num(m.valor) != null ? <b className="text-sm">{mxn(m.valor)}</b> : null}
+              <input type="number" inputMode="numeric" min={0} className="w-24 rounded-lg border border-line bg-white px-2 py-1 text-sm" placeholder="$ / mes" value={vals[m.campo] ?? ''} onChange={(e) => setVals((x) => ({ ...x, [m.campo]: e.target.value }))} />
+              <button type="button" disabled={pending || num(vals[m.campo]) == null} className={quiet} onClick={() => { declarar(m.campo, num(vals[m.campo])); setVals((x) => ({ ...x, [m.campo]: '' })); }}>OK</button>
+            </div> : null}
             <Meta c={c} tu={tu} />
           </div>
-        ))}
+        ); })}
       </div>
     </div>
   );

@@ -72,13 +72,22 @@ export function MisCinco({ personaId, base }: { personaId: string; base: BaseAse
               </> : null}
               {q.n === 5 ? <>
                 <button type="button" disabled={pending} className={chip(false)} onClick={() => declarar('ahorro_voluntario', 0)}>No tengo otros ahorros</button>
-                {q.campos.map((k) => (
-                  <span key={k.campo} className="flex items-center gap-1">
-                    <input type="number" inputMode="numeric" min={0} className="w-28 rounded-lg border border-line bg-white px-2 py-1.5 text-sm" placeholder={AH[k.campo] ?? k.nombre} title={AH[k.campo] ?? k.nombre} value={v(k.campo)} onChange={(e) => set(k.campo, e.target.value)} />
-                    <button type="button" disabled={pending || num(v(k.campo)) == null} className={btn} onClick={() => { declarar(k.campo, num(v(k.campo))); set(k.campo, ''); }}>OK</button>
-                  </span>
-                ))}
                 <button type="button" disabled={pending} className={chip(q.estado === 'no_sabe')} onClick={() => noSe('ahorro_voluntario', q.estado === 'no_sabe')}>No sé</button>
+                <div className="grid w-full gap-2 pt-1 sm:grid-cols-3">
+                  {q.campos.filter((k) => !k.campo.endsWith('_mensual')).map((k) => { const m = q.campos.find((x) => x.campo === `${k.campo}_mensual`); return (
+                    <div key={k.campo} className="rounded-xl border border-line bg-white p-2">
+                      <div className="text-[11px] text-muted">{AH[k.campo] ?? k.nombre}</div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <input type="number" inputMode="numeric" min={0} className="w-24 rounded-lg border border-line bg-white px-2 py-1 text-sm" placeholder="saldo $" value={v(k.campo)} onChange={(e) => set(k.campo, e.target.value)} />
+                        <button type="button" disabled={pending || num(v(k.campo)) == null} className={btn} onClick={() => { declarar(k.campo, num(v(k.campo))); set(k.campo, ''); }}>OK</button>
+                      </div>
+                      {m ? <div className="mt-1 flex items-center gap-1">
+                        <input type="number" inputMode="numeric" min={0} className="w-24 rounded-lg border border-line bg-white px-2 py-1 text-sm" placeholder="$ al mes" value={v(m.campo)} onChange={(e) => set(m.campo, e.target.value)} />
+                        <button type="button" disabled={pending || num(v(m.campo)) == null} className={btn} onClick={() => { declarar(m.campo, num(v(m.campo))); set(m.campo, ''); }}>OK</button>
+                      </div> : null}
+                    </div>
+                  ); })}
+                </div>
               </> : null}
             </div>
           </li>

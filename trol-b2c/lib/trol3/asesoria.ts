@@ -27,7 +27,7 @@ export const PASO_CLIENTE: Record<number, string> = {
 export type BaseCampo = { campo: string; nombre: string; tipo: string; unidad: string | null; opciones: string[] | null; valor: unknown; capa: string | null; en: string | null; estimado: unknown; no_sabe: boolean };
 export type BasePregunta = { n: number; titulo: string; estado: 'tenemos' | 'no_sabe' | 'falta'; campos: BaseCampo[] };
 export type BaseAsesoria = {
-  highlights: { ley: string | null; semanas: number | null; semanas_capa: string | null; semanas_descontadas: number | null; edad: number | null; status_empleo: string | null;
+  highlights: { ley: string | null; semanas: number | null; semanas_capa: string | null; semanas_descontadas: number | null; semanas_recuperadas: number | null; edad: number | null; edad_decimal: number | null; status_empleo: string | null;
     conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null };
   preguntas: BasePregunta[]; listos: number; total: number;
 };
