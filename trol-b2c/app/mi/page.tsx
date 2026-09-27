@@ -7,6 +7,8 @@ import { waLink } from '@/lib/whatsapp';
 
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
+import { MisCinco } from '@/components/trol3/MisCinco';
+import type { BaseAsesoria } from '@/lib/trol3/asesoria';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
 import { NegativaLey73 } from '@/components/NegativaLey73';
@@ -63,6 +65,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
     </main>
   );
   const e = x as Any;
+  // 189 · Los cinco del paso cero, los mismos que ve su asesor.
+  const base = pidActual ? (((await db.rpc('base_asesoria', { p_persona: pidActual })).data ?? null) as BaseAsesoria | null) : null;
   const misiones: Any[] = (mis as Any[]) ?? [];
   // 'misiones' se jubiló (159): lo que tenía vive en Hoy. La clave sigue viva porque /encuesta regresa ahí.
   const tabPedida = searchParams.tab === 'misiones' ? 'hoy' : (searchParams.tab ?? '');
@@ -221,6 +225,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
       {tab === 'expediente' && (
         <div className="space-y-4">
+          {base && pidActual ? <MisCinco personaId={String(pidActual)} base={base} /> : null}
           {faltan.length > 0 ? (
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="text-sm font-bold">Afina tus números</h2>

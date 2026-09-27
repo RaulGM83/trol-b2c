@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { abrirAsesoria, armarDiagnosticoAsesoria, guardarDiagnostico, ligarDiagnosticoAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
 import { PropuestaForm } from '@/components/trol3/RelacionPanel';
-import { PASOS, PASO_CLIENTE, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { PASOS_TODOS, PASO_CLIENTE, tituloPaso, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { PasoCero } from '@/components/trol3/PasoCero';
 import { CompartirContext } from '@/lib/trol3/compartir';
 import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
 import { FichaPanel } from '@/components/trol3/FichaPanel';
@@ -19,11 +20,13 @@ const fechaLarga = (iso?: string | null) => (iso ? new Date(`${String(iso).slice
  * pasó, no obliga a nada. Lo que el asesor ve aquí trae guion, valores internos y notas;
  * "Presentar" abre la versión limpia para compartir pantalla.
  */
-export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramientas }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode; herramientas?: { calculadora?: ReactNode; infonavit?: ReactNode } }) {
+export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramientas, pasoInicial }: { personaId: string; vista: VistaAsesoria; hrefTab: Record<string, string>; diagSlot?: ReactNode; herramientas?: { calculadora?: ReactNode; infonavit?: ReactNode }; pasoInicial?: number | null }) {
   const router = useRouter();
   const ses = vista.sesion && vista.sesion.estado === 'abierta' ? vista.sesion : null;
-  const [paso, setPaso] = useState<number>(ses?.paso ?? 1);
-  const [nota, setNota] = useState<string>(ses?.notas?.[String(ses?.paso ?? 1)] ?? '');
+  // 189 · `?paso=0` desde Relación ("Preparar") abre el paso cero aunque la sesión vaya en otro.
+  const paso0 = pasoInicial != null && pasoInicial >= 0 && pasoInicial <= 5 ? pasoInicial : (ses?.paso ?? 1);
+  const [paso, setPaso] = useState<number>(paso0);
+  const [nota, setNota] = useState<string>(ses?.notas?.[String(paso0)] ?? '');
   const [msg, setMsg] = useState<string | null>(null);
   const [estrategia, setEstrategia] = useState<string>(vista.diagnostico?.estrategia ?? '');
   const [msgDiag, setMsgDiag] = useState<string | null>(null);
@@ -36,6 +39,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const [compartiendo, setCompartiendo] = useState(false);
   const llave = `trol:compartiendo:${personaId}`;
   useEffect(() => { try { if (window.sessionStorage.getItem(llave) === '1') setCompartiendo(true); } catch { /* sin storage: arranca apagado */ } }, [llave]);
+  // 189 · Al compartir, el menú de /trabajo, el buscador y el encabezado del expediente desaparecen (globals.css).
+  useEffect(() => { document.documentElement.toggleAttribute('data-compartiendo', compartiendo); return () => { document.documentElement.removeAttribute('data-compartiendo'); }; }, [compartiendo]);
   const alternar = () => setCompartiendo((v) => { setFichaCod(null); try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ } return !v; });
 
   if (!ses) {
@@ -43,7 +48,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
     return (
       <section className="rounded-2xl border border-line bg-white p-6">
         <h2 className="text-lg font-extrabold">Asesoría</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted">Cinco pasos: su situación, lo que encontramos, escenarios, nuestra recomendación y acuerdos. Puedes saltar entre ellos; queda registro de la sesión y, al final, su diagnóstico armado.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">Empieza por lo que ya sabemos y las cinco cosas que hay que afinar (paso 0); luego su situación, lo que encontramos, escenarios, nuestra recomendación y acuerdos. Puedes saltar entre ellos; queda registro de la sesión y, al final, su diagnóstico armado.</p>{vista.base ? <p className="mt-2 text-xs"><b>Listo para asesorar: {vista.base.listos} de {vista.base.total}.</b>{vista.base.listos < vista.base.total ? ' La sesión arranca en el paso 0.' : ''}</p> : null}
         {previa ? <p className="mt-2 text-xs text-muted">Última asesoría cerrada el {fechaLarga(previa.cerrada_en) ?? '—'}.</p> : null}
         <button disabled={pending} className={`${dark} mt-4`} onClick={() => start(async () => { const r = await abrirAsesoria(personaId); if (!r.ok) setMsg((r as { error?: string }).error ?? 'No se pudo abrir.'); else router.refresh(); })}>{previa ? 'Empezar una asesoría nueva' : 'Empezar asesoría'}</button>
         {msg ? <p className="mt-2 text-xs text-red-600">{msg}</p> : null}
@@ -83,10 +88,10 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
     <CompartirContext.Provider value={compartiendo}>
     <div className={`${ancho ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}${compartiendo ? ' [&_.text-sm]:text-base [&_.text-xs]:text-sm' : ''}`}>
       <nav className={ancho ? 'hidden' : 'space-y-1'}>
-        {PASOS.map((p) => (
+        {PASOS_TODOS.map((p) => (
           <button key={p.n} type="button" onClick={() => ir(p.n)} className={p.n === paso ? 'flex w-full items-center gap-2.5 rounded-xl bg-white p-2.5 text-left shadow-sm ring-1 ring-line' : 'flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left hover:bg-white'}>
             <span className={p.n === paso ? 'h-6 w-6 shrink-0 rounded-full border-[3px] border-ink bg-lime' : vistos.has(p.n) ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white' : 'h-6 w-6 shrink-0 rounded-full border-2 border-line bg-white'}>{p.n !== paso && vistos.has(p.n) ? '✓' : ''}</span>
-            <span><span className="block text-[10px] text-muted">Paso {p.n}</span><span className={p.n === paso ? 'block text-sm font-bold' : 'block text-sm'}>{compartiendo ? PASO_CLIENTE[p.n] : p.titulo}</span></span>
+            <span><span className="block text-[10px] text-muted">Paso {p.n}{p.n === 0 && vista.base ? ` · ${vista.base.listos}/${vista.base.total}` : ''}</span><span className={p.n === paso ? 'block text-sm font-bold' : 'block text-sm'}>{compartiendo ? PASO_CLIENTE[p.n] : p.titulo}</span></span>
           </button>
         ))}
         {compartiendo ? null : <label className="mt-3 flex items-start gap-2 rounded-xl border border-dashed border-line p-2.5 text-xs">
@@ -97,7 +102,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="text-xl font-extrabold">{paso} · {compartiendo ? PASO_CLIENTE[paso] : PASOS[paso - 1].titulo}</h2>{compartiendo ? null : <p className="text-xs text-muted">Asesoría iniciada el {fechaLarga(ses.iniciada_en)}</p>}</div>
+          <div><h2 className="text-xl font-extrabold">{paso} · {tituloPaso(paso, compartiendo)}</h2>{compartiendo ? null : <p className="text-xs text-muted">Asesoría iniciada el {fechaLarga(ses.iniciada_en)}</p>}</div>
           <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={alternar} aria-pressed={compartiendo} title="Esconde guion, notas y valores internos mientras compartes tu pantalla" className={compartiendo ? 'flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white' : 'flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold'}><span className={compartiendo ? 'h-2 w-2 rounded-full bg-lime' : 'h-2 w-2 rounded-full bg-line'} />{compartiendo ? 'Compartiendo · salir' : 'Compartir pantalla'}</button>
           <a href={`/presentar/${personaId}?paso=${paso}`} target="_blank" rel="noreferrer" className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Presentar al cliente ↗</a>
@@ -110,7 +115,9 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
           {fichasPaso.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-amber-200 pt-2 text-[11px]"><span className="font-bold uppercase tracking-wide text-amber-800">Fichas a la mano</span>{fichasPaso.map((f) => <button key={f.codigo} type="button" onClick={() => setFichaCod(f.codigo)} className="rounded-full border border-amber-300 bg-white px-2.5 py-0.5 font-semibold hover:bg-amber-100">{f.codigo} · {f.titulo}</button>)}</div> : null}
         </div>}
 
-        {compartiendo ? null : <Copiloto key={paso} asesoriaId={ses.id} personaId={personaId} paso={paso} preparacion={ses.preparacion ?? null} respuestas={ses.copiloto ?? {}} fichasValidas={fichas.map((f) => f.codigo)} onFicha={setFichaCod} />}
+        {compartiendo || paso === 0 ? null : <Copiloto key={paso} asesoriaId={ses.id} personaId={personaId} paso={paso} preparacion={ses.preparacion ?? null} respuestas={ses.copiloto ?? {}} fichasValidas={fichas.map((f) => f.codigo)} onFicha={setFichaCod} />}
+
+        {paso === 0 && <PasoCero personaId={personaId} base={vista.base} compartiendo={compartiendo} nombre={c.nombre as string | null} onSeguir={() => ir(1)} />}
 
         {paso === 1 && (
           <>
@@ -285,8 +292,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         </section>}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {paso > 1 ? <button type="button" className={line} onClick={() => ir(paso - 1)}>← {compartiendo ? PASO_CLIENTE[paso - 1] : PASOS[paso - 2].titulo}</button> : <span />}
-          {paso < 5 ? <button type="button" className={dark} onClick={() => ir(paso + 1)}>Siguiente: {compartiendo ? PASO_CLIENTE[paso + 1] : PASOS[paso].titulo} →</button>
+          {paso > 0 ? <button type="button" className={line} onClick={() => ir(paso - 1)}>← {tituloPaso(paso - 1, compartiendo)}</button> : <span />}
+          {paso < 5 ? <button type="button" className={dark} onClick={() => ir(paso + 1)}>Siguiente: {tituloPaso(paso + 1, compartiendo)} →</button>
             : compartiendo ? <span /> : <button type="button" disabled={pending} className={dark} onClick={() => { if (window.confirm('¿Cerramos la asesoría? Queda registrada en su historia.')) start(async () => { await marcarAsesoria(ses.id, personaId, { cerrar: true }); router.refresh(); }); }}>Cerrar asesoría</button>}
         </div>
       </div>

@@ -18,6 +18,8 @@ export type FilaCarril = {
   ultimo_gesto?: string | null; ultimo_toque?: string | null; toques_30d?: number; vuelve_el?: string | null; en_proceso?: boolean; pide_equipo?: boolean;
   potencial?: { oportunidad_id?: string; nombre?: string; potencial?: number; valor?: number; urgencia_fecha?: string | null; factor?: number } | null;
   toque?: { n: number; tipo?: 'plantilla' | 'lukas' | 'llamada' } | null; tramo?: number;
+  /** 189 · cuántas de las cinco preguntas del paso 0 ya tenemos (o dijo que no sabe). */
+  base_listos?: number | null;
 };
 
 export const MOTIVOS_FRIO: [string, string][] = [
@@ -100,7 +102,7 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
 
   if (fila.carril === 'calientes') {
     if (fila.origen === 'reacciono' || fila.origen === 'llego_hoy') principales = <>{chat}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'atendido_chat'), 'Anotado: atendido.')}>Ya lo atendí</button></>;
-    else if (fila.origen === 'cita') principales = <Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria`} className={dark}>Preparar asesoría</Link>;
+    else if (fila.origen === 'cita') principales = <>{fila.base_listos != null && fila.base_listos < 5 ? <Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria&paso=0`} className={dark}>Prepárale la base ({fila.base_listos}/5)</Link> : null}<Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria`} className={fila.base_listos != null && fila.base_listos < 5 ? line : dark}>Preparar asesoría</Link></>;
     else if (fila.origen === 'tramite' || fila.origen === 'asignado') principales = <><Link href={`/trabajo/p/${fila.persona_id}?tab=oportunidades`} className={dark}>Ver trámite</Link><button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'contesto'), 'Anotado: contestó.')}>Contestó</button></>;
     else if (fila.origen === 'tocado') principales = <>{fila.chat_abierto ? chat : null}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'contesto'), 'Anotado: contestó. Ya no cuenta en el tope.')}>Contestó</button></>;
     else principales = llamadas(true);

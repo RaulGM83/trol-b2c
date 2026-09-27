@@ -106,6 +106,7 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
         <div className="text-xs text-muted">
           {uc ? `Último contacto: ${quien}, ${uc.canal === 'wa' || uc.canal === 'bot' ? 'WhatsApp' : uc.canal} · ${hace(uc.fecha)}` : 'Sin contacto humano todavía'}
           {' · '}<span className={f.chat_abierto ? 'font-semibold text-green-700' : ''}>{f.chat_abierto ? 'chat abierto' : 'chat cerrado'}</span>
+          {f.base_listos != null && f.base_listos < 5 ? <>{' · '}<span title="Las cinco preguntas del paso 0 (AFORE, saldo, Infonavit, expectativa, otros ahorros)">base {f.base_listos}/5</span></> : null}
           {f.no_contactar ? <span className="font-semibold text-red-600"> · NO CONTACTAR</span> : null}
         </div>
       </div>

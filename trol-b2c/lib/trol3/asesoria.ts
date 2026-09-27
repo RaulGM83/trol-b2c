@@ -13,9 +13,23 @@ export const PASOS: { n: number; titulo: string; corto: string }[] = [
   { n: 5, titulo: 'Acuerdos', corto: 'Acuerdos' },
 ];
 
+/** 189 · El paso cero: lo que ya sabemos y lo que falta afinar antes de recomendar (claude/86). Va aparte para no mover los índices 1–5. */
+export const PASO_CERO = { n: 0, titulo: 'Lo que ya sabemos', corto: 'Base' };
+export const PASOS_TODOS = [PASO_CERO, ...PASOS];
+export const tituloPaso = (n: number, cliente = false) => (cliente ? PASO_CLIENTE[n] : PASOS_TODOS.find((p) => p.n === n)?.titulo) ?? '';
+
 /** Cómo se llama cada paso cuando se le habla al cliente. */
 export const PASO_CLIENTE: Record<number, string> = {
-  1: 'Tu situación hoy', 2: 'Lo que encontramos en tu caso', 3: 'Tus caminos', 4: 'Lo que te recomendamos', 5: 'Lo que acordamos',
+  0: 'Lo que ya sabemos de ti', 1: 'Tu situación hoy', 2: 'Lo que encontramos en tu caso', 3: 'Tus caminos', 4: 'Lo que te recomendamos', 5: 'Lo que acordamos',
+};
+
+/** 189 · Lo que devuelve `base_asesoria(persona)`: highlights + las cinco preguntas con su estado. */
+export type BaseCampo = { campo: string; nombre: string; tipo: string; unidad: string | null; opciones: string[] | null; valor: unknown; capa: string | null; en: string | null; estimado: unknown; no_sabe: boolean };
+export type BasePregunta = { n: number; titulo: string; estado: 'tenemos' | 'no_sabe' | 'falta'; campos: BaseCampo[] };
+export type BaseAsesoria = {
+  highlights: { ley: string | null; semanas: number | null; semanas_capa: string | null; semanas_descontadas: number | null; edad: number | null; status_empleo: string | null;
+    conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null };
+  preguntas: BasePregunta[]; listos: number; total: number;
 };
 
 export type Sesion = {
@@ -39,6 +53,8 @@ export type VistaAsesoria = {
   /** 170 · Todas las fichas activas, para el panel contextual. */
   fichas: Ficha[];
   pendientes: { id: string; titulo: string; vence_el: string | null; responsable: string }[];
+  /** 189 · el paso cero. */
+  base?: BaseAsesoria | null;
 };
 
 export const mxn = (n: unknown) => (n == null || Number.isNaN(Number(n)) ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(n)));
@@ -85,6 +101,12 @@ export function guion(paso: number, v: VistaAsesoria): string {
   const n = (v.cliente?.nombre ?? '').split(' ')[0] || 'Hola';
   const base = v.numeros?.pension_base; const max = v.numeros?.pension_maxima;
   const top = v.oportunidades?.[0];
+  if (paso === 0) {
+    const faltan = (v.base?.preguntas ?? []).filter((q) => q.estado === 'falta').map((q) => q.titulo.replace(/\?/g, '').trim().toLowerCase());
+    return faltan.length
+      ? `Enséñale primero lo que ya tenemos de él —ley, semanas, edad, lo que hoy le tocaría— y dile que sólo falta afinar ${faltan.length === 1 ? 'una cosa' : `${faltan.length} cosas`} para arrancar: ${faltan.join(' · ')}. Si no sabe alguna, márcala como “no sabe” y sigue: se trabaja con el estimado.`
+      : 'Ya tenemos lo básico. Repásalo con él en un minuto —ley, semanas, edad, lo que hoy le tocaría— y entra al paso 1 por lo que le preocupa.';
+  }
   if (paso === 1) return v.cliente?.dolor_principal
     ? `Empieza por lo que le preocupa, con sus palabras: “${v.cliente.dolor_principal}”. Luego sus dos números${base ? `: hoy ${mxn(base)}` : ''}${max ? ` y hasta ${mxn(max)}` : ''}. No expliques todavía cómo se llega de uno a otro.`
     : `“${n}, antes de enseñarte números: ¿qué es lo que más te preocupa de tu pensión?” Anótalo abajo. Después, sus dos números${base ? `: hoy ${mxn(base)}` : ''}${max ? ` y hasta ${mxn(max)}` : ''}.`;

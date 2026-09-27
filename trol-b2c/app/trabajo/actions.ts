@@ -430,7 +430,16 @@ export async function declararAsesor(personaId: string, campo: string, valor: un
   const m = await requireMiembro();
   const { error } = await t3().rpc('declarar', { p_persona: personaId, p_campo: campo, p_valor: valor, p_actor: 'asesor', p_actor_id: m.id, p_capa: capa });
   if (error) return fail(error);
-  revalidatePath(`/trabajo/p/${personaId}`);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath(`/presentar/${personaId}`);
+  return ok();
+}
+
+/** 189 · Paso cero: el cliente dijo "no sé" a un dato base. No ensucia `datos`; se borra solo cuando llega el dato. */
+export async function baseNoSabe(personaId: string, campo: string, deshacer = false) {
+  await requireMiembro();
+  const { error } = await t3().rpc('base_no_sabe', { p_persona: personaId, p_campo: campo, p_deshacer: deshacer });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath(`/presentar/${personaId}`);
   return ok();
 }
 

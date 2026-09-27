@@ -14,7 +14,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
   if (!miembro) return <>{children}</>;
   return (
     <div className="min-h-screen bg-cream">
-      <header className="sticky top-0 z-10 border-b border-line bg-white">
+      <header className="chrome-trabajo sticky top-0 z-10 border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
           <Link href="/trabajo/cartera" className="rounded-lg bg-ink px-2 py-0.5 text-lg font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></Link>
           <nav className="flex items-center gap-3 text-sm">

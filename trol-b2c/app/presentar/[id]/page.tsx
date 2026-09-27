@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireMiembro, t3 } from '@/lib/trol3/server';
-import { PASOS, PASO_CLIENTE, caminos, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
+import { PASOS_TODOS, PASO_CLIENTE, caminos, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
 import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
+import { PasoCero } from '@/components/trol3/PasoCero';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Tu asesoría · Trol' };
@@ -13,12 +14,23 @@ export const metadata = { title: 'Tu asesoría · Trol' };
 // sólo si el asesor prendió "mostrar costos" en la sesión.
 const fechaLarga = (iso?: string | null) => (iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : null);
 
-export default async function Presentar({ params, searchParams }: { params: { id: string }; searchParams: { paso?: string } }) {
+// 189 · Paso 0 también aquí: en persona (evento, tablet) el asesor llena los cinco delante del
+// cliente, en grande. `?modo=evento` corta la sesión en el paso 2 y ofrece agendar: los caminos
+// y la recomendación dependen de saldos que en un stand todavía son estimados.
+export default async function Presentar({ params, searchParams }: { params: { id: string }; searchParams: { paso?: string; modo?: string } }) {
   await requireMiembro();
-  const { data } = await t3().rpc('asesoria_vista', { p_persona: params.id });
+  const db = t3();
+  const [{ data }, { data: lc }] = await Promise.all([db.rpc('asesoria_vista', { p_persona: params.id }), db.rpc('link_citas_para', { p_persona: params.id })]);
   const v = (data ?? null) as VistaAsesoria | null;
   if (!v) notFound();
-  const paso = Math.min(Math.max(Number(searchParams.paso ?? v.sesion?.paso ?? 1) || 1, 1), 5);
+  const evento = searchParams.modo === 'evento';
+  const base = v.base ?? null;
+  const pasoDefecto = v.sesion?.estado === 'abierta' ? v.sesion.paso : (base && base.listos < base.total ? 0 : 1);
+  const pasoPedido = searchParams.paso != null && /^[0-5]$/.test(searchParams.paso) ? Number(searchParams.paso) : pasoDefecto;
+  const ultimo = evento ? 2 : 5;
+  const paso = Math.min(Math.max(pasoPedido, 0), ultimo);
+  const pasosVisibles = PASOS_TODOS.filter((p) => p.n <= ultimo);
+  const linkCitas = ((lc as { link?: string } | null)?.link) ?? null;
   const c = v.cliente; const num = v.numeros;
   const nombre = [c.nombre, c.apellidos].filter(Boolean).join(' ');
   const brecha = num.pension_base && num.pension_maxima ? Number(num.pension_maxima) - Number(num.pension_base) : null;
@@ -26,7 +38,7 @@ export default async function Presentar({ params, searchParams }: { params: { id
   const maxPension = Math.max(1, ...cams.map((k) => Number(k.pension)), Number(num.pension_base ?? 0));
   const costos = !!v.sesion?.mostrar_costos;
   const rec = v.sesion?.escenario_recomendado ?? null;
-  const href = (n: number) => `/presentar/${params.id}?paso=${n}`;
+  const href = (n: number) => `/presentar/${params.id}?paso=${n}${evento ? '&modo=evento' : ''}`;
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-ink">
@@ -37,9 +49,15 @@ export default async function Presentar({ params, searchParams }: { params: { id
 
       <main className="flex flex-1 flex-col gap-7 px-6 pb-8 sm:px-14">
         <div>
-          <div className="text-sm font-bold uppercase tracking-wide text-muted">Paso {paso} de 5</div>
+          <div className="text-sm font-bold uppercase tracking-wide text-muted">{paso === 0 ? 'Antes de empezar' : `Paso ${paso} de ${ultimo}`}</div>
           <h1 className="mt-1 text-4xl font-extrabold tracking-tight">{PASO_CLIENTE[paso]}</h1>
         </div>
+
+        {paso === 0 && (
+          <div className="max-w-5xl [&_.text-\[10px\]]:text-xs [&_.text-\[11px\]]:text-sm [&_.text-lg]:text-2xl [&_.text-sm]:text-lg [&_.text-xs]:text-base [&_input]:text-lg [&_input]:py-2.5 [&_button]:text-base [&_button]:py-2.5">
+            <PasoCero personaId={params.id} base={base} compartiendo nombre={c.nombre as string | null} seguirHref={href(1)} />
+          </div>
+        )}
 
         {paso === 1 && (
           <>
@@ -127,11 +145,14 @@ export default async function Presentar({ params, searchParams }: { params: { id
 
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-6">
           <div className="flex items-center gap-2">
-            {PASOS.map((p) => <Link key={p.n} href={href(p.n)} aria-label={`Paso ${p.n}: ${PASO_CLIENTE[p.n]}`} className={p.n <= paso ? 'h-2 w-10 rounded-full bg-ink' : 'h-2 w-10 rounded-full bg-line'} />)}
+            {pasosVisibles.map((p) => <Link key={p.n} href={href(p.n)} aria-label={`Paso ${p.n}: ${PASO_CLIENTE[p.n]}`} className={p.n <= paso ? 'h-2 w-10 rounded-full bg-ink' : 'h-2 w-10 rounded-full bg-line'} />)}
           </div>
           <div className="flex items-center gap-2 text-sm">
-            {paso > 1 ? <Link href={href(paso - 1)} className="rounded-xl border border-line px-4 py-2 font-bold">← Anterior</Link> : null}
-            {paso < 5 ? <Link href={href(paso + 1)} className="rounded-xl bg-ink px-4 py-2 font-bold text-white">Siguiente →</Link> : null}
+            {paso > 0 ? <Link href={href(paso - 1)} className="rounded-xl border border-line px-4 py-2 font-bold">← Anterior</Link> : null}
+            {paso < ultimo ? <Link href={href(paso + 1)} className="rounded-xl bg-ink px-4 py-2 font-bold text-white">Siguiente →</Link> : null}
+            {evento && paso === ultimo ? (linkCitas
+              ? <a href={linkCitas} target="_blank" rel="noreferrer" className="rounded-xl bg-lime px-5 py-2.5 text-base font-bold text-ink">Agendemos tu asesoría →</a>
+              : <span className="rounded-xl bg-lime px-5 py-2.5 text-base font-bold text-ink">Lo que sigue: tu asesoría con un experto</span>) : null}
           </div>
           <p className="w-full text-xs text-muted">Son proyecciones hechas con tu información oficial del IMSS; no son una resolución del instituto. El trámite ante el IMSS es gratis.</p>
         </footer>

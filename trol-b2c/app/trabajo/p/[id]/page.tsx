@@ -23,7 +23,7 @@ import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CobroPanel } from '@/components/trol3/CobroPanel';
 import { RegistroRapido, ActivarCard, PropuestaForm, type Puede } from '@/components/trol3/RelacionPanel';
 import { AsesoriaSesion } from '@/components/trol3/AsesoriaSesion';
-import type { VistaAsesoria } from '@/lib/trol3/asesoria';
+import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
@@ -41,13 +41,15 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   } catch { return { title: 'Expediente · Trol' }; }
 }
 
-// 167 · La primera pestaña es la relación con el cliente; las demás se agrupan por lo que el
-// asesor está haciendo (asesorar · tramitar · consultar datos), no por tipo de dato.
-const GRUPO_TAB: Record<string, string> = { relacion: '', asesoria: '', calculadoras: 'Herramientas', infonavit: 'Herramientas', diagnostico: 'Herramientas', oportunidades: 'Trámite', documentos: 'Trámite', viraal: 'Trámite', resumen: 'Datos', bitacora: 'Datos' };
-const ORDEN_TAB = ['relacion', 'asesoria', 'calculadoras', 'infonavit', 'diagnostico', 'oportunidades', 'documentos', 'viraal', 'resumen', 'bitacora'];
-const TABS_BASE: [string, string][] = [['relacion', 'Relación'], ['asesoria', 'Asesoría'], ['resumen', 'Resumen'], ['calculadoras', 'Calculadoras'], ['diagnostico', 'Diagnóstico'], ['documentos', 'Documentos y beneficios'], ['oportunidades', 'Oportunidades'], ['viraal', 'Viraal'], ['bitacora', 'Bitácora']];
+// 189 · Tres pestañas de trabajo y un "Más" (claude/85, 86): Relación (la portada) · Asesoría (con
+// su paso 0) · Trámite (oportunidades, documentos). Lo demás —los datos completos, las herramientas
+// sueltas, la bitácora— sigue ahí pero fuera de la experiencia. Viraal ya no es pestaña: la mesa
+// de financiamiento es trabajo de back (sigue respondiendo a ?tab=viraal para los links viejos).
+const GRUPO_TAB: Record<string, string> = { oportunidades: 'Trámite' };
+const TABS_PRINCIPALES: [string, string][] = [['relacion', 'Relación'], ['asesoria', 'Asesoría'], ['oportunidades', 'Oportunidades'], ['documentos', 'Documentos y beneficios']];
+const TABS_MAS: [string, string][] = [['resumen', 'Datos completos'], ['calculadoras', 'Calculadoras'], ['infonavit', 'Infonavit'], ['diagnostico', 'Diagnóstico'], ['bitacora', 'Bitácora']];
 
-export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
+export default async function Expediente({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string; paso?: string } }) {
   const m = await requireMiembro();
   const db = t3();
   const [{ data: e }, { data: campos }, { data: datos }, { data: ck }, { data: ops }, { data: cat }, { data: consultas }, { data: docs }, { data: inter }, { data: contactos }, { data: citas }, { data: miembros }, { data: puntos }] = await Promise.all([
@@ -258,9 +260,10 @@ export default async function Expediente({ params, searchParams }: { params: { i
     });
   }
   const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;
-  const TABS: [string, string][] = (verTabInfonavit ? [...TABS_BASE, ['infonavit', 'Infonavit'] as [string, string]] : TABS_BASE)
-    .slice().sort((a, b) => ORDEN_TAB.indexOf(a[0]) - ORDEN_TAB.indexOf(b[0]));
+  const MAS: [string, string][] = TABS_MAS.filter(([t]) => t !== 'infonavit' || verTabInfonavit);
+  const TABS: [string, string][] = [...TABS_PRINCIPALES, ...MAS, ['viraal', 'Viraal']];
   const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'relacion';
+  const enMas = MAS.find(([t]) => t === tab) ?? null;
   // 167 · La misma parada que el cliente ve en su cuenta, y si hoy se le puede mandar plantilla.
   const [{ data: paradaCli }, { data: puedePl }, { data: perRel }] = await Promise.all([
     db.rpc('parada_cliente', { p_persona: params.id }),
@@ -270,6 +273,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const pa = (paradaCli ?? null) as Any | null;
   // 168 · La asesoría en cinco pasos: una sola lectura, la misma que usa /presentar.
   const vistaAsesoria = tab === 'asesoria' ? (((await db.rpc('asesoria_vista', { p_persona: params.id })).data ?? null) as VistaAsesoria | null) : null;
+  // 189 · Relación enseña si está listo para asesorar (los cinco del paso 0).
+  const baseRel = tab === 'relacion' ? (((await db.rpc('base_asesoria', { p_persona: params.id })).data ?? null) as BaseAsesoria | null) : null;
+  const pasoInicial = searchParams.paso != null && /^[0-5]$/.test(searchParams.paso) ? Number(searchParams.paso) : null;
   const chatAbierto = !!(perRel as Any)?.tako_visto_en && Date.now() - new Date((perRel as Any).tako_visto_en).getTime() < 24 * 3600e3;
 
   const SITE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
@@ -490,8 +496,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="rounded-2xl border border-line bg-white p-5">
+      {/* Header · se esconde al compartir pantalla (189): sólo queda el cliente y sus pasos */}
+      <div className="chrome-trabajo rounded-2xl border border-line bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-extrabold">{e.nombre ?? '(sin nombre)'} {e.apellidos ?? ''}</h1>
@@ -509,15 +515,21 @@ export default async function Expediente({ params, searchParams }: { params: { i
             <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
           </div>
         </div>
-        <nav className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3 text-sm">
-          {TABS.map(([t, l], k) => (
+        <nav className="mt-4 flex flex-wrap items-center gap-1 border-t border-line pt-3 text-sm">
+          {TABS_PRINCIPALES.map(([t, l]) => (
             <span key={t} className="flex items-center gap-1">
-            {GRUPO_TAB[t] && GRUPO_TAB[t] !== GRUPO_TAB[TABS[k - 1]?.[0] ?? ''] ? <span className="ml-3 mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">{GRUPO_TAB[t]}</span> : null}
+            {GRUPO_TAB[t] ? <span className="ml-3 mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">{GRUPO_TAB[t]}</span> : null}
             <Link href={href(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? 'bg-ink font-semibold text-white' : 'hover:bg-cream'}`}>
-              {l}{t === 'oportunidades' && opsAbiertas.length ? <span className="ml-1 rounded-full bg-lime px-1.5 text-[10px] text-ink">{opsAbiertas.length}</span> : null}{t === 'resumen' && alertas.length ? <span className="ml-1 rounded-full bg-amber-200 px-1.5 text-[10px] text-ink">{alertas.length}</span> : null}
+              {l}{t === 'oportunidades' && opsAbiertas.length ? <span className="ml-1 rounded-full bg-lime px-1.5 text-[10px] text-ink">{opsAbiertas.length}</span> : null}
             </Link>
             </span>
           ))}
+          <details className="relative ml-3" open={!!enMas}>
+            <summary className={`cursor-pointer list-none rounded-lg px-3 py-1.5 ${enMas ? 'bg-ink font-semibold text-white' : 'text-muted hover:bg-cream'}`}>{enMas ? `Más · ${enMas[1]}` : 'Más'} ▾</summary>
+            <div className="absolute left-0 z-10 mt-1 flex min-w-[200px] flex-col rounded-xl border border-line bg-white p-1 shadow-lg">
+              {MAS.map(([t, l]) => <Link key={t} href={href(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? 'bg-cream font-semibold' : 'hover:bg-cream'}`}>{l}{t === 'resumen' && alertas.length ? <span className="ml-1 rounded-full bg-amber-200 px-1.5 text-[10px] text-ink">{alertas.length}</span> : null}</Link>)}
+            </div>
+          </details>
         </nav>
       </div>
 
@@ -560,7 +572,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 {tocaCliente ? <p className="mt-2 text-xs text-muted">La pelota está de su lado. Si lleva días sin moverse, actívalo desde la derecha.</p> : null}
                 {(pa?.hallazgos ?? []).length ? <ul className="mt-3 space-y-1 border-t border-line pt-3 text-sm">{(pa.hallazgos as Any[]).map((h) => <li key={h.item} className="flex items-start gap-2"><span className={h.severidad === 'alta' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500' : 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-400'} /><span>{h.titulo}</span></li>)}</ul> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Link href={href('asesoria')} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">{'Empezar asesoría'}</Link>
+                  <Link href={href('asesoria')} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">{baseRel && baseRel.listos < baseRel.total ? 'Empezar asesoría (paso 0)' : 'Empezar asesoría'}</Link>
                   <Link href={href('oportunidades')} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold">Ver trámite y oportunidades</Link>
                 </div>
               </section>
@@ -600,6 +612,19 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 </div>
                 <p className="mt-2 text-[11px] text-muted">{(perRel as Any)?.app_visto_en ? `Abrió su cuenta por última vez el ${fmtFecha((perRel as Any).app_visto_en)}.` : 'Todavía no ha abierto su cuenta.'}</p>
               </section>
+              {baseRel ? (
+                <section className="rounded-2xl border border-line bg-white p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Listo para asesorar</div>
+                    <span className={baseRel.listos === baseRel.total ? 'rounded-full bg-lime px-2.5 py-1 text-[11px] font-bold' : 'rounded-full bg-cream px-2.5 py-1 text-[11px] font-bold'}>{baseRel.listos} de {baseRel.total}</span>
+                  </div>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {baseRel.preguntas.map((q) => <li key={q.n} className="flex items-start gap-2"><span className={q.estado === 'tenemos' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink' : q.estado === 'no_sabe' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full border-2 border-ink bg-white' : 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-line'} /><span className={q.estado === 'falta' ? 'text-muted' : ''}>{q.titulo}{q.estado === 'no_sabe' ? <span className="text-muted"> · no sabe</span> : ''}</span></li>)}
+                  </ul>
+                  <p className="mt-2 text-[11px] text-muted">Lo que la calculadora no da y sí cambia la recomendación. “No sabe” cuenta: se sigue con el estimado.</p>
+                  <Link href={`${href('asesoria')}&paso=0`} className="mt-3 inline-block rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold">{baseRel.listos < baseRel.total ? 'Preparar (llamada corta o chat)' : 'Revisar la base'}</Link>
+                </section>
+              ) : null}
               <ActivarCard personaId={e.persona_id} chatAbierto={chatAbierto} takoUrl={takoChat} op={opTop} puede={(puedePl ?? null) as Puede | null} />
               <PropuestaForm personaId={e.persona_id} ops={opsProp} pensionBase={e.pension_base == null ? null : Number(e.pension_base)} />
             </aside>
@@ -608,7 +633,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       })()}
 
       {tab === 'asesoria' && vistaAsesoria ? (
-        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} herramientas={{ calculadora: calcPanel, infonavit: verTabInfonavit ? infPanel : null }} />
+        <AsesoriaSesion personaId={e.persona_id} vista={vistaAsesoria} pasoInicial={pasoInicial} hrefTab={{ relacion: href('relacion'), resumen: href('resumen'), calculadoras: href('calculadoras'), infonavit: verTabInfonavit ? href('infonavit') : '', diagnostico: href('diagnostico'), documentos: href('documentos') }} diagSlot={diagPanel} herramientas={{ calculadora: calcPanel, infonavit: verTabInfonavit ? infPanel : null }} />
       ) : null}
 
       {tab === 'resumen' && (

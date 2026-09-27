@@ -17,3 +17,6 @@ body { background: #f4f4f2; color: #26282b; }
     --border: 220 6% 91%; --input: 220 6% 91%; --ring: 220 6% 16%; --radius: 0.5rem;
   }
 }
+
+/* 189 · Modo "Compartiendo" de la asesoría: fuera lo que es nuestro (menú, buscador, encabezado con CURP y teléfono). */
+html[data-compartiendo] .chrome-trabajo { display: none !important; }
