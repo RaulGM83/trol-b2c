@@ -90,8 +90,29 @@ export function eventosASegmentos(eventos: EventoLaboral[]): EmpleoHistorial[] {
   }
 
   const segmentos: EmpleoHistorial[] = [];
-  for (const [, evs] of porPatron) {
+  for (const [, evsCrudos] of porPatron) {
     let abierto: { inicio: string; salario: number | null; empleador: string | null; rp: string | null } | null = null;
+    let vistoPatron = false;
+    // v1.9: mismo patrón y mismo día. Con un tramo abierto va primero la baja
+    // (cierra el anterior) y luego el reingreso y sus modificaciones; sin tramo
+    // abierto: reingreso → modificación → baja (empleo de un día). Antes el
+    // orden dependía del parser y un tramo podía quedar abierto hasta hoy.
+    const evs: EventoLaboral[] = [];
+    let abiertoSim = false;
+    for (let i = 0; i < evsCrudos.length; ) {
+      let j = i;
+      while (j < evsCrudos.length && evsCrudos[j].fecha === evsCrudos[i].fecha) j++;
+      const rank: Record<EventoLaboral['tipo'], number> = abiertoSim
+        ? { discharge: 0, reentry: 1, salary_modification: 2 }
+        : { reentry: 0, salary_modification: 1, discharge: 2 };
+      for (const e of evsCrudos.slice(i, j).sort((a, b) => rank[a.tipo] - rank[b.tipo])) {
+        if (e.tipo === 'reentry') abiertoSim = true;
+        else if (e.tipo === 'discharge') abiertoSim = false;
+        else if (!abiertoSim && evs.length === 0) abiertoSim = true;
+        evs.push(e);
+      }
+      i = j;
+    }
     for (const e of evs) {
       if (e.tipo === 'reentry') {
         // reentry con segmento abierto: ciérralo el día anterior (baja implícita).
@@ -108,8 +129,10 @@ export function eventosASegmentos(eventos: EventoLaboral[]): EmpleoHistorial[] {
             empleador: abierto.empleador,
             rp: abierto.rp,
           };
-        } else {
-          // modificación sin alta previa registrada: abre segmento desde aquí.
+        } else if (!vistoPatron) {
+          // modificación sin alta previa registrada: abre segmento desde aquí
+          // (v1.9: sólo si es lo primero del patrón; una modificación huérfana
+          // después de una baja se ignora — antes abría un tramo sin fin).
           abierto = { inicio: e.fecha, salario: e.salario_base, empleador: e.empleador, rp: e.registro_patronal };
         }
       } else {
@@ -121,6 +144,7 @@ export function eventosASegmentos(eventos: EventoLaboral[]): EmpleoHistorial[] {
           abierto = null;
         }
       }
+      vistoPatron = true;
     }
     if (abierto) segmentos.push(seg(abierto, null)); // sigue activo
   }
@@ -285,6 +309,7 @@ export function getHistoriaPrecisa(
     | 'eventos_sisec'
     | 'eventos_belvo'
     | 'eventos_interpolados'
+    | 'eventos_deflactados'
     | 'empleos_interpolados'
     | 'empleos_deflactados'
     | 'empleos';
@@ -306,7 +331,19 @@ export function getHistoriaPrecisa(
   const evs = evSisec.length ? evSisec : evBelvo;
   if (evs.length) {
     const segs = cerrarSegmentosAbiertos(eventosASegmentos(evs), fuentes.empleos ?? []);
-    return { historia: empleosInterpolados(segs, opts?.hastaISO), fuente: 'eventos_interpolados' };
+    const interp = empleosInterpolados(segs, opts?.hastaISO);
+    // v1.9: los tramos que quedan PLANOS (alta = baja: el parser sólo trajo el
+    // último salario) se deflactan hacia atrás con la curva salarial, en vez de
+    // aplicar el salario final a todos los años (claude/89, hallazgo 1).
+    if (opts?.curvaSalarial) {
+      const planos = interp.filter((e) => !e.salario_inicial || e.salario_inicial === e.salario_base);
+      if (planos.length) {
+        const resto = interp.filter((e) => !(!e.salario_inicial || e.salario_inicial === e.salario_base));
+        const defl = empleosDeflactados(planos, opts.curvaSalarial, opts.hastaISO);
+        if (defl.length > planos.length) return { historia: [...resto, ...defl], fuente: 'eventos_deflactados' };
+      }
+    }
+    return { historia: interp, fuente: 'eventos_interpolados' };
   }
   if (fuentes.empleos?.length) {
     // 1) interpola los que traen salario inicial

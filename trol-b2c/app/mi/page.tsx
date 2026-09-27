@@ -10,7 +10,7 @@ import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { MisCinco } from '@/components/trol3/MisCinco';
 import { MillasCard, type MiMillas } from '@/components/trol3/MillasCard';
 import { MetaRetiro } from '@/components/trol3/MetaRetiro';
-import type { BaseAsesoria } from '@/lib/trol3/asesoria';
+import { rangoAforeTexto, type BaseAsesoria } from '@/lib/trol3/asesoria';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
 import { NegativaLey73 } from '@/components/NegativaLey73';
@@ -584,7 +584,7 @@ function HeroLey97({ e, base, pa, millas, semanasTxt }: { e: Any; base: BaseAses
         <div className="mt-0.5 text-sm font-bold">{palanca[0]}</div>
         <div className="text-xs text-white/70">{palanca[1]}{millas && !sinRegistro ? <> <a href="#millas" className="font-semibold text-lime underline">Ahorra desde aquí ↓</a></> : null}</div>
       </div>
-      <div className="mt-2 text-[11px] text-white/50">{['Ley 97', semanasTxt, saldo != null ? `tu AFORE ~${fmtMXN(saldo)}${saldoReal == null ? ' (estimado)' : ''}` : null, e.ley_en ? `datos del IMSS al ${fmtFecha(e.ley_en)}` : null].filter(Boolean).join(' · ')}</div>
+      <div className="mt-2 text-[11px] text-white/50">{['Ley 97', semanasTxt, saldoReal == null && rangoAforeTexto(base?.highlights.afore_rango) ? `tu AFORE ${rangoAforeTexto(base?.highlights.afore_rango)} (estimado)` : saldo != null ? `tu AFORE ~${fmtMXN(saldo)}${saldoReal == null ? ' (estimado)' : ''}` : null, e.ley_en ? `datos del IMSS al ${fmtFecha(e.ley_en)}` : null].filter(Boolean).join(' · ')}</div>
     </>
   );
 }

@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { baseNoSabe, declararAsesor, reevaluar } from '@/app/trabajo/actions';
-import { mxn, type BaseAsesoria, type BaseCampo, type BasePregunta } from '@/lib/trol3/asesoria';
+import { mxn, rangoAforeTexto, type BaseAsesoria, type BaseCampo, type BasePregunta } from '@/lib/trol3/asesoria';
 
 /**
  * 189 · El paso cero de la asesoría (claude/86): arriba lo que ya sabemos de él —para que vea
@@ -85,7 +85,7 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
               </div>
               <div className="mt-3 pl-9">
                 {q.n === 1 ? <Afore q={q} c={campo(q, 'afore_actual')} declarar={declarar} noSabe={noSabe} pending={pending} tu={tu} /> : null}
-                {q.n === 2 ? <Monto c={campo(q, 'saldo_rcv97')} placeholder="p. ej. 350000" declarar={declarar} noSabe={noSabe} pending={pending} tu={tu} conNoSabe /> : null}
+                {q.n === 2 ? <Monto c={campo(q, 'saldo_rcv97')} rango={rangoAforeTexto(h.afore_rango)} placeholder="p. ej. 350000" declarar={declarar} noSabe={noSabe} pending={pending} tu={tu} conNoSabe /> : null}
                 {q.n === 3 ? <Infonavit q={q} declarar={declarar} pending={pending} tu={tu} /> : null}
                 {q.n === 4 ? <Expectativa q={q} declarar={declarar} noSabe={noSabe} pending={pending} tu={tu} /> : null}
                 {q.n === 5 ? <Ahorros q={q} declarar={declarar} noSabe={noSabe} pending={pending} tu={tu} /> : null}
@@ -124,13 +124,13 @@ function Afore({ q, c, declarar, noSabe, pending, tu }: { q: BasePregunta; c?: B
   );
 }
 
-function Monto({ c, placeholder, declarar, noSabe, pending, tu, conNoSabe, campoNoSabe }: { c?: BaseCampo; placeholder: string; declarar: (campo: string, v: unknown) => void; noSabe: (campo: string, deshacer?: boolean) => void; pending: boolean; tu: boolean; conNoSabe?: boolean; campoNoSabe?: string }) {
+function Monto({ c, rango, placeholder, declarar, noSabe, pending, tu, conNoSabe, campoNoSabe }: { c?: BaseCampo; rango?: string | null; placeholder: string; declarar: (campo: string, v: unknown) => void; noSabe: (campo: string, deshacer?: boolean) => void; pending: boolean; tu: boolean; conNoSabe?: boolean; campoNoSabe?: string }) {
   const [v, setV] = useState<string>('');
   if (!c) return null;
   const actual = num(c.valor); const est = num(c.estimado);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {actual != null ? <span className="text-sm font-bold">{mxn(actual)}</span> : est != null ? <span className="text-sm text-muted">{tu ? 'Estimamos' : 'Estimado'} <b className="text-ink">{mxn(est)}</b></span> : null}
+      {actual != null ? <span className="text-sm font-bold">{mxn(actual)}</span> : rango ? <span className="text-sm text-muted">{tu ? 'Estimamos' : 'Estimado'} <b className="text-ink">{rango}</b></span> : est != null ? <span className="text-sm text-muted">{tu ? 'Estimamos' : 'Estimado'} <b className="text-ink">{mxn(est)}</b></span> : null}
       <input type="number" inputMode="numeric" min={0} className={input} placeholder={actual != null ? 'corregir…' : placeholder} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && num(v) != null) { declarar(c.campo, num(v)); setV(''); } }} />
       <button type="button" disabled={pending || num(v) == null} className={btn} onClick={() => { declarar(c.campo, num(v)); setV(''); }}>Guardar</button>
       {conNoSabe ? <button type="button" disabled={pending} className={chip(c.no_sabe)} onClick={() => noSabe(campoNoSabe ?? c.campo, c.no_sabe)}>{tu ? 'No sé' : 'No sabe'}</button> : null}

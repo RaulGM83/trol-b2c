@@ -50,7 +50,14 @@
 //     de hoy no llega al piso sin costo.
 //   · Mod 40 sin baja: el proyecto asume que deja de cotizar hoy.
 // Un snapshot anterior a esta versión NO es comparable con uno de hoy.
-export const ENGINE_VERSION = '2026.09.06.1';
+// 2026.09.27.1 — saldo AFORE calibrado con 24 saldos reales (claude/89):
+// contrafactual v1.9 y motor n8n v5.6 a la vez. Comisión sobre flujo antes de
+// 2008, tope de Cesantía y Vejez 1997-2006, cuota social nueva desde 2023,
+// retiros por desempleo cada 5 años dentro del hueco y residuo repartido,
+// eventos del mismo día bien ordenados, tramos planos deflactados cuando el
+// SISEC no trae modificaciones, SIN castigo plano de 10% y fugas 0.95 sobre
+// RCV-97. Mueve los saldos RCV/SAR y todo lo de Ley 97 que cuelga de ellos.
+export const ENGINE_VERSION = '2026.09.27.1';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.

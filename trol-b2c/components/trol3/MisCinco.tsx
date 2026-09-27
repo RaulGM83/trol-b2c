@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { BaseAsesoria, BasePregunta } from '@/lib/trol3/asesoria';
+import { rangoAforeTexto, type BaseAsesoria, type BasePregunta } from '@/lib/trol3/asesoria';
 
 /**
  * 189 · Los cinco del paso cero, del lado del cliente (claude/86): lo que la calculadora no
@@ -56,7 +56,7 @@ export function MisCinco({ personaId, base }: { personaId: string; base: BaseAse
                 <button type="button" disabled={pending} className={chip(q.estado === 'no_sabe')} onClick={() => noSe('afore_actual', q.estado === 'no_sabe')}>No sé</button>
               </> : null}
               {q.n === 2 ? <>
-                {num(c(q, 'saldo_rcv97')?.estimado) != null ? <span className="text-xs text-muted">Estimamos {mxn(c(q, 'saldo_rcv97')?.estimado)} ·</span> : null}
+                {rangoAforeTexto(base.highlights.afore_rango) ? <span className="text-xs text-muted">Estimamos {rangoAforeTexto(base.highlights.afore_rango)} ·</span> : num(c(q, 'saldo_rcv97')?.estimado) != null ? <span className="text-xs text-muted">Estimamos {mxn(c(q, 'saldo_rcv97')?.estimado)} ·</span> : null}
                 <input type="number" inputMode="numeric" min={0} className={input} placeholder="$ aproximado" value={v('saldo_rcv97')} onChange={(e) => set('saldo_rcv97', e.target.value)} />
                 <button type="button" disabled={pending || num(v('saldo_rcv97')) == null} className={btn} onClick={() => { declarar('saldo_rcv97', num(v('saldo_rcv97'))); set('saldo_rcv97', ''); }}>Guardar</button>
                 <button type="button" disabled={pending} className={chip(q.estado === 'no_sabe')} onClick={() => noSe('saldo_rcv97', q.estado === 'no_sabe')}>No sé</button>

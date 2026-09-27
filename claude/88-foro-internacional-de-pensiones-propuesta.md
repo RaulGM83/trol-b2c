@@ -1,6 +1,6 @@
 # 88 — Foro Internacional de Pensiones (21-oct-2026): propuesta (27 sep 2026)
 
-Sigue a `claude/83` (Finnosummit) y `claude/87` (lo que aprendimos de los 7). **Estado: propuesta acordada; semana 1 construida (190–192, `/fip`, panel, `/mi`); ver "Construido" abajo.**
+Sigue a `claude/83` (Finnosummit) y `claude/87` (lo que aprendimos de los 7). **Estado: semanas 1 y 2 construidas (190–193f); ver "Construido" abajo. Faltan: tarjetas del kit (Raul con Millas), ensayo general.**
 
 ## Lo que dijo Raul
 
@@ -105,9 +105,29 @@ Correo del FIP ──► app.trol.mx/fip (landing co-brandeada)
 
 **Queda para la semana 2:** hero Ley 97 · plantillas FIP a Meta (`fip_cuenta_lista`, recordatorio de sesión) · Lukas v20.7 (bloque `ref:fip2026` + evento `pedir_constancia`, que hoy manda `accionEvento` con la plantilla `trol_retomar` si el chat está cerrado) · lista "Por depositar a Millas" en Negocio (marcar depositado con referencia) · tarjetas con QR a `/fip` · CDA visible en la tarjeta de Millas · decidir si la parada 2 "nos toca" se generaliza a todo cliente con cabecera (`claude/87`, punto 1) o se queda sólo con `sesion_experto`.
 
+## Construido (28-sep, semana 2)
+
+Decisiones de Raul (28-sep): hero Ley 97 con su meta si la tenemos (el estimado de AFORE se mejorará después con casos reales, como mínimo o rango); gestorías se cobran con "Registrar un cobro"; cashback **con IVA, sobre lo que paga a Trol** (no sobre su ahorro ni lo que haga en Millas); "nos toca a nosotros" en parada 2 **para todos** los clientes con experto; tarjetas del kit se revisan con Millas; **nunca decir «oficial»** (Trol no es un medio autorizado por el IMSS: «tu información real» / «del IMSS»).
+
+**Base:**
+- **193** parada 2 con experto → `toca='trol'`, `cta='agendar'` ("Raúl te va a explicar lo que encontramos" + *Agendar con Raúl*; la cortesía conserva su texto; con cita futura, "Tu sesión con X es el …"); parada 1 `pedir_constancia` cuando el equipo la pidió (14 días); `registrar_cobro(persona, producto, medio, referencia, monto)` acepta gestorías y monto; `cashback_lista(estado)`, `cashback_depositar(ids, referencia)` (deja nota visible al cliente); `mi_millas` con CDA; `tg_avisar_consulta_lista` elige plantilla por código (`evento_plantilla_cuenta_lista`: fip2026 → `fip_cuenta_lista`) y manda `codigo` en el payload; `citas.recordada_en` + `recordar_sesiones()` + job `trol3-recordar-sesiones` (minuto 7 de cada hora) con interruptor `config.recordatorio_sesion = 'off'`.
+- **193b/c** `ordenes.producto` tiene FK a `productos`: las gestorías entran como producto `gestoria` (inactivo) con `metadata.gestoria_codigo`; `cashback_pct('gestoria') = 5`.
+- **193d** textos de cara al cliente sin «oficial» en `parada_de`, `mi_misiones`, `declarar`, `evaluar_persona`, `aplicar_regla_identidad`, `registrar_sisec`, `migrar_desde_public`, `sync_desde_cliente`.
+- **193e** ⚠️ bug de la semana 1: `alta_por_telefono` pone de cabecera al dueño del código (fip2026 → Raul), así que el reparto de `alta_web_evento` nunca entraba y por chat no había ni reparto ni cortesía. Ahora `tg_persona_evento` (after insert en personas) reparte entre `evento_asesores` y otorga `evento_beneficio` por cualquier puerta. Probado: dos altas seguidas → Lore y Andrea, ambas con `sesion_experto`.
+- **193f** `resumen_bot` (trolExpediente) trae `codigo_origen`, `evento` (marca) y `link_citas` del experto (o el general si no tiene).
+
+**App:** Hero Ley 97 en `/mi` (`HeroLey97` + `MetaRetiro`: meta vs. "si todo sigue igual" con barra, brecha al mes, "A tu edad, lo que más lo mueve" — registrar cuenta / AFORE que rinda más / ahorro voluntario con liga a la tarjeta de Millas; saldo AFORE marcado "(estimado)" si no es real) · CTA `constancia` en `/mi` (pasos + subir PDF + WhatsApp) · `CobroPanel` con gestorías y monto con IVA (dice el cashback generado) · **Negocio → Por depositar a Millas** (`/trabajo/millas`: seleccionar, copiar lista CURP·nombre·monto para Millas, marcar depositado con referencia; pestaña Depositado) · Negocio → Panel del evento · tarjeta de Millas con estado del CDA · "Pedir constancia" usa `trol_constancia` · textos sin «oficial» en `/fip`, `/mi`, paso 0, Presentar y Asesoría (quedan ~90 en otras pantallas y en el sitio: barrido pendiente).
+
+**WhatsApp:** `fip_cuenta_lista`, `trol_constancia`, `trol_recordatorio_sesion` dadas de alta en Tako (Utilidad, Tako Asesoría, **en revisión**). Textos en `tako/plantillas-whatsapp.md` §6.
+
+**Lukas v20.7** (`tako/prompt-lukas-v20.7.md`, completo sobre v20.6 — v20.6 nunca se pegó): §14.5-E Foro (saludo co-brandeado, no repetir alta, objetivo agendar con `link_citas`, Millas sin prometer rendimientos, diagnóstico no es cortesía, "seguimos buscando"), regla dura 11 (nunca «oficial»), línea de privacidad al pedir la CURP, botones nuevos en §14.4.1, eventos `pedir_constancia` y `recordatorio_sesion`, `consulta_lista` con `codigo`.
+
 ## Pendiente
 - **Logo del FIP**: no se pudo bajar de foropensiones.org (framerusercontent bloqueado desde aquí); Raul lo pone como `trol-b2c/public/marca/fip-blanco.png` y `fip-color.png`. Confirmar permiso con el organizador.
-- CLABE de Millas asignada a Trol (`trol3.config.millas_clabe`) y su link de referido (`millas_link`).
-- `link_citas` de **Lore y Vero** en `trol3.miembros` (hoy sólo Raul y Andrea; sin él, sus clientes del FIP sólo ven el botón de WhatsApp para agendar).
+- ~~CLABE de Millas~~ cargada el 28-sep (`millas_clabe` = 646180388520000243, STP, dígito verificador ok; referencia = CURP del cliente). Falta sólo el link de Millas (`millas_link`), opcional.
+- **Pendiente (Raul, 28-sep):** `link_citas` de **Lore y Vero** en `trol3.miembros` (hoy sólo Raul y Andrea; sin él, sus clientes del FIP agendan con el link general).
+- Pegar **Lukas v20.7**; cuando Meta apruebe `trol_recordatorio_sesion`, encender `recordatorio_sesion`.
+- Barrido de «oficial» en el resto de pantallas y el sitio.
+- Tarjetas del kit con QR a `app.trol.mx/i/fip2026` (→ `/fip`), por definir con Millas.
 - Aplicar la 185 (política por canal) antes de tocar la del FIP.
 - Pedir a Millas el SVG de su logo.

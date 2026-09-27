@@ -33,14 +33,14 @@ if (!URL || !KEY) {
 const args = process.argv.slice(2);
 const LIMIT = args.includes('--limit') ? Number(args[args.indexOf('--limit') + 1]) : Infinity;
 const DRY = args.includes('--dry-run');
-// v1.8: castigo plano TEMPORAL sobre todos los saldos (conservador mientras se
-// junta muestra real de declarados). Se removerá poniéndolo en 0.
-// Override: --castigo 0.05  (o CASTIGO_PLANO=0 env).
+// v1.9 (27-sep-2026): castigo plano RETIRADO (era 0.10 en v1.8), a la vez que
+// el motor v5.6 de n8n. La calibración ahora es el factor de fugas 0.95 sobre
+// RCV-97 dentro del motor (claude/89). Override: --castigo 0.05 (o env).
 const CASTIGO_PLANO = args.includes('--castigo')
   ? Number(args[args.indexOf('--castigo') + 1])
   : process.env.CASTIGO_PLANO != null
     ? Number(process.env.CASTIGO_PLANO)
-    : 0.1;
+    : 0;
 
 const H = {
   apikey: KEY,

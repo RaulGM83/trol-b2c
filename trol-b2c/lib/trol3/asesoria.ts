@@ -23,12 +23,24 @@ export const PASO_CLIENTE: Record<number, string> = {
   0: 'Lo que ya sabemos de ti', 1: 'Tu situación hoy', 2: 'Lo que encontramos en tu caso', 3: 'Tus caminos', 4: 'Lo que te recomendamos', 5: 'Lo que acordamos',
 };
 
+/** 194 · Rango del saldo AFORE del motor v5.6 (claude/89): piso/techo alrededor del estimado central. */
+export type RangoAfore = { piso: number; central: number; techo: number; factor_piso?: number; factor_techo?: number; banderas?: string[] };
+
+/** 194 · "entre $X y $Y": el estimado del saldo AFORE se dice como rango, redondeado a miles. */
+export function rangoAforeTexto(r: RangoAfore | null | undefined): string | null {
+  if (!r || !(Number(r.piso) > 0) || !(Number(r.techo) > 0)) return null;
+  const miles = (n: number) => '$' + (Math.round(n / 1000) * 1000).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+  return `entre ${miles(Number(r.piso))} y ${miles(Number(r.techo))}`;
+}
+
 /** 189 · Lo que devuelve `base_asesoria(persona)`: highlights + las cinco preguntas con su estado. */
 export type BaseCampo = { campo: string; nombre: string; tipo: string; unidad: string | null; opciones: string[] | null; valor: unknown; capa: string | null; en: string | null; estimado: unknown; no_sabe: boolean };
 export type BasePregunta = { n: number; titulo: string; estado: 'tenemos' | 'no_sabe' | 'falta'; campos: BaseCampo[] };
 export type BaseAsesoria = {
   highlights: { ley: string | null; semanas: number | null; semanas_capa: string | null; semanas_descontadas: number | null; semanas_recuperadas: number | null; edad: number | null; edad_decimal: number | null; status_empleo: string | null;
-    conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null };
+    conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null;
+    /** 194 · rango del saldo AFORE (RCV 97 + SAR 92) del motor v5.6; null con semillas anteriores. */
+    afore_rango?: RangoAfore | null };
   preguntas: BasePregunta[]; listos: number; total: number;
 };
 

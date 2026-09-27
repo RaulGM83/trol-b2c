@@ -1,6 +1,17 @@
 // ============================================================================
 // Contrafactual Compara Afore — metodología v1.4 (18/19-jul-2026)
 //
+// v1.9 (27-sep-2026) — calibrado con 24 saldos reales (claude/89), espejo del
+// motor v5.6 de n8n:
+//   · comisión sobre flujo antes de 2008 (1.4% ≤2001, 1.2% 02-04, 1.0% 05-07,
+//     0.9% ene-feb 2008) descontada de cada aportación;
+//   · tope de Cesantía y Vejez 1997-2006 (15 SM en 1997 +1 SM/año; Retiro 25);
+//   · cuota social: la tabla de la reforma 2020 aplica desde 2023;
+//   · F2: un retiro posible cada 5 años dentro de desempleos largos y el
+//     residuo repartido en los desempleos que queden, topado al monto de ley;
+//   · sin castigo plano (el batch pasa 0); factor de fugas 0.95 sobre RCV-97
+//     (días no pagados, desfase bimestral), uniforme: no mueve el ranking.
+//
 // Simula el saldo RCV-97 + SAR-92 que el cliente tendría hoy si sus recursos
 // hubieran estado, buy-and-hold, en cada una de las AFOREs (método de
 // unidades sobre precios de bolsa encadenados por generación). Reporta:
@@ -94,6 +105,11 @@ export interface EntradaContrafactual {
    * No afecta el ranking (es uniforme) ni el factor_retiro_efectivo.
    */
   castigo_plano?: number | null;
+  /**
+   * v1.9: fugas no modeladas (días no pagados, desfase bimestral) sobre el
+   * RCV-97. Default 0.95 (calibración claude/89). Uniforme: no mueve el ranking.
+   */
+  factor_fugas?: number | null;
   /**
    * Fecha del SISEC (emisión). La cobertura se calcula HASTA esta fecha para
    * no castigar/premiar a vigentes cuyo SISEC no se ha actualizado.
@@ -284,6 +300,38 @@ export function tasaRcv(anio: number, sbcDiario: number): number {
   return TASA_RETIRO + patronal + TASA_CESANTIA_TRABAJADOR;
 }
 
+/** v1.9: año desde el que aplica la cuota social de la reforma de dic-2020. */
+export const CS_REFORMA_DESDE = 2023;
+
+/**
+ * v1.9: comisión sobre flujo (fracción del SBC) que las AFOREs cobraban sobre
+ * cada aportación antes de 2008 (además de la de saldo, que ya va en los
+ * precios de bolsa). Redalyc: 1.35-1.45% en 1998, 0.90% en 2007, eliminada 2008.
+ */
+export function comisionFlujo(anio: number, mes: number): number {
+  if (anio <= 2001) return 0.014;
+  if (anio <= 2004) return 0.012;
+  if (anio <= 2007) return 0.01;
+  if (anio === 2008 && mes <= 2) return 0.009;
+  return 0;
+}
+
+/**
+ * v1.9: aportación RCV diaria neta de comisión sobre flujo y con el tope de
+ * Cesantía y Vejez de la ley 1997 (15 SM en 1997 + 1 SM por año hasta 25; el
+ * Retiro 2% topa siempre en 25 UMA, ya aplicado en sbcMensual).
+ */
+export function aporteRcvDiario(anio: number, mes: number, sbcDiario: number): number {
+  const tasa = tasaRcv(anio, sbcDiario);
+  let a = tasa * sbcDiario;
+  if (anio <= 2006) {
+    const capCV = (15 + Math.max(0, anio - 1997)) * porAnio(SALARIO_MINIMO, anio);
+    a = TASA_RETIRO * sbcDiario + (tasa - TASA_RETIRO) * Math.min(sbcDiario, capCV);
+  }
+  a -= comisionFlujo(anio, mes) * sbcDiario;
+  return Math.max(0, a);
+}
+
 /**
  * Cuota social diaria (pesos corrientes del año) según el régimen vigente.
  * Montos nominales de cada decreto indexados por UMA (proxy de INPC).
@@ -295,8 +343,9 @@ export function cuotaSocialDiaria(anio: number, sbcDiario: number): number {
     // 5.5% del SMG-DF jul-97 ($1.45), todos los salarios, indexado.
     return CS_1997_DIARIA * (uma / porAnio(UMA, CS_1997_ANIO));
   }
-  if (anio < 2021) {
-    // Tabla 2009 por veces salario mínimo, tope 15 SM.
+  if (anio < CS_REFORMA_DESDE) {
+    // Tabla 2009 por veces salario mínimo, tope 15 SM (v1.9: vigente hasta 2022;
+    // la reforma de dic-2020 cambió la cuota social a partir de 2023).
     const vecesSm = sbcDiario / sm;
     const idx = uma / porAnio(UMA, CS_2009_ANIO);
     for (const [tope, monto] of CS_2009) {
@@ -304,7 +353,7 @@ export function cuotaSocialDiaria(anio: number, sbcDiario: number): number {
     }
     return 0; // > 15 SM
   }
-  // Reforma 2021+: 1 SM → $10.75; bandas UMA hasta 4.00; transitorio 4.01-7.09.
+  // Reforma (aplica 2023+): 1 SM → $10.75; bandas UMA hasta 4.00; transitorio 4.01-7.09.
   const idx = uma / porAnio(UMA, CS_2021_ANIO);
   if (sbcDiario <= sm * 1.001) return CS_2021_1SM * idx;
   const vecesUma = sbcDiario / uma;
@@ -383,6 +432,8 @@ function mediana(xs: number[]): number {
 // subcuenta RCV-97 (el retiro por desempleo no toca el SAR-92).
 // ----------------------------------------------------------------------------
 
+/** v1.9: fugas no modeladas sobre RCV-97 (claude/89). */
+export const FACTOR_FUGAS_DEFAULT = 0.95;
 const RETIRO_TOPE_PCT = 0.115; // 11.5% del saldo RCV (tope de Modalidad B)
 const RETIRO_DIAS_A = 30; // Modalidad A: 30 días del SBC reciente
 const RETIRO_DIAS_B = 90; // Modalidad B: 90 días del salario prom. 250 sem
@@ -491,7 +542,11 @@ export function reconstruirRetirosDesempleo(params: {
       let j = i;
       while (j <= corteIdx && !cot.has(j)) j++;
       const largo = j - inicio;
-      if (largo >= RETIRO_MIN_GAP_MESES && inicio >= rcvIniIdx) gaps.push(inicio);
+      if (largo >= RETIRO_MIN_GAP_MESES && inicio >= rcvIniIdx) {
+        gaps.push(inicio);
+        // v1.9: la ley permite un retiro cada 5 años; un desempleo largo da más oportunidades.
+        for (let k = inicio + RETIRO_COOLDOWN_MESES; k < j; k += RETIRO_COOLDOWN_MESES) gaps.push(k);
+      }
       i = j;
     } else i++;
   }
@@ -556,20 +611,20 @@ export function reconstruirRetirosDesempleo(params: {
     }
   }
 
-  // Residuo: retiro parcial en el desempleo elegible más antiguo disponible.
+  // Residuo (v1.9): se reparte en los desempleos elegibles que queden, del más
+  // antiguo al más reciente, respetando 5 años entre retiros; cada uno topado a
+  // su monto de ley en esa fecha (antes: un solo retiro de hasta 100%).
   if (restante > EPS) {
-    const usados = new Set(retiros.map((r) => r.idx));
     const gapsAsc = [...gaps].sort((a, b) => a - b);
     for (const g of gapsAsc) {
-      if (usados.has(g)) continue;
-      // respeta cooldown contra retiros vecinos ya colocados
-      if (retiros.some((r) => Math.abs(r.idx - g) < RETIRO_COOLDOWN_MESES)) continue;
+      if (restante <= EPS) break;
+      if (retiros.some((r) => r.idx === g || Math.abs(r.idx - g) < RETIRO_COOLDOWN_MESES)) continue;
+      const { f: fLey } = fraccionEn(g);
       const w = wObsEn(g);
-      if (!(w > 0)) continue;
-      const f = Math.max(0, Math.min(1, restante / w));
+      if (!(fLey > 0) || !(w > 0)) continue;
+      const f = Math.min(fLey, restante / w);
       retiros.push({ idx: g, fraccion: f, semanas: f * w });
       restante -= f * w;
-      break;
     }
   }
 
@@ -583,7 +638,9 @@ export function calcularContrafactual(input: EntradaContrafactual): ResultadoCon
     'Precios de bolsa CONSAR (netos de comisión), series encadenadas por generación.',
     'Buy-and-hold: cada AFORE simulada sostiene los recursos toda la historia.',
     'SAR-92: 2% del SBC may92-jun97 capitalizado con CETES 28d (promedios anuales), entra como monto inicial en jul-97.',
-    'Retiros parciales y aportaciones voluntarias no modelados.',
+    'Aportaciones voluntarias no modeladas.',
+    'Comisión sobre flujo antes de 2008 y tope de Cesantía y Vejez 1997-2006 aplicados a cada aportación (v1.9).',
+    'Fugas no modeladas (días no pagados, desfase bimestral): 5% sobre RCV-97 (v1.9).',
     'Huecos de salario imputados con ratio salario/UMA histórico del cliente.',
     'Eventos sin cambios de salario: interpolación del salario de alta al de baja (o al actual) por empleo.',
     'AFOREs con serie corta: prefijo índice-industria (solo simulación, no ranking).',
@@ -611,7 +668,8 @@ export function calcularContrafactual(input: EntradaContrafactual): ResultadoCon
   // 3) Aportaciones RCV mensuales (nominal)
   const aportaciones: Array<{ mes: string; monto: number }> = mesesRcv.map((m) => {
     const anio = anioDe(m.mes);
-    const rcv = tasaRcv(anio, m.sbcDiario) * m.sbcDiario * m.dias;
+    const mesNum = Number(m.mes.slice(5, 7));
+    const rcv = aporteRcvDiario(anio, mesNum, m.sbcDiario) * m.dias;
     const cs = cuotaSocialDiaria(anio, m.sbcDiario) * m.dias;
     return { mes: m.mes, monto: rcv + cs };
   });
@@ -648,6 +706,7 @@ export function calcularContrafactual(input: EntradaContrafactual): ResultadoCon
   // 4) Valuación por AFORE (método de unidades). Los retiros por desempleo
   // quitan fracción de las UNIDADES RCV en su fecha → el rendimiento perdido
   // queda capturado (a diferencia de un factor plano sobre el saldo de hoy).
+  const fugas = Math.max(0, Math.min(1, Number(input.factor_fugas ?? FACTOR_FUGAS_DEFAULT)));
   const rcvBrutoPorAfore = new Map<string, number>();
   const saldos: SaldoAfore[] = [];
   for (const s of input.series) {
@@ -681,6 +740,8 @@ export function calcularContrafactual(input: EntradaContrafactual): ResultadoCon
       ri++;
     }
 
+    unidadesRcv *= fugas; // v1.9: fugas no modeladas (uniforme, no mueve el ranking)
+    unidadesRcvBruto *= fugas;
     const unidades92 = b92 > 0 && p97 ? b92 / p97 : 0;
     rcvBrutoPorAfore.set(s.afore, unidadesRcvBruto * pHoy);
     saldos.push({
@@ -755,7 +816,7 @@ export function calcularContrafactual(input: EntradaContrafactual): ResultadoCon
   const estimadoPrevio = input.estimado_previo ?? null;
 
   return {
-    version: 'contrafactual-1.8',
+    version: 'contrafactual-1.9',
     precios_corte: hoyMes,
     saldos_por_afore: saldos.map((s) => ({
       afore: s.afore,
