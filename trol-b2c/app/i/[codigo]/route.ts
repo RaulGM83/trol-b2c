@@ -46,8 +46,13 @@ async function registrarClic(codigo: string, req: Request): Promise<void> {
   }
 }
 
+// 190 · Códigos con landing web propia: el QR de las tarjetas del evento cae en la página,
+// no en WhatsApp (la página registra su propia visita y ofrece el chat como alternativa).
+const LANDING_WEB: Record<string, string> = { fip2026: '/fip' };
+
 export async function GET(req: Request, { params }: { params: { codigo: string } }) {
   const codigo = (params.codigo ?? '').slice(0, 64);
+  if (LANDING_WEB[codigo]) return NextResponse.redirect(new URL(LANDING_WEB[codigo], req.url));
   await registrarClic(codigo, req);
   return NextResponse.redirect(waInvitacionBot(codigo));
 }

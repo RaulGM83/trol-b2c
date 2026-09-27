@@ -8,6 +8,7 @@ import { waLink } from '@/lib/whatsapp';
 import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { MisCinco } from '@/components/trol3/MisCinco';
+import { MillasCard, type MiMillas } from '@/components/trol3/MillasCard';
 import type { BaseAsesoria } from '@/lib/trol3/asesoria';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
@@ -57,6 +58,10 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   await db.rpc('marcar_visto_en_app');
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }, { data: paradaData }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss'), db.rpc('mi_parada')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
+  // 192 · Patrocinio (FIP) y Millas: sólo para quien llegó por un código con aliado.
+  const [{ data: marcaData }, { data: millasData }] = await Promise.all([db.rpc('mi_marca'), db.rpc('mi_millas')]);
+  const marca = (marcaData as { patrocinio?: string; aliado?: string } | null) ?? null;
+  const millas = (millasData as MiMillas | null) ?? null;
   if (error || !x) return (
     <main className="mx-auto max-w-md space-y-3 px-5 py-10 text-sm">
       <p>No pudimos cargar tu cuenta en este momento. Vuelve a intentarlo en un minuto, o escríbenos y lo vemos contigo.</p>
@@ -104,6 +109,12 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
         <span className="rounded-lg bg-ink px-2.5 py-1 text-xl font-extrabold tracking-tight text-white"><img src="/marca/logo-trol-blanco.svg" alt="Trol financiero" className="inline-block h-[1.35em] w-auto align-middle" /></span>
         {tab === 'hoy' ? <span className="text-xs text-muted">Tu cuenta Trol</span> : <Link href={href('puntos')} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{e.puntos} pts</Link>}
       </header>
+      {marca?.patrocinio ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-2.5">
+          <p className="text-xs"><b>Tu asesoría básica es cortesía de</b> {marca.patrocinio}.</p>
+          {marca.aliado === 'millas' ? <img src="/marca/millas-color.png" alt="Millas para el Retiro" className="h-6 w-auto shrink-0" /> : null}
+        </div>
+      ) : null}
 
       {tab === 'hoy' && (
         <div className="space-y-4">
@@ -156,7 +167,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           ) : null}
 
 
-          {pa ? <LoQueSigue pa={pa} jugada={(jugada as Any | null) ?? null} identidad={identidad} faltan={faltan} tieneSemilla={!!e.tiene_semilla} /> : <ChatTrol />}
+          {pa ? <LoQueSigue pa={pa} jugada={(jugada as Any | null) ?? null} identidad={identidad} faltan={faltan} tieneSemilla={!!e.tiene_semilla} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} /> : <ChatTrol />}
+
+          {millas ? <MillasCard m={millas} /> : null}
 
           {pa && ((pa.hallazgos ?? []).length > 0 || Number(pa.en_orden) > 0) && Number(pa.parada) > 1 ? (
             <section className="rounded-2xl border border-line bg-white p-5">
@@ -432,7 +445,7 @@ function Ruta({ parada, frase }: { parada: number; frase: string }) {
 }
 
 /** 157 · UNA sola cosa que sigue, y con dueño. No tener nada que hacer también es un estado válido. */
-function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla }: { pa: Any; jugada: Any | null; identidad: Identidad | null; faltan: Any[]; tieneSemilla: boolean }) {
+function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla, linkCitas }: { pa: Any; jugada: Any | null; identidad: Identidad | null; faltan: Any[]; tieneSemilla: boolean; linkCitas: string | null }) {
   const tocaCliente = pa.toca === 'cliente';
   const lime = pa.cta === 'avanzar';
   const op = (pa.oportunidad as Any | null) ?? null;
@@ -470,6 +483,13 @@ function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla }: { pa: Any; 
         </>
       ) : null}
       {pa.cta === 'chat' ? <div className="mt-3"><HablarBoton texto={pa.boton ?? 'Escribir por WhatsApp'} mensaje={pa.mensaje_wa} oscuro /></div> : null}
+      {/* 192 · Sesión de cortesía: el botón es la agenda de su experto; el chat queda como alternativa. */}
+      {pa.cta === 'agendar' ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {linkCitas ? <a href={linkCitas} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">{pa.boton ?? 'Agendar mi sesión'}</a> : null}
+          <HablarBoton texto={linkCitas ? 'Mejor por WhatsApp' : (pa.boton ?? 'Agendar mi sesión')} mensaje={pa.mensaje_wa} oscuro={!linkCitas} />
+        </div>
+      ) : null}
       {pa.cta === 'avanzar' ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <HablarBoton texto={pa.boton ?? 'Quiero avanzar'} mensaje={pa.mensaje_wa} oscuro />

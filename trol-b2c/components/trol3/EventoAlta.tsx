@@ -55,7 +55,7 @@ export function EventoAlta({ codigo, etiqueta, eventos, registrados, qrChat, waU
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div><h1 className="text-2xl font-extrabold">{etiqueta}</h1><p className="text-xs text-muted">Registra, enseña su cuenta y sigue platicando: la información del IMSS llega sola.</p></div>
+        <div><h1 className="text-2xl font-extrabold">{etiqueta}</h1><p className="text-xs text-muted">Registra, enseña su cuenta y sigue platicando: la información del IMSS llega sola. <Link href={`/trabajo/evento/panel?c=${codigo}`} className="font-semibold underline">Panel del evento →</Link></p></div>
         {eventos.length > 1 ? <select value={codigo} onChange={(e) => router.push(`/trabajo/evento?c=${e.target.value}`)} className="rounded-lg border border-line bg-white px-2 py-1 text-xs">{eventos.map((e) => <option key={e.codigo} value={e.codigo}>{e.etiqueta ?? e.codigo}</option>)}</select> : null}
       </div>
 

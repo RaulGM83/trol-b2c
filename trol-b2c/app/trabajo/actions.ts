@@ -1896,3 +1896,50 @@ export async function fijarReto(meta: number) {
 export async function noAplicaOportunidad(opId: string, personaId: string, motivo: string, nota?: string | null) {
   return cambiarEstadoOportunidad(opId, personaId, 'no_aplica', { motivo, nota: nota ?? null });
 }
+
+// ── 191 · Panel del evento: lo que le toca al equipo con cada registrado ─────────────────
+export type AccionEvento = 'reintentar_jordan' | 'reintentar_belvo' | 'ventanilla' | 'pedir_constancia' | 'llamado' | 'sin_respuesta';
+const ACCION_EVENTO: Record<AccionEvento, string> = {
+  reintentar_jordan: 'Se volvió a pedir su historial (Jordan)',
+  reintentar_belvo: 'Se volvió a pedir su historial (Belvo)',
+  ventanilla: 'Se pidió por ventanilla del IMSS',
+  pedir_constancia: 'Se le pidió su Reporte de Semanas Cotizadas',
+  llamado: 'Llamada: contestó',
+  sin_respuesta: 'Llamada sin respuesta',
+};
+/**
+ * Una acción por renglón del panel del evento. Cada una deja una interacción con
+ * `metadata.evento_accion`, que es lo que el panel enseña como "último seguimiento", para que
+ * dos asesores no le caigan a la misma persona.
+ */
+export async function accionEvento(personaId: string, codigo: string, accion: AccionEvento) {
+  const m = await requireMiembro();
+  let detalle = '';
+  if (accion === 'reintentar_jordan' || accion === 'reintentar_belvo') {
+    const prov = accion === 'reintentar_jordan' ? 'jordan' : 'belvo';
+    const r = await pedirConsulta(personaId, 'imss_historial', false, `evento ${codigo}: reintento manual`, true, prov);
+    if (!r.ok) return r;
+    const res = (r as { resultado?: { ok?: boolean; motivo?: string; estado?: string } }).resultado;
+    if (res && res.ok === false) return fail(`No se pidió: ${res.motivo ?? 'sin motivo'}`);
+    detalle = res?.estado ? ` · ${res.estado}` : '';
+  } else if (accion === 'ventanilla') {
+    const r = await pedirVentanilla(personaId, `evento ${codigo}: la automática no pudo`);
+    if (!r.ok) return r;
+    detalle = ` · ~${(r as { eta_min?: number }).eta_min ?? 30} min`;
+  } else if (accion === 'pedir_constancia') {
+    const r = await avisar(personaId, 'pedir_constancia', {
+      payload: { codigo },
+      resumen: 'El IMSS no nos devolvió tu historial. Mándanos tu Reporte de Semanas Cotizadas (lo bajas en serviciosdigitales.imss.gob.mx) y con eso armamos tu asesoría.',
+      plantilla: 'trol_retomar',
+    });
+    if (!r.ok) return fail(`No salió el aviso: ${r.error ?? r.motivo ?? 'sin detalle'}`);
+    detalle = r.via === 'plantilla' ? ' · salió la plantilla' : ' · le llegó en su chat';
+  }
+  const canal = accion === 'llamado' || accion === 'sin_respuesta' ? 'llamada' : 'nota';
+  await t3().rpc('registrar_interaccion', {
+    p_persona: personaId, p_canal: canal, p_actor: 'asesor', p_actor_id: m.id, p_direccion: canal === 'nota' ? 'interna' : 'saliente',
+    p_contenido: `${ACCION_EVENTO[accion]}${detalle} (evento ${codigo})`, p_visible_cliente: false, p_meta: { evento_accion: accion, codigo },
+  });
+  revalidatePath('/trabajo/evento/panel'); revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ texto: `${ACCION_EVENTO[accion]}${detalle}.` });
+}
