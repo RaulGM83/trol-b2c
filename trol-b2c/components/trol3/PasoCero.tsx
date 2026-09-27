@@ -55,7 +55,7 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
         <div className="text-[11px] font-bold uppercase tracking-wide text-white/60">{tu ? 'Lo que ya sabemos de ti' : `Lo que ya sabemos de ${nombre?.split(' ')[0] ?? 'él'}`}</div>
         <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
           <Dato label="Régimen" v={ley ?? '—'} />
-          <Dato label="Semanas cotizadas" v={h.semanas != null ? Math.round(Number(h.semanas)).toLocaleString('es-MX') : '—'} sub={!tu && h.semanas_capa ? (h.semanas_capa === 'validado' ? 'oficiales' : 'declaradas') : undefined} />
+          <Dato label="Semanas cotizadas" v={h.semanas != null ? Math.round(Number(h.semanas)).toLocaleString('es-MX') : '—'} sub={!tu && h.semanas_capa ? (h.semanas_capa === 'validado' ? 'del IMSS' : 'declaradas') : undefined} />
           {h.semanas_descontadas ? <Dato label="Semanas descontadas" v={Math.round(Number(h.semanas_descontadas)).toLocaleString('es-MX')} /> : null}
           {h.semanas_recuperadas ? <Dato label="Semanas recuperadas" v={Math.round(Number(h.semanas_recuperadas)).toLocaleString('es-MX')} /> : null}
           <Dato label="Edad" v={h.edad_decimal != null ? `${Number(h.edad_decimal).toFixed(1)} años` : h.edad != null ? `${h.edad} años` : '—'} />
@@ -109,7 +109,7 @@ function Dato({ label, v, sub, lime }: { label: string; v: string; sub?: string;
 
 function Meta({ c, tu }: { c?: BaseCampo; tu: boolean }) {
   if (tu || !c?.valor || !c.en) return null;
-  return <span className="text-[11px] text-muted">{c.capa === 'validado' ? 'oficial' : 'declarado'} · {fecha(c.en)}</span>;
+  return <span className="text-[11px] text-muted">{c.capa === 'validado' ? 'del IMSS' : 'declarado'} · {fecha(c.en)}</span>;
 }
 
 function Afore({ q, c, declarar, noSabe, pending, tu }: { q: BasePregunta; c?: BaseCampo; declarar: (campo: string, v: unknown) => void; noSabe: (campo: string, deshacer?: boolean) => void; pending: boolean; tu: boolean }) {

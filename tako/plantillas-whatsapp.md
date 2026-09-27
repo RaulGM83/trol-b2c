@@ -197,3 +197,24 @@ Falta, y es de Tako, no de código:
 - Dar de alta las siete plantillas (todas menos `trol_refresco`) y que Meta las apruebe.
 - Pegar **v20.3** del prompt (§14.4.1: qué hacer cuando aprietan la respuesta rápida).
 - Correr los `update` del mapa, plantilla por plantilla, conforme se aprueben.
+
+## 6. Las de la semana 2 del FIP (28-sep) — Utilidad, línea Tako Asesoría, en revisión
+
+Regla nueva (Raul): **nunca «oficial»**. Trol no es un medio autorizado por el IMSS: se dice «tu información real» o «del IMSS».
+
+**`fip_cuenta_lista`** — sale sola cuando llega su historial y su chat está cerrado, sólo para `codigo_origen = fip2026` (config `evento_plantilla_cuenta_lista`; el resto sigue con `trol_reabrir`).
+> Tu asesoría básica, cortesía del Foro Internacional de Pensiones, está lista con tu información real. Entra a tu cuenta aquí {{1}} y agenda tu sesión de 20 minutos con tu experto de Trol.
+
+Botón: `[Agendar mi sesión]`
+
+**`trol_constancia`** — el botón "Pedir constancia" del panel del evento (`accionEvento`); sirve para cualquier cliente.
+> No pudimos traer tu historial del IMSS por la vía automática. En tu cuenta te explicamos cómo bajar tu Reporte de Semanas Cotizadas {{1}} en dos minutos; mándanoslo por este chat y armamos tu asesoría.
+
+Botón: `[Ya lo tengo]`. En la cuenta, la parada 1 cambia a "Mándanos tu Reporte de Semanas Cotizadas" con el link al IMSS y el botón para subirlo (193).
+
+**`trol_recordatorio_sesion`** — automático ~24 h antes de cada cita (`trol3.recordar_sesiones`, job `trol3-recordar-sesiones` cada hora al minuto 7). **Apagado** hasta que Meta la apruebe y esté pegado Lukas v20.7: `update trol3.config set valor = 'on' where clave = 'recordatorio_sesion';`
+> Mañana es tu sesión con tu experto de Trol. Los detalles están en tu cuenta {{1}}; si necesitas cambiar la hora, respóndenos por aquí.
+
+Botón: `[Ahí estaré]`
+
+Pie en las tres: `Responde BAJA para no recibir más mensajes.` · Nota: `trol_retomar` quedó aprobada como **Marketing** (Meta la recategorizó).

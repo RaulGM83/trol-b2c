@@ -8,6 +8,7 @@ import { useState } from 'react';
 export type MiMillas = {
   clabe: string | null; link: string | null; referencia: string | null;
   pct: { asesoria: number; gestoria: number };
+  cda?: { estatus: string | null; registrada: boolean | null; al: string | null } | null;
   movimientos: { id: string; concepto: string; base: number; pct: number; monto: number; estado: 'por_depositar' | 'depositado'; fecha: string; depositado_en: string | null }[];
   por_depositar: number; depositado: number;
 };
@@ -39,6 +40,15 @@ export function MillasCard({ m }: { m: MiMillas }) {
       <p className="mt-1 text-xs text-muted">
         Con Millas para el Retiro, lo que pagues en Trol regresa a tu AFORE: <b className="text-ink">{m.pct.asesoria}% en asesorías</b> y <b className="text-ink">{m.pct.gestoria}% en gestorías</b>. Y puedes abonar a tu ahorro cuando quieras, por transferencia.
       </p>
+
+      {/* 193 · El CDA: ¿su cuenta AFORE está registrada y puede recibir ahorro? */}
+      {m.cda && (m.cda.estatus || m.cda.registrada != null) ? (
+        m.cda.estatus === 'puede_ahorrar' || (m.cda.registrada && m.cda.estatus !== 'sin_registro') ? (
+          <p className="mt-3 flex items-center gap-2 rounded-xl bg-cream px-3 py-2 text-xs"><span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-green-600 text-[10px] font-bold text-white">✓</span>Tu cuenta AFORE está registrada y puede recibir ahorro.</p>
+        ) : (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Tu cuenta AFORE aparece sin registrar.</b> Para que el ahorro llegue hay que registrarla; tu experto te ayuda en tu sesión.</p>
+        )
+      ) : null}
 
       {total > 0 ? (
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-lime/20 p-3">

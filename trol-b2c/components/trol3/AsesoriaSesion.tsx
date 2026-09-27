@@ -127,7 +127,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
                 <div><div className="text-[11px] uppercase tracking-wide text-lime">{compartiendo ? 'Podrías lograr' : 'Podría lograr'}</div><div className="text-3xl font-extrabold text-lime">{mxn(num.pension_maxima)}</div></div>
                 {brecha && brecha > 0 ? <div className="pb-1 text-sm text-white/80">Brecha: <b className="text-lime">{mxn(brecha)}</b> al mes</div> : null}
               </div>
-              <div className="mt-3 text-xs text-white/60">{[c.ley === 'Ley73' ? 'Ley 73' : c.ley === 'Ley97' ? 'Ley 97' : null, c.semanas ? `${Math.round(Number(c.semanas)).toLocaleString('es-MX')} semanas ${c.semanas_capa === 'validado' ? 'oficiales' : 'declaradas'}` : null, c.edad ? `${c.edad} años` : null, c.status_empleo ? `cotiza: ${c.status_empleo}` : null, c.datos_al ? `datos del IMSS al ${fechaLarga(c.datos_al)}` : null].filter(Boolean).join(' · ')}</div>
+              <div className="mt-3 text-xs text-white/60">{[c.ley === 'Ley73' ? 'Ley 73' : c.ley === 'Ley97' ? 'Ley 97' : null, c.semanas ? `${Math.round(Number(c.semanas)).toLocaleString('es-MX')} semanas ${c.semanas_capa === 'validado' ? 'del IMSS' : 'declaradas'}` : null, c.edad ? `${c.edad} años` : null, c.status_empleo ? `cotiza: ${c.status_empleo}` : null, c.datos_al ? `datos del IMSS al ${fechaLarga(c.datos_al)}` : null].filter(Boolean).join(' · ')}</div>
             </section>
             <section className="rounded-2xl border border-line bg-white p-5">
               <h3 className="text-sm font-bold">{compartiendo ? 'Lo que te preocupa' : 'Lo que le preocupa'}</h3>
@@ -137,7 +137,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
             <section className="rounded-2xl border border-line bg-white p-5">
               <h3 className="text-sm font-bold">{compartiendo ? 'Tu historia laboral' : 'Su historia laboral'} <span className="font-normal text-muted">· {vista.historial.length} {vista.historial.length === 1 ? 'movimiento' : 'movimientos'}, con fecha de alta y baja</span></h3>
               {vista.historial.length ? <HistoriaLaboral historial={vista.historial} grande={compartiendo} />
-                : <p className="mt-1 text-sm text-muted">Sin historia laboral: falta su información oficial del IMSS. {compartiendo ? null : <Link href={hrefTab.resumen} className="underline">Pedirla en Datos</Link>}</p>}
+                : <p className="mt-1 text-sm text-muted">Sin historia laboral: falta su información del IMSS. {compartiendo ? null : <Link href={hrefTab.resumen} className="underline">Pedirla en Datos</Link>}</p>}
             </section>
           </>
         )}

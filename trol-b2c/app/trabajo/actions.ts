@@ -751,9 +751,10 @@ export async function otorgarBeneficio(personaId: string, codigo: string, motivo
  * le confirma por WhatsApp. Va SIN plantilla: acaba de pagar por el chat, su ventana está
  * abierta; y si no lo está, la nota en su cuenta ya quedó y no se reabre en frío por esto.
  */
-export async function registrarCobro(personaId: string, producto: string, medio: string, referencia: string) {
+export async function registrarCobro(personaId: string, producto: string, medio: string, referencia: string, monto?: number | null) {
   await requireMiembro();
-  const { data, error } = await t3().rpc('registrar_cobro', { p_persona: personaId, p_producto: producto, p_medio: medio || 'transferencia', p_referencia: referencia || null });
+  // 193: gestorías y montos acordados (con IVA); si no se pasa monto, el precio de lista.
+  const { data, error } = await t3().rpc('registrar_cobro', { p_persona: personaId, p_producto: producto, p_medio: medio || 'transferencia', p_referencia: referencia || null, p_monto: monto && monto > 0 ? monto : null });
   if (error) {
     const m = error.message ?? '';
     return fail(
@@ -771,7 +772,8 @@ export async function registrarCobro(personaId: string, producto: string, medio:
   } catch { /* el cobro ya quedó; que falle el aviso no lo deshace */ }
   revalidatePath(`/trabajo/p/${personaId}`);
   const hizo = r?.hizo === 'consulta' ? 'ya se pidió la consulta' : r?.hizo === 'beneficio' ? 'ya quedó habilitado en su cuenta' : 'quedó registrado';
-  return ok({ texto: `Cobro registrado: ${hizo}; ${aviso}.` });
+  const cb = Number(r?.cashback ?? 0) > 0 ? ` Cashback Millas: $${Number(r.cashback).toLocaleString('es-MX')} por depositar.` : '';
+  return ok({ texto: `Cobro registrado: ${hizo}; ${aviso}.${cb}` });
 }
 export async function revocarBeneficio(personaId: string, id: string) {
   await requireMiembro();
@@ -1930,7 +1932,7 @@ export async function accionEvento(personaId: string, codigo: string, accion: Ac
     const r = await avisar(personaId, 'pedir_constancia', {
       payload: { codigo },
       resumen: 'El IMSS no nos devolvió tu historial. Mándanos tu Reporte de Semanas Cotizadas (lo bajas en serviciosdigitales.imss.gob.mx) y con eso armamos tu asesoría.',
-      plantilla: 'trol_retomar',
+      plantilla: 'trol_constancia',
     });
     if (!r.ok) return fail(`No salió el aviso: ${r.error ?? r.motivo ?? 'sin detalle'}`);
     detalle = r.via === 'plantilla' ? ' · salió la plantilla' : ' · le llegó en su chat';
@@ -1942,4 +1944,16 @@ export async function accionEvento(personaId: string, codigo: string, accion: Ac
   });
   revalidatePath('/trabajo/evento/panel'); revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ texto: `${ACCION_EVENTO[accion]}${detalle}.` });
+}
+
+// ── 193 · Cashback a Millas: marcar depositado ────────────────────────────────────────────
+export async function depositarCashback(ids: string[], referencia: string) {
+  await requireMiembro();
+  if (!ids.length) return fail('Elige al menos un movimiento.');
+  if (!referencia.trim()) return fail('Falta la referencia de la transferencia.');
+  const { data, error } = await t3().rpc('cashback_depositar', { p_ids: ids, p_referencia: referencia.trim() });
+  if (error) return fail(error);
+  revalidatePath('/trabajo/millas');
+  const r = data as { depositados: number; total: number };
+  return ok({ texto: `${r.depositados} movimiento${r.depositados === 1 ? '' : 's'} marcado${r.depositados === 1 ? '' : 's'} como depositado${r.depositados === 1 ? '' : 's'} ($${Number(r.total).toLocaleString('es-MX')}).` });
 }

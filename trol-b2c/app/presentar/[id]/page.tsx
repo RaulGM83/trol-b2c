@@ -154,7 +154,7 @@ export default async function Presentar({ params, searchParams }: { params: { id
               ? <a href={linkCitas} target="_blank" rel="noreferrer" className="rounded-xl bg-lime px-5 py-2.5 text-base font-bold text-ink">Agendemos tu asesoría →</a>
               : <span className="rounded-xl bg-lime px-5 py-2.5 text-base font-bold text-ink">Lo que sigue: tu asesoría con un experto</span>) : null}
           </div>
-          <p className="w-full text-xs text-muted">Son proyecciones hechas con tu información oficial del IMSS; no son una resolución del instituto. El trámite ante el IMSS es gratis.</p>
+          <p className="w-full text-xs text-muted">Son proyecciones hechas con tu información del IMSS; no son una resolución del instituto. El trámite ante el IMSS es gratis.</p>
         </footer>
       </main>
     </div>

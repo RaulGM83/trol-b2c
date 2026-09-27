@@ -24,7 +24,9 @@ const ITEMS_NEGOCIO: [string, string][] = [
   ['/trabajo/embudo-mi', 'Embudo de /mi'],
   ['/trabajo/eventos', 'Actividad'],
   ['/trabajo/personas', 'Todos los clientes'],
-  ['/trabajo/evento', 'Evento'],
+  ['/trabajo/evento', 'Evento (pasillo)'],
+  ['/trabajo/evento/panel', 'Panel del evento'],
+  ['/trabajo/millas', 'Por depositar a Millas'],
 ];
 
 export function NavNegocio({ aviso = 0 }: { aviso?: number }) {

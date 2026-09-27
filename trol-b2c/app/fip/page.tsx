@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 // con la ref del evento (wa.me con ref:fip2026). El QR de las tarjetas (/i/fip2026) cae aquí.
 const CODIGO = 'fip2026';
 const TITULO = 'Tu asesoría básica de pensión, cortesía del Foro Internacional de Pensiones';
-const DESC = 'Tus números oficiales del IMSS, una sesión de 20 minutos con un experto de Trol y cashback a tu AFORE con Millas para el Retiro.';
+const DESC = 'Tu información real del IMSS, una sesión de 20 minutos con un experto de Trol y cashback a tu AFORE con Millas para el Retiro.';
 
 export const metadata: Metadata = {
   title: 'Foro Internacional de Pensiones × Trol · Tu asesoría básica',
@@ -38,7 +38,7 @@ async function registrarVisita(db: ReturnType<typeof createClient>) {
 }
 
 const QUE_TE_LLEVAS = [
-  { t: 'Tus números oficiales del IMSS', d: 'Semanas cotizadas, salario registrado, tu ley (73 o 97) y cuánto te tocaría hoy de pensión. Sin trámites: con tu CURP lo consultamos nosotros.' },
+  { t: 'Tu información real del IMSS', d: 'Semanas cotizadas, salario registrado, tu ley (73 o 97) y cuánto te tocaría hoy de pensión. Sin trámites: con tu CURP lo consultamos nosotros.' },
   { t: 'Una sesión de 20 minutos con un experto', d: 'Cortesía del Foro. Revisamos tu caso contigo: qué te conviene, qué no, y cuál es tu mejor jugada.' },
   { t: 'Cashback a tu AFORE con Millas para el Retiro', d: 'Lo que después decidas invertir en Trol regresa a tu ahorro para el retiro: 10% en asesorías y 5% en gestorías.' },
 ];
@@ -83,7 +83,7 @@ export default async function Fip() {
             <p className="text-sm font-semibold uppercase tracking-wide text-lime">{m.etiqueta ?? 'Foro Internacional de Pensiones'}</p>
             <h1 className="mt-3 text-4xl font-extrabold leading-tight sm:text-5xl">Tu asesoría básica de pensión, cortesía del Foro</h1>
             <p className="mt-4 max-w-xl text-lg text-white/80">
-              El {m.patrocinio ?? 'Foro Internacional de Pensiones y Millas para el Retiro'} te regalan lo que normalmente cuesta: tus números oficiales del IMSS y 20 minutos con un experto de Trol para saber qué hacer con ellos.
+              El {m.patrocinio ?? 'Foro Internacional de Pensiones y Millas para el Retiro'} te regalan lo que normalmente cuesta: tu información real del IMSS y 20 minutos con un experto de Trol para saber qué hacer con ellos.
             </p>
             <ul className="mt-8 space-y-5">
               {QUE_TE_LLEVAS.map((x) => (

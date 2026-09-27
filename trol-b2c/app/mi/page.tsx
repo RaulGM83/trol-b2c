@@ -9,6 +9,7 @@ import { CalculadoraPro } from '@/components/CalculadoraPro';
 import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { MisCinco } from '@/components/trol3/MisCinco';
 import { MillasCard, type MiMillas } from '@/components/trol3/MillasCard';
+import { MetaRetiro } from '@/components/trol3/MetaRetiro';
 import type { BaseAsesoria } from '@/lib/trol3/asesoria';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
@@ -89,7 +90,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const href = (t: string) => `/mi?tab=${t}`;
   const yaCubierto = (p: Any) => Array.isArray(p.beneficios) && p.beneficios.length > 0 && p.beneficios.every((b: string) => beneficios.includes(b));
   const leyTxt = e.ley === 'Ley97' ? 'Ley 97' : e.ley === 'Ley73' ? 'Ley 73' : '';
-  const semanasTxt = e.semanas ? `${fmtNum(e.semanas)} semanas ${e.semanas_capa === 'validado' ? 'oficiales' : 'que nos dijiste'}` : null;
+  const semanasTxt = e.semanas ? `${fmtNum(e.semanas)} semanas ${e.semanas_capa === 'validado' ? 'según el IMSS' : 'que nos dijiste'}` : null;
   // Glosario por ley: para_ley null = para todas; sin ley conocida sólo lo genérico.
   const explLey = ((expl ?? []) as Any[]).filter((x) => !x.para_ley || x.para_ley === e.ley);
   // Negativa (portada del diagnóstico viejo): cuando el motor dice que el
@@ -133,6 +134,8 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                 <p className="mt-2 text-sm">Con tus datos de hoy, el escenario base no alcanza pensión. Abajo te explicamos por qué, qué pasa con tu dinero y cómo se revierte.</p>
                 <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
               </>
+            ) : e.ley === 'Ley97' && e.pension_base ? (
+              <HeroLey97 e={e} base={base} pa={pa} millas={millas} semanasTxt={semanasTxt} />
             ) : e.pension_base ? (
               <>
                 <div className="mt-2 flex items-end gap-3">
@@ -144,7 +147,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                 <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
               </>
             ) : (
-              <p className="mt-2 text-sm">Aquí vas a ver lo que hoy te tocaría de pensión y lo máximo que podrías lograr, en cuanto tengamos tu información oficial del IMSS.</p>
+              <p className="mt-2 text-sm">Aquí vas a ver lo que hoy te tocaría de pensión y lo máximo que podrías lograr, en cuanto tengamos tu información del IMSS.</p>
             )}
           </section>
 
@@ -242,13 +245,13 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           {faltan.length > 0 ? (
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="text-sm font-bold">Afina tus números</h2>
-              <p className="mb-3 text-xs text-muted">Entre más sepamos de ti, más exactos son tus números. Lo que nos digas se guarda como tu versión; cuando tenemos el dato oficial, ese manda.</p>
+              <p className="mb-3 text-xs text-muted">Entre más sepamos de ti, más exactos son tus números. Lo que nos digas se guarda como tu versión; cuando tenemos el dato del IMSS, ese manda.</p>
               <CompletarDatos campos={faltan.map((c) => ({ campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null }))} />
             </section>
           ) : null}
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">Tus datos</h2>
-            <p className="text-xs text-muted">A la derecha, de dónde viene cada uno: oficial, calculado por Trol o lo que nos dijiste.</p>
+            <p className="text-xs text-muted">A la derecha, de dónde viene cada uno: del IMSS, calculado por Trol o lo que nos dijiste.</p>
             {[['identidad', 'Identidad'], ['imss', 'IMSS'], ['afore', 'AFORE'], ['infonavit', 'Infonavit'], ['issste', 'ISSSTE'], ['contexto', 'Sobre ti'], ['calculo', 'Cálculos de Trol']].map(([g, l]) => {
               const rows = datos.filter((d) => d.grupo === g);
               if (!rows.length) return null;
@@ -260,7 +263,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                       <tr key={d.campo} className="border-t border-line/70">
                         <td className="py-1 text-muted">{d.nombre}</td>
                         <td className="py-1 text-right font-medium">{d.tipo === 'bool' ? (d.valor === true ? 'Sí' : d.valor === false ? 'No' : String(d.valor)) : d.tipo === 'number' ? (/saldo|pension|costo|ingreso|infonavit|salario|expectativa|disponible/.test(d.campo) ? fmtMXN(Number(d.valor)) : fmtNum(Number(d.valor))) : d.tipo === 'date' ? fmtFecha(String(d.valor)) : String(d.valor)}</td>
-                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'oficial' : d.capa === 'calculado' ? 'calculado' : 'nos dijiste'}{d.vigente === false ? ' · antiguo' : ''}</td>
+                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'del IMSS' : d.capa === 'calculado' ? 'calculado' : 'nos dijiste'}{d.vigente === false ? ' · antiguo' : ''}</td>
                       </tr>
                     ))}
                   </tbody></table>
@@ -272,7 +275,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           <section className="rounded-2xl border border-line bg-white p-5">
             <h2 className="text-sm font-bold">¿Y si…?</h2>
             {beneficios.includes('calculadora') && e.tiene_semilla ? (
-              <><p className="mb-2 text-xs text-muted">Tienes la calculadora habilitada: prueba edad de retiro, semanas y saldos con tus datos oficiales.</p><Link href="/mi?tab=calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link></>
+              <><p className="mb-2 text-xs text-muted">Tienes la calculadora habilitada: prueba edad de retiro, semanas y saldos con tus datos reales.</p><Link href="/mi?tab=calculadora" className="inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white">Abrir calculadora {leyTxt}</Link></>
             ) : (
               <><p className="mb-2 text-xs text-muted">La calculadora completa te deja probar escenarios (edad de retiro, Modalidad 40, semanas por recuperar). Se habilita con la asesoría avanzada, con {fmtMXN(100)} o con 100 puntos.</p><div className="flex flex-wrap gap-2"><CanjearBoton producto="calculadora" precio={100} saldo={e.puntos} /><Link href="/checkout?p=CALCULADORA_ADDON" className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-bold">Pagar {fmtMXN(100)}</Link></div></>
             )}
@@ -341,7 +344,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           {beneficios.includes('calculadora') && e.tiene_semilla ? (
             <CalculadoraEmbed />
           ) : (
-            <section className="rounded-2xl border border-line bg-white p-5 text-sm">{e.tiene_semilla ? 'La calculadora se habilita con la asesoría avanzada, con $100 o con 100 puntos.' : 'Necesitamos tu información oficial del IMSS para habilitar la calculadora.'} <Link href={href('expediente')} className="underline">Volver</Link></section>
+            <section className="rounded-2xl border border-line bg-white p-5 text-sm">{e.tiene_semilla ? 'La calculadora se habilita con la asesoría avanzada, con $100 o con 100 puntos.' : 'Necesitamos tu información del IMSS para habilitar la calculadora.'} <Link href={href('expediente')} className="underline">Volver</Link></section>
           )}
         </div>
       )}
@@ -472,6 +475,20 @@ function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla, linkCitas }: 
       {lime && op && !op.pension_con_plan && (op.valor || op.urgencia) ? <div className="mt-2 text-xs text-ink/70">{op.valor ? `hasta ${fmtMXN(op.valor)} al año` : ''}{op.valor && op.urgencia ? ' · ' : ''}{op.urgencia ? `antes del ${fmtFecha(op.urgencia)}` : ''}</div> : null}
 
       {pa.cta === 'curp' ? <div className="mt-3"><MisionCta mision={{ codigo: 'curp', cta: 'curp', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}
+      {/* 193 · El equipo le pidió su Reporte de Semanas Cotizadas: cómo bajarlo y dónde subirlo. */}
+      {pa.cta === 'constancia' ? (
+        <div className="mt-3 space-y-2">
+          <ol className="list-decimal space-y-1 pl-5 text-sm">
+            <li>Entra a la página del IMSS con tu CURP y tu correo: <a href="https://serviciosdigitales.imss.gob.mx/semanascotizadas-web/usuarios/IngresoAsegurado" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Reporte de Semanas Cotizadas</a>.</li>
+            <li>Te llega a tu correo un PDF.</li>
+            <li>Súbelo aquí o mándanoslo por WhatsApp.</li>
+          </ol>
+          <div className="flex flex-wrap items-center gap-2">
+            <SubirDoc tipo="constancia_semanas" parseable />
+            <HablarBoton texto={pa.boton ?? 'Mejor se lo mando por WhatsApp'} mensaje={pa.mensaje_wa} compacto />
+          </div>
+        </div>
+      ) : null}
       {pa.cta === 'consulta_imss' ? <div className="mt-3"><MisionCta mision={{ codigo: 'info_oficial', cta: 'consulta_imss', estado: 'pendiente' }} campos={faltan as never} identidad={identidad} /></div> : null}
       {pa.cta === 'curp_revisar' ? (
         <>
@@ -516,5 +533,58 @@ function LoQueSigue({ pa, jugada, identidad, faltan, tieneSemilla, linkCitas }: 
       ) : null}
       {pa.pie ? <p className={lime ? 'mt-3 text-xs text-ink/70' : 'mt-3 text-xs text-muted'}>{pa.pie}</p> : null}
     </section>
+  );
+}
+
+/**
+ * 193 · Hero Ley 97 (claude/87 punto 3, claude/88). A los 35–55 con Ley 97, "hoy te tocaría" es una
+ * proyección lejana que no ayuda a decidir. Lo que sí: su meta (la pregunta 4 del paso cero)
+ * contra hacia dónde va si todo sigue igual, y la palanca que más mueve a su edad.
+ * El saldo de la AFORE casi siempre es nuestro estimado: se dice.
+ */
+function HeroLey97({ e, base, pa, millas, semanasTxt }: { e: Any; base: BaseAsesoria | null; pa: Any | null; millas: MiMillas | null; semanasTxt: string | null }) {
+  const campo = (n: number, c: string) => base?.preguntas.find((q) => q.n === n)?.campos.find((x) => x.campo === c);
+  const num = (v: unknown) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  const meta = num(campo(4, 'expectativa_pension_mxn')?.valor);
+  const edadMeta = num(campo(4, 'edad_retiro_deseada')?.valor);
+  const saldoReal = num(campo(2, 'saldo_rcv97')?.valor);
+  const saldo = saldoReal ?? num(campo(2, 'saldo_rcv97')?.estimado);
+  const edadBase = num(base?.highlights.edad_base);
+  const proy = Number(e.pension_base);
+  const edad = num(base?.highlights.edad ?? e.edad);
+  const hall = ((pa?.hallazgos ?? []) as Any[]).map((h) => h.item as string);
+  const sinRegistro = hall.includes('cuenta_registrada') || millas?.cda?.estatus === 'sin_registro';
+  const anios = edad != null ? Math.max(1, (edadMeta ?? edadBase ?? 65) - Math.floor(edad)) : null;
+  const palanca = sinRegistro
+    ? ['Registrar tu cuenta AFORE', 'Sin registro no puedes ahorrar ni elegir AFORE. Es un trámite sencillo y es lo primero.']
+    : hall.includes('afore_top')
+      ? ['Estar en una AFORE que rinda más', 'Cambiarte no cuesta, y el rendimiento se acumula todos los años que te faltan.']
+      : ['Tu ahorro voluntario', `En Ley 97 tu pensión sale de lo que juntes en tu AFORE. Lo que ahorres hoy trabaja${anios ? ` ${anios} años` : ''} antes de que lo uses.`];
+  const brecha = meta != null ? meta - proy : null;
+  const pct = meta ? Math.max(4, Math.min(100, Math.round((proy / meta) * 100))) : null;
+  return (
+    <>
+      {meta != null ? (
+        <>
+          <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
+            <div><div className="text-[11px] uppercase tracking-wide text-lime">Tu meta</div><div className="text-3xl font-extrabold text-lime">{fmtMXN(meta)}<span className="text-sm font-normal text-white/60">/mes{edadMeta ? ` a los ${edadMeta}` : ''}</span></div></div>
+            <div><div className="text-[11px] uppercase tracking-wide text-white/60">Si todo sigue igual</div><div className="text-3xl font-extrabold">~{fmtMXN(proy)}<span className="text-sm font-normal text-white/60">/mes{edadBase ? ` a los ${edadBase}` : ''}</span></div></div>
+          </div>
+          {pct != null ? <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-lime" style={{ width: `${pct}%` }} /></div> : null}
+          <p className="mt-2 text-sm text-white/80">{brecha != null && brecha > 0 ? <>Hoy vas a un <b className="text-lime">{pct}%</b> de tu meta: te faltan <b className="text-lime">~{fmtMXN(brecha)} al mes</b>. Se puede cerrar; depende sobre todo de lo que hagas desde ahora.</> : <>Con lo que llevas, vas en camino a tu meta. Lo que sigue es cuidarla.</>}</p>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-white/80">Si todo sigue igual, {edadBase ? `a los ${edadBase} ` : ''}vas para <b className="text-white">~{fmtMXN(proy)} al mes</b>. ¿Te alcanza? Depende de tu meta.</p>
+          <MetaRetiro edadSugerida={edadBase} />
+        </>
+      )}
+      <div className="mt-3 rounded-2xl bg-white/10 p-3">
+        <div className="text-[11px] uppercase tracking-wide text-white/60">A tu edad, lo que más lo mueve</div>
+        <div className="mt-0.5 text-sm font-bold">{palanca[0]}</div>
+        <div className="text-xs text-white/70">{palanca[1]}{millas && !sinRegistro ? <> <a href="#millas" className="font-semibold text-lime underline">Ahorra desde aquí ↓</a></> : null}</div>
+      </div>
+      <div className="mt-2 text-[11px] text-white/50">{['Ley 97', semanasTxt, saldo != null ? `tu AFORE ~${fmtMXN(saldo)}${saldoReal == null ? ' (estimado)' : ''}` : null, e.ley_en ? `datos del IMSS al ${fmtFecha(e.ley_en)}` : null].filter(Boolean).join(' · ')}</div>
+    </>
   );
 }

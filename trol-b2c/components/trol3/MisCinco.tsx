@@ -25,7 +25,7 @@ export function MisCinco({ personaId, base }: { personaId: string; base: BaseAse
   const [vals, setVals] = useState<Record<string, string>>({});
   const declarar = (campo: string, valor: unknown) => start(async () => {
     const { error } = await supabase.schema('trol3').rpc('declarar_mio', { p_campo: campo, p_valor: valor });
-    setMsg(error ? (error.message.includes('dato_validado') ? 'Ese dato ya lo tenemos oficial.' : error.message) : null);
+    setMsg(error ? (error.message.includes('dato_validado') ? 'Ese dato ya lo tenemos del IMSS.' : error.message) : null);
     router.refresh();
   });
   const noSe = (campo: string, deshacer = false) => start(async () => {

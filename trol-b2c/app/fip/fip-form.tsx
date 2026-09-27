@@ -181,7 +181,7 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
       </label>
       <label className="mt-3 block text-sm font-semibold">Tu CURP
         <input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase())} maxLength={18} autoCapitalize="characters" spellCheck={false} placeholder="18 caracteres, como en tu INE" className={`${campo} font-mono tracking-wider`} />
-        <span className="mt-1 block text-xs font-normal text-muted">Con ella consultamos tu historial oficial del IMSS. Sólo para tu asesoría.</span>
+        <span className="mt-1 block text-xs font-normal text-muted">Con ella consultamos tu historial del IMSS. Sólo para tu asesoría.</span>
       </label>
       <label className="mt-4 flex cursor-pointer items-start gap-2 text-xs text-muted">
         <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-lime" />
