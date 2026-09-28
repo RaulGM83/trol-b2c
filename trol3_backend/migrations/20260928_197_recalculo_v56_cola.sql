@@ -82,3 +82,53 @@ $$;
 
 revoke all on function public.recalculo_v56_tomar(int), public.recalculo_v56_cerrar(int) from public, anon, authenticated;
 grant execute on function public.recalculo_v56_tomar(int), public.recalculo_v56_cerrar(int) to service_role;
+
+-- 197b · tomar() cierra como ok los 'procesando' que ya quedaron en v5.6 antes de reintentar los viejos
+-- (el workflow se encadena y no llama a cerrar() entre lotes).
+create or replace function public.recalculo_v56_tomar(p_n int default 25)
+returns jsonb
+language plpgsql security definer set search_path to 'public' as $$
+declare r record; c record; j jsonb; pid uuid; salida jsonb := '[]'::jsonb;
+begin
+  update public.recalculo_v56_cola q set estado = 'ok', detalle = null, actualizado_en = now()
+    from public.clientes cl
+   where cl.id = q.cliente_id and q.estado = 'procesando'
+     and cl.calculo_pensional->'meta'->>'version_sistema' = '2.6.0-saldos-v56';
+  for r in
+    select q.cliente_id, q.proceso_origen from public.recalculo_v56_cola q
+     where q.estado = 'pendiente' or (q.estado = 'procesando' and q.actualizado_en < now() - interval '30 minutes' and q.intentos < 3)
+     order by q.prioridad, q.creado_en, q.cliente_id
+     limit greatest(1, least(p_n, 200))
+     for update skip locked
+  loop
+    select json_sisec into j from public.procesos where id = r.proceso_origen;
+    select * into c from public.clientes where id = r.cliente_id;
+    insert into public.procesos (cliente_id, tipo_servicio, estado, json_sisec, datos_entrada)
+    values (r.cliente_id, 'Recalculo v5.6', 'DATA_READY', j,
+            jsonb_build_object('origen', 'recalculo_v56', 'proceso_origen', r.proceso_origen))
+    returning id into pid;
+    update public.recalculo_v56_cola set estado = 'procesando', proceso_nuevo = pid, intentos = intentos + 1,
+           actualizado_en = now() where cliente_id = r.cliente_id;
+    salida := salida || jsonb_build_object(
+      'cliente_id', c.id, 'process_id', pid, 'curp', c.curp, 'nombre', c.nombre, 'email', c.email,
+      'drive_folder_id', c.drive_folder_id, 'EstadoRep', c.edo_republica, 'id_booster', c.id_booster,
+      'fecha_sisec', coalesce(j #>> '{employment_history_json,data,employment_info,emission_date}', c."última_fecha_sisec"::text),
+      'employment_history_json', j -> 'employment_history_json');
+  end loop;
+  return salida;
+end $$;
+revoke all on function public.recalculo_v56_tomar(int) from public, anon, authenticated;
+grant execute on function public.recalculo_v56_tomar(int) to service_role;
+
+-- 197c · Motor v5.6.1 (ventana de reingreso a Mod 40, claude/89): la cola acepta cualquier 2.6.x-saldos-v56.
+do $$
+declare src text;
+begin
+  src := pg_get_functiondef('public.recalculo_v56_tomar(integer)'::regprocedure);
+  src := replace(src, $a$cl.calculo_pensional->'meta'->>'version_sistema' = '2.6.0-saldos-v56'$a$, $b$cl.calculo_pensional->'meta'->>'version_sistema' like '2.6.%-saldos-v56'$b$);
+  if position($c$like '2.6.%-saldos-v56'$c$ in src) = 0 then raise exception '197c tomar no encajó'; end if;
+  execute src;
+  src := pg_get_functiondef('public.recalculo_v56_cerrar(integer)'::regprocedure);
+  src := replace(src, $a$c.calculo_pensional->'meta'->>'version_sistema' = '2.6.0-saldos-v56'$a$, $b$c.calculo_pensional->'meta'->>'version_sistema' like '2.6.%-saldos-v56'$b$);
+  execute src;
+end $$;

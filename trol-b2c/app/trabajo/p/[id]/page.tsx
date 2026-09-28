@@ -412,7 +412,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 backLabel="← Volver al resumen"
                 fechaSisec={fechaSisecTxt}
                 calculoGeneradoAt={semillaAt}
-                mod40Aplica={mod40AplicaLegacy ?? !!(e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
+                mod40Aplica={!!(mod40AplicaLegacy || e.mod40_retro_aplica || semilla.perfil.aplica_mod40)}
                 calculoPensional={datosMap.get('semilla')?.valor}
                 historialLaboral={historialLaboral}
                 limiteInscripcionMod40={limiteMod40}
