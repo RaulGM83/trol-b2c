@@ -99,7 +99,9 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
     try {
       const { error } = await supabase.auth.verifyOtp({ phone: e164(), token: soloDigitos(otp), type: 'sms' });
       if (error) throw new Error('El código no coincide o ya venció. Revísalo o pide uno nuevo.');
-      await darDeAlta();
+      // 199 · El código ya se usó: si el alta falla, no se vuelve a pedir (reintentar sólo da de alta).
+      setConSesion(true);
+      try { await darDeAlta(); } catch (err) { setPaso('datos'); throw err; }
     } catch (err) {
       setError((err as Error).message);
     } finally {
