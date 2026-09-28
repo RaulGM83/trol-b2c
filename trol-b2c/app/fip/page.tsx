@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 // sesión de 20 min de cortesía. Quien prefiera WhatsApp tiene el mismo alta por chat
 // con la ref del evento (wa.me con ref:fip2026). El QR de las tarjetas (/i/fip2026) cae aquí.
 const CODIGO = 'fip2026';
+const MILLAS_URL = 'https://bit.ly/4hD6GkG';
 const TITULO = 'Tu asesoría básica de pensión, cortesía del Foro Internacional de Pensiones';
 const DESC = 'Tus números de pensión, una sesión de 20 minutos con un experto de Trol y cashback a tu AFORE con Millas para el Retiro.';
 
@@ -68,10 +69,12 @@ export default async function Fip() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/marca/logo-trol-blanco.svg" alt="El Trol Financiero" className="h-9 w-auto" />
           <div className="flex items-center gap-5">
-            <LogoFip variante="blanco" className="h-9" />
+            <LogoFip variante="degradado" className="h-14" />
             <span className="hidden h-6 w-px bg-white/20 sm:block" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/marca/millas-blanco.png" alt="Millas para el Retiro" className="h-8 w-auto" />
+            <a href={MILLAS_URL} target="_blank" rel="noopener noreferrer" aria-label="Millas para el Retiro">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/marca/millas-blanco.png" alt="Millas para el Retiro" className="h-8 w-auto" />
+            </a>
           </div>
         </div>
       </header>
@@ -129,8 +132,10 @@ export default async function Fip() {
       {/* Millas */}
       <section className="border-t border-line bg-white">
         <div className="mx-auto max-w-5xl px-5 py-14 lg:grid lg:grid-cols-[auto_1fr] lg:items-center lg:gap-12">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/marca/millas-color.png" alt="Millas para el Retiro" className="h-14 w-auto" />
+          <a href={MILLAS_URL} target="_blank" rel="noopener noreferrer" aria-label="Millas para el Retiro" className="inline-block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/marca/millas-color.png" alt="Millas para el Retiro" className="h-14 w-auto" />
+          </a>
           <div className="mt-6 lg:mt-0">
             <h2 className="text-2xl font-extrabold">Cada peso que inviertes en tu pensión, regresa a tu retiro</h2>
             <p className="mt-2 max-w-2xl text-muted">

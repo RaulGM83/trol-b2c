@@ -22,10 +22,10 @@ const ERRORES: Record<string, string> = {
 type Resultado = { ok: boolean; motivo?: string; persona_id?: string; nueva?: boolean; consulta?: { estado: string; proveedor: string | null } | null };
 
 /** Logo del Foro: mientras no tengamos el archivo, el nombre en texto (no un cuadro roto). */
-export function LogoFip({ variante, className = '' }: { variante: 'blanco' | 'color'; className?: string }) {
+export function LogoFip({ variante, className = '' }: { variante: 'blanco' | 'color' | 'degradado'; className?: string }) {
   const [roto, setRoto] = useState(false);
   if (roto) {
-    return <span className={`text-xs font-bold uppercase leading-tight tracking-wide ${variante === 'blanco' ? 'text-white' : 'text-ink'} ${className}`}>Foro Internacional<br />de Pensiones</span>;
+    return <span className={`text-xs font-bold uppercase leading-tight tracking-wide ${variante === 'color' ? 'text-ink' : 'text-white'} ${className}`}>Foro Internacional<br />de Pensiones</span>;
   }
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={`/marca/fip-${variante}.png`} alt="Foro Internacional de Pensiones" className={`w-auto ${className}`} onError={() => setRoto(true)} />;
