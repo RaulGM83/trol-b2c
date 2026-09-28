@@ -2,7 +2,7 @@
 
 Pedido de Raul: revisar los 10 cálculos que se hicieron con Resolut ("BUSQUEDA DE INFORMACION Respuestas.xlsx"), entender por qué no cuadran y proponer mejoras al estimado. Después de esto se mejorará el estimado para usarlo como **mínimo o rango** (decisión pendiente).
 
-**Estado: análisis hecho; nada cambiado en el motor ni en n8n.** Actualizado el 27-sep con los salarios reales del SISEC (ver sección al final). Para el experimento se corrió el motor v55 real (el que produjo los números de la hoja), con opciones para prender o apagar cada corrección.
+**Estado (27-sep, noche): implementado.** Ver "Implementado 27-sep" al final. Falta pegar el motor v5.6 en el nodo de n8n y el recálculo masivo. Para el experimento se corrió el motor v55 real (el que produjo los números de la hoja), con opciones para prender o apagar cada corrección.
 
 ## Los datos
 
@@ -157,3 +157,145 @@ Arnés: `parse_sisec.py` (PDF → eventos con modificaciones), `dataset_real.jso
   2. **Respaldo:** aplicar el factor con k = 0.5 sólo a la parte que la F2 no alcance a explicar.
   3. **En el rango:** ensanchar el piso cuando haya 120 semanas descontadas o más.
   4. **Recalibrar k** cuando lleguen más saldos reales.
+
+## Implementado 27-sep (Raul: "arregla todo")
+
+### Motor v5.6: `motor/calculadora_pension_pro_v56.js`
+
+- **Qué incluye:** comisión sobre flujo, tope CV 1997-2006, cuota social nueva desde 2023, retiros cada 5 años dentro del hueco, residuo repartido topado al monto de ley, y un fix de orden para baja y reingreso del mismo día y para la modificación huérfana. Si el SISEC no trae modificaciones, deflacta los tramos planos, sólo para saldos: la pensión y el promedio de 250 semanas no se tocan. **Sin castigo**, con fugas de 0.95 sobre RCV 97. Nuevas salidas: `saldo_afore_rango` y `SAR92_concentradora`. `server_version` es `2.6.0-saldos-v56`.
+- **Resultado con los 24 casos:**
+
+  | | Mediana | sd log | ±20 % | ±10 % | Dentro del rango |
+  |---|---|---|---|---|---|
+  | v55 (hoy) | 0.84 | 0.27 | 15 | 7 | — |
+  | v5.6 | **0.98** | **0.15** | **21** | **14** | **22 de 24** |
+
+  Fuera del rango quedan Javier y Patricia, que el SISEC no explica.
+- **Semanas descontadas como factor:** con salarios reales y retiros múltiples el sesgo por semanas descontadas desaparece. Los casos con 120 semanas o más dan una mediana de 0.98, así que ya no hace falta un factor. El retiro sintético se probó, salió neutro y quedó apagado (`V56.retiroSintetico`).
+- **Regresión v55 → v56 en 35 corridas:** en Ley 73 no cambia nada (pensión, 250 semanas, Mod 40, costos, Infonavit). En Ley 97 sólo se mueven los escenarios que dependen del RCV, como se esperaba.
+- **Rango:**
+  - Base: piso 0.90 × RCV y techo 1.15 × RCV.
+  - Con 120 semanas descontadas o más: el piso baja 0.10.
+  - Sin trayectoria salarial: el piso baja 0.07 y el techo sube 0.12.
+  - Con un hueco de 10 años o más: el piso baja 0.05.
+  - SAR 92: entre SIEFORE y concentradora.
+
+### pension-core v1.9 (`contrafactual.ts`, `eventos-laborales.ts`, batch)
+
+- Las mismas correcciones: `aporteRcvDiario`, `comisionFlujo`, cuota social desde 2023, F2 múltiple con residuo repartido, `factor_fugas` 0.95, fix de mismo día y de modificación huérfana, y `eventos_deflactados` con la curva salarial.
+- El batch ya no aplica castigo: default 0.
+- `ENGINE_VERSION` es `2026.09.27.1`.
+- 284 tests en verde (9 nuevos en `contrafactual-v19.test.ts`) y tsc limpio.
+
+### n8n (en vivo)
+
+- **Waterfall PDF Jordan** (publicado):
+  - Los dos parsers entregan los movimientos reales (`v2.2+bloques4+mov`).
+  - Validado con los 9 PDFs de Resolut: 498 modificaciones, 0 diferencias contra la referencia, y el resto del payload idéntico.
+  - El PDF de B2B ahora se guarda como `CURP_SISEC_fecha.pdf`.
+- **Calculos, "Build Diagnostico Bag"** (publicado): la semilla guarda `saldos.afore_rango`, `sar92_concentradora` y `saldos_fuente`. Vale null mientras corra v55.
+- **Pendiente:** pegar v5.6 en el nodo "Calculadora Trol". Son 138 mil caracteres y el MCP no lo aguanta. Después se verifica contra el archivo, se publica y se sube `trol3.config.motor_version_actual` a `pension-core@2026.09.27.1`.
+
+### Base (migración 194)
+
+- Campo `saldo_afore_rango`.
+- `sync_desde_cliente` lo baja de la semilla.
+- `base_asesoria.highlights.afore_rango` lo expone.
+
+### App
+
+- Donde hay rango, `/mi` (hero Ley 97), el paso 0 (pregunta 2) y "Mis cinco" dicen "entre $X y $Y (estimado)". Sin rango se ven como antes.
+- Helper: `rangoAforeTexto`.
+
+### Recálculo (por decidir cómo)
+
+- Los ~1,160 SISEC de Jordan hay que re-parsearlos desde su PDF: "Sisec clientes" por CURP y `documento_sisec_url` en B2B.
+- El resto de la base se queda con saldos de v55 hasta que se recalcule.
+- Calculos con `mass_refresh` evita correos y envíos a aliados, pero sigue generando 2 Google Docs y 2 llamadas a OpenAI por persona.
+
+## Recálculo Jordan (27-sep, noche)
+
+- **Motor v5.6 en n8n:** Raul lo pegó. Se verificó byte a byte contra `motor/calculadora_pension_pro_v56.js` y quedó publicado. Raul apagó en Calculos los Google Docs y las llamadas a OpenAI para el lote. La hoja `CALCULADORA_{curp}` (Copy file) siguió prendida.
+- **Cola `public.reparse_jordan_cola` (migración 195):** 678 clientes cuyo SISEC más reciente vino del parser de Jordan sin movimientos. Se opera con los RPC `reparse_jordan_tomar`, `reparse_jordan_guardar` y `reparse_jordan_marcar`.
+- **Workflow "Re-parsear SISEC Jordan (v5.6)"** (`6wGaain2Y6Lq3Pku`, sin publicar; se corre a mano con `{n}`). Por cada cliente:
+  1. busca el PDF en "Sisec clientes" por CURP;
+  2. lo parsea con v2.2+mov y verifica que la CURP coincida;
+  3. crea un proceso nuevo, "Recalculo v5.6";
+  4. llama a Calculos con `mass_refresh`.
+- **Resultado:**
+  - **625 recalculados con v5.6 y rango.** 10 se reintentaron porque el runner de n8n se saturó con 6 lotes en paralelo; en adelante, máximo 4.
+  - 32 sin PDF en Drive.
+  - 21 con PDF sin eventos: SISEC en 0 semanas o vacíos.
+  - Casi todos traían modificaciones de salario.
+- **Efecto medido contra el cálculo anterior guardado:**
+
+  | | Mediana | P10 | P90 | Casos que bajan más de 20 % | Casos que suben más de 20 % |
+  |---|---|---|---|---|---|
+  | Pensión base Ley 73 | 0.98 | 0.82 | 1.05 | 14 de 150 | 4 |
+  | Pensión Mod 40 retro hoy | 1.06 | — | — | — | — |
+
+  - En la **pensión base Ley 73**, los que bajan son quienes ganaban mucho menos antes de su último salario: el promedio de 250 semanas ahora usa los salarios reales.
+  - En **Mod 40 retro hoy** sube: el retroactivo va a 25 UMA y la base real es más baja, así que el salto es mayor.
+  - El **saldo RCV** contra el guardado sale en mediana 0.97, pero con mucha dispersión. Muchos cálculos "anteriores" eran de motores de mayo a agosto, anteriores a v5.3/v5.5. Contra v55 corrido hoy, v5.6 con salarios reales baja lo esperado; por ejemplo, UALE queda en 0.60 y EUHA en 0.78.
+- **Pendiente:**
+  - los 53 sin PDF o sin eventos;
+  - los ~359 B2B (`partner_transactions`);
+  - el resto de la base (saldos v55 de Nubarium y otros);
+  - volver a prender Docs y OpenAI en Calculos;
+  - subir `motor_version_actual` cuando se despliegue la app.
+
+### B2B (consultas de aliados)
+
+- **Alcance:** 326 `partner_transactions` con parser v2.0 o v2.0+bloques4, status `completed` y producto normal o CHECKUP. Diagnóstico avanzado quedó fuera, porque cambiar `calculo_pensional` dispara su generación.
+- **Cómo se corrió:** migración 196, workflow "Re-parsear SISEC Jordan B2B (v5.6)" (`iox21Oi2HyMxP9qp`). El PDF sale del id en `documento_sisec_url`; si no hay, se busca por CURP.
+- **Protecciones durante el lote:**
+  - Calculos corrió con `mass_refresh`. Verificado: no mandó correo al aliado ni llamó a Capital Connect o Credifintech.
+  - Un trigger temporal conservó las ligas de documentos que Calculos habría dejado vacías con los Docs apagados. Se quitó al terminar (196c).
+- **Resultado:**
+  - **321 recalculados con v5.6**, también reflejados en `trol3.consultas_aliados`.
+  - 5 PDFs sin eventos.
+  - 25 consultas de abril y mayo siguen sin ligas de documentos; ya no las tenían antes.
+- **Resto de la base sin v5.6** (27-sep):
+
+  | Versión del motor | Clientes | Con experto |
+  |---|---|---|
+  | 2.0.0 (v5.0) | 6,667 | 56 |
+  | 2.1.0 | 867 | — |
+  | v55 | 386 | — |
+  | v18 | 132 | — |
+  | Sin semilla | 930 | — |
+
+  En total, unos 95 con experto. A ~20 por minuto, recalcularlos todos por Calculos toma unas 8 horas.
+
+## Recálculo del resto de la base (28-sep)
+
+Raul apagó también la hoja CALCULADORA (Copy file, HTTP Request2, Move file2) además de Docs y OpenAI. Se recalcula con el SISEC que cada cliente ya tiene guardado; no hay re-parseo.
+
+- **Cola `public.recalculo_v56_cola`** (migración 197 y 197b): **10,033 clientes**. Entran los que tienen el proceso más reciente con `employment_history_json`, CURP de 18 y semilla distinta de v5.6.
+
+  | Prioridad | Quiénes | Clientes |
+  |---|---|---|
+  | 0 | con experto | 101 |
+  | 1 | con semilla de un motor viejo | 8,867 |
+  | 2 | sin semilla | 1,065 |
+
+- **RPC:**
+  - `recalculo_v56_tomar(n)` crea el proceso "Recalculo v5.6" con copia del SISEC y devuelve lo que Calculos necesita. Antes de tomar, cierra como ok los que ya quedaron en v5.6 (197b). Reintenta los 'procesando' de más de 30 minutos, hasta 3 veces.
+  - `recalculo_v56_cerrar(min)` marca ok o error según la semilla.
+- **Workflow "Recalcular resto (v5.6)"** (`MfKPuy6q5KaQErXo`, **publicado**, webhook `recalculo-v56`, body `{n}`):
+  - toma el lote y llama a Calculos con `mass_refresh` para cada cliente, con una pausa entre uno y otro;
+  - al terminar, se llama solo con el siguiente lote ("Siguiente lote");
+  - se detiene cuando la cola se vacía, o al despublicarlo.
+- **Prueba (3 clientes con experto):** semilla v5.6 con `afore_rango`, `trol3.datos.saldo_afore_rango` sincronizado, procesos en DIAGNOSTICO_GENERADO. Calculos tardó 4–9 s por cliente y no creó documentos.
+- **Capacidad:** el cuello es el task runner de n8n, no el workflow. Calculos procesa como máximo **~10 clientes por minuto**. Por encima de eso, las tareas esperan más de 60 s y fallan con "Task request timed out".
+  - Con 4 corridas en paralelo y 6 s de pausa (40 por minuto) fallaron 58 de 800.
+  - Con 2 cadenas y 10 s de pausa fallaron 8 de 300.
+  - Quedó en **2 cadenas con 15 s de pausa (~8 por minuto)**, es decir, unas 18–19 horas para todo. La perilla es la pausa: se cambia, se republica y aplica desde el siguiente lote.
+  - Los fallidos quedan en 'procesando' y se reintentan solos.
+- **Avance a las 11:00 UTC del 28-sep:** 745 ok (incluidos los 101 con experto) y 300 en curso.
+- **Al terminar:**
+  1. correr `select public.recalculo_v56_cerrar(0)`;
+  2. revisar los errores;
+  3. despublicar `MfKPuy6q5KaQErXo`;
+  4. volver a prender en Calculos Docs, OpenAI y la hoja CALCULADORA.
+- **Costo lateral:** cada intento crea un proceso "Recalculo v5.6", y por el puente también una consulta `calculo_base` en trol3, sin aviso al cliente.

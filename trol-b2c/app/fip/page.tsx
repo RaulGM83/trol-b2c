@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 // con la ref del evento (wa.me con ref:fip2026). El QR de las tarjetas (/i/fip2026) cae aquí.
 const CODIGO = 'fip2026';
 const TITULO = 'Tu asesoría básica de pensión, cortesía del Foro Internacional de Pensiones';
-const DESC = 'Tu información real del IMSS, una sesión de 20 minutos con un experto de Trol y cashback a tu AFORE con Millas para el Retiro.';
+const DESC = 'Tus números de pensión, una sesión de 20 minutos con un experto de Trol y cashback a tu AFORE con Millas para el Retiro.';
 
 export const metadata: Metadata = {
   title: 'Foro Internacional de Pensiones × Trol · Tu asesoría básica',
@@ -38,14 +38,14 @@ async function registrarVisita(db: ReturnType<typeof createClient>) {
 }
 
 const QUE_TE_LLEVAS = [
-  { t: 'Tu información real del IMSS', d: 'Semanas cotizadas, salario registrado, tu ley (73 o 97) y cuánto te tocaría hoy de pensión. Sin trámites: con tu CURP lo consultamos nosotros.' },
+  { t: 'Tus números de pensión', d: 'Cuánto te tocaría de pensión, tus semanas, tu ley (73 o 97) y tu ahorro para el retiro. Hacemos los cálculos con base en tu información real del IMSS.' },
   { t: 'Una sesión de 20 minutos con un experto', d: 'Cortesía del Foro. Revisamos tu caso contigo: qué te conviene, qué no, y cuál es tu mejor jugada.' },
   { t: 'Cashback a tu AFORE con Millas para el Retiro', d: 'Lo que después decidas invertir en Trol regresa a tu ahorro para el retiro: 10% en asesorías y 5% en gestorías.' },
 ];
 
 const PASOS = [
-  ['Regístrate aquí', 'Tu celular, tu CURP y listo. Dos minutos.'],
-  ['Consultamos tu historial', 'Directo con el IMSS. Suele tardar minutos; si tarda más, te avisamos por WhatsApp.'],
+  ['Regístrate aquí', 'Tu nombre, tu celular y tu CURP. Dos minutos.'],
+  ['Hacemos tus cálculos', 'Suelen estar en minutos; si tardan más, te avisamos por WhatsApp.'],
   ['Entra a tu cuenta', 'Ves tus números, contestas cinco preguntas y agendas tu sesión con tu experto.'],
 ];
 
@@ -83,7 +83,7 @@ export default async function Fip() {
             <p className="text-sm font-semibold uppercase tracking-wide text-lime">{m.etiqueta ?? 'Foro Internacional de Pensiones'}</p>
             <h1 className="mt-3 text-4xl font-extrabold leading-tight sm:text-5xl">Tu asesoría básica de pensión, cortesía del Foro</h1>
             <p className="mt-4 max-w-xl text-lg text-white/80">
-              El {m.patrocinio ?? 'Foro Internacional de Pensiones y Millas para el Retiro'} te regalan lo que normalmente cuesta: tu información real del IMSS y 20 minutos con un experto de Trol para saber qué hacer con ellos.
+              El Foro Internacional de Pensiones, El Trol Financiero y Millas para el Retiro te regalan tu asesoría básica: tus números de pensión y 20 minutos con un experto de Trol para saber qué te conviene hacer.
             </p>
             <ul className="mt-8 space-y-5">
               {QUE_TE_LLEVAS.map((x) => (
@@ -141,7 +141,7 @@ export default async function Fip() {
       </section>
 
       <footer className="bg-ink px-5 py-8 text-center text-xs text-white/60">
-        El Trol Financiero · Asesoría pensional independiente. La consulta al IMSS se hace con tu autorización y sólo para tu asesoría.{' '}
+        El Trol Financiero · Asesoría pensional independiente. Usamos tu información con tu autorización y sólo para tu asesoría.{' '}
         <a href="https://landing.trol.mx/privacidad/" className="underline hover:text-lime" target="_blank" rel="noopener noreferrer">Aviso de privacidad</a>
       </footer>
     </main>

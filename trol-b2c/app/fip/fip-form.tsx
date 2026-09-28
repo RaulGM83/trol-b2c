@@ -36,6 +36,7 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
   const supabase = createClient();
   const [paso, setPaso] = useState<'datos' | 'otp' | 'listo'>('datos');
   const [nombre, setNombre] = useState('');
+  const [apellidos, setApellidos] = useState('');
   const [tel, setTel] = useState(telVerificado);
   const [conSesion, setConSesion] = useState(!!telVerificado);
   const [curp, setCurp] = useState('');
@@ -49,10 +50,11 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
   const tel10 = soloDigitos(tel).slice(-10);
   const curpLimpia = curp.toUpperCase().replace(/\s/g, '');
   const e164 = () => '+52' + tel10;
-  const datosOk = nombre.trim().length >= 2 && tel10.length === 10 && CURP_RE.test(curpLimpia) && acepta;
+  const datosOk = nombre.trim().length >= 2 && apellidos.trim().length >= 2 && tel10.length === 10 && CURP_RE.test(curpLimpia) && acepta;
 
   function validar(): string | null {
     if (nombre.trim().length < 2) return 'Escribe tu nombre.';
+    if (apellidos.trim().length < 2) return 'Escribe tus apellidos.';
     if (tel10.length !== 10) return 'Escribe tu celular a 10 dígitos.';
     if (!CURP_RE.test(curpLimpia)) return ERRORES.curp_invalida;
     if (!acepta) return ERRORES.sin_consentimiento;
@@ -61,7 +63,7 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
 
   async function darDeAlta() {
     const { data, error } = await supabase.schema('trol3').rpc('alta_web_evento', {
-      p_codigo: codigo, p_nombre: nombre.trim(), p_curp: curpLimpia, p_consentimiento: true,
+      p_codigo: codigo, p_nombre: nombre.trim(), p_apellidos: apellidos.trim(), p_curp: curpLimpia, p_consentimiento: true,
     });
     if (error) {
       const clave = Object.keys(ERRORES).find((k) => error.message.includes(k));
@@ -130,7 +132,7 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
         <h2 className="mt-3 text-2xl font-extrabold">{nombre.trim().split(' ')[0]}, ya estamos en eso</h2>
         <p className="mt-2 text-sm text-muted">
           {buscando
-            ? 'Estamos consultando tu historial en el IMSS. Suele tardar unos minutos; te avisamos por WhatsApp en cuanto tu cuenta tenga tus números.'
+            ? 'Estamos preparando tus cálculos. Suele tardar unos minutos; te avisamos por WhatsApp en cuanto tu cuenta tenga tus números.'
             : 'Tu cuenta quedó creada con el beneficio del Foro. Entra y ve tus números en cuanto estén.'}
         </p>
         <ul className="mt-4 space-y-2 text-sm">
@@ -163,9 +165,14 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
     <div className="rounded-2xl bg-white p-6 text-ink shadow-xl">
       <h2 className="text-xl font-extrabold">Activa tu asesoría básica</h2>
       <p className="mt-1 text-sm text-muted">Dos minutos. Tu cuenta se abre con tu celular, sin contraseña.</p>
-      <label className="mt-4 block text-sm font-semibold">Tu nombre
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="given-name" placeholder="Como te gusta que te digan" className={campo} />
-      </label>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm font-semibold">Nombre(s)
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="given-name" placeholder="Como en tu INE" className={campo} />
+        </label>
+        <label className="block text-sm font-semibold">Apellidos
+          <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} autoComplete="family-name" placeholder="Paterno y materno" className={campo} />
+        </label>
+      </div>
       <label className="mt-3 block text-sm font-semibold">Tu celular (WhatsApp)
         {conSesion ? (
           <div className="mt-1 flex items-center justify-between rounded-xl border border-line bg-cream px-4 py-3 text-base">
@@ -181,7 +188,7 @@ export function FipForm({ codigo, telVerificado, waUrl }: { codigo: string; telV
       </label>
       <label className="mt-3 block text-sm font-semibold">Tu CURP
         <input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase())} maxLength={18} autoCapitalize="characters" spellCheck={false} placeholder="18 caracteres, como en tu INE" className={`${campo} font-mono tracking-wider`} />
-        <span className="mt-1 block text-xs font-normal text-muted">Con ella consultamos tu historial del IMSS. Sólo para tu asesoría.</span>
+        <span className="mt-1 block text-xs font-normal text-muted">Con ella hacemos tus cálculos. Sólo para tu asesoría.</span>
       </label>
       <label className="mt-4 flex cursor-pointer items-start gap-2 text-xs text-muted">
         <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-lime" />
