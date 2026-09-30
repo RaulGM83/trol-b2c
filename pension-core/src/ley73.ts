@@ -22,6 +22,12 @@ import type {
 } from './types';
 import { lineasCapturaMod40 } from './mod40-lineas';
 import {
+  factorIncrementosFebrero,
+  fechaDelDerecho,
+  montoActualizado,
+  retroactivoDesdeDerecho,
+} from './derecho73';
+import {
   addDias,
   addMeses,
   DIAS_ANIO,
@@ -201,11 +207,50 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       ? porAnio(PMG_LEY73, ultimaCot.getUTCFullYear())
       : porAnio(PMG_LEY73, fechaRetiro.getUTCFullYear()); // K16
   const pensionMaxima = porAnio(UMA, anioHoy) * 25 * DIAS_MES_PENSION; // K17
+
+  // ---- Derecho ya ganado (motor v5.7, claude/90) ----
+  // Quien ya no cotiza y cumplió los requisitos ganó su derecho en D (la más
+  // tardía entre la última cotización y los 60 años). El monto se calcula a D
+  // —edad a D con la regla del .5, mínima garantizada del año de D— y sube cada
+  // febrero con la inflación. Pensionarse a los 61 o a los 66 no cambia el
+  // monto, sólo los meses de retroactivo. Con Mod 40 retro o cotizando no
+  // aplica: ahí se gana un derecho nuevo.
+  const fechaDerecho = fechaDelDerecho(fnac, ultimaCot);
+  const aplicaDerecho =
+    entrada.reglaDerecho !== false &&
+    pct === 0 &&
+    !recuperaRetro &&
+    perfil.status_empleo !== 'empleado' &&
+    perfil.conserva_derechos &&
+    !faltanSemanas &&
+    diasEntre(fechaDerecho, hoy) >= 0;
+  let derecho: ResultadoLey73['derecho'] = null;
+  let formulaD = 0;
+  let pmgD = 0;
+  let montoDerecho: number | null = null;
+  if (aplicaDerecho) {
+    const edadD = diasEntre(fnac, fechaDerecho) / DIAS_ANIO;
+    const [, ajusteD] = lookupAprox(Math.round(edadD), AJUSTE_EDAD as Array<[number, number]>);
+    formulaD = ((cuantiaBasica + incrementos + asignaciones) * ajusteD) / 12;
+    pmgD = porAnio(PMG_LEY73, fechaDerecho.getUTCFullYear());
+    montoDerecho = montoActualizado(formulaD, pmgD, pensionMaxima, fechaDerecho, hoy);
+    derecho = {
+      fecha: fechaDerecho,
+      edad: edadD,
+      ajusteEdad: ajusteD,
+      pensionALaFecha: Math.min(pensionMaxima, Math.max(formulaD, pmgD)),
+      factorActualizacion: factorIncrementosFebrero(fechaDerecho, hoy),
+    };
+  }
+
   // D43. Monto que le corresponde por semanas y salario, antes del filtro de
   // conservación: es lo que vería si reactiva sus derechos.
   const montoPorSemanas = faltanSemanas
     ? null
-    : round(Math.min(pensionMaxima, Math.max(pensionCalculada, pensionMinima)), -2);
+    : round(
+        montoDerecho ?? Math.min(pensionMaxima, Math.max(pensionCalculada, pensionMinima)),
+        -2,
+      );
   const pensionMensual = negativa ? null : montoPorSemanas;
   // Solo tiene sentido ofrecerlo cuando la conservación es el ÚNICO obstáculo.
   const pensionSiReactiva = pierdeConservacion && !faltanSemanas ? montoPorSemanas : null;
@@ -219,11 +264,15 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   // conservación vencida tampoco: `negativa` ya lo cubre.
   let retroactivoAlPensionarse: ResultadoLey73['retroactivoAlPensionarse'] = null;
   if (pct === 0 && !recuperaRetro && !negativa && pensionMensual !== null) {
-    const fecha60 = addMeses(fnac, 60 * 12);
-    const fechaDerechos = diasEntre(fecha60, ultimaCot) > 0 ? ultimaCot : fecha60;
+    const fechaDerechos = fechaDerecho;
     const meses = Math.min(12, Math.round(diasEntre(fechaDerechos, fechaRetiro) / DIAS_MES));
     if (meses > 0) {
-      retroactivoAlPensionarse = { fechaDerechos, meses, monto: pensionMensual * meses };
+      // Con el derecho ya ganado cada mensualidad lleva el incremento de su mes
+      // (un retroactivo que cruza febrero no es parejo).
+      const monto = derecho
+        ? round(retroactivoDesdeDerecho(formulaD, pmgD, pensionMaxima, fechaDerecho, fechaRetiro, meses), -2)
+        : pensionMensual * meses;
+      retroactivoAlPensionarse = { fechaDerechos, meses, monto };
     }
   }
 
@@ -340,8 +389,8 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       cuantiaBasica,
       incrementos,
       asignaciones,
-      ajusteEdad,
-      pensionMinima,
+      ajusteEdad: derecho ? derecho.ajusteEdad : ajusteEdad,
+      pensionMinima: derecho ? pmgD * derecho.factorActualizacion : pensionMinima,
       pensionMaxima,
       advertenciaConservacion,
       fechaTramite,
@@ -350,6 +399,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     aplicaRetroHoy,
     semanasRecuperablesRetro,
     retroactivoAlPensionarse,
+    derecho,
     costoEstrategiaFutura,
     costoMensualPrimerMes,
     modalidadPrimerMes,

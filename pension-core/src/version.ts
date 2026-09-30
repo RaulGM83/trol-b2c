@@ -57,7 +57,18 @@
 // eventos del mismo día bien ordenados, tramos planos deflactados cuando el
 // SISEC no trae modificaciones, SIN castigo plano de 10% y fugas 0.95 sobre
 // RCV-97. Mueve los saldos RCV/SAR y todo lo de Ley 97 que cuelga de ellos.
-export const ENGINE_VERSION = '2026.09.27.1';
+// 2026.09.30.1 — regla de la fecha del derecho (espejo del motor n8n v5.7,
+// claude/90): quien ya no cotiza y ya ganó su derecho (60 años, >500 semanas,
+// conservación vigente) cobra el monto calculado a D —edad a D con la regla del
+// .5, mínima garantizada del año de D— actualizado con los incrementos de
+// febrero; el retroactivo suma cada mensualidad con el incremento de su mes.
+// Sube la pensión "hoy" de los pensionables con derecho viejo (Sergio Durán
+// 30,200 → 39,500; Beatriz Serrano 69,400 → 88,300) y la base "sin proyecto"
+// del Mod 40 cuando D ya pasó. `reglaDerecho: false` reproduce el Excel.
+// 2026.09.30.2 — mínima garantizada Ley 73 igual a la del motor n8n: 2025 =
+// 9,412.98 (confirmada con la nómina IMSS de César, claude/90) y 2026 = 10,635
+// (antes 9,415.69 y 10,600 del Excel). Decisión de Raul, 30-sep.
+export const ENGINE_VERSION = '2026.09.30.2';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.

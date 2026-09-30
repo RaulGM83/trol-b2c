@@ -428,6 +428,8 @@ describe('Proyecto Mod40 Retroactivo (hoja Mod40 Retroactivo)', () => {
   it('sin pensionEscenarioBase calcula la base internamente (≈ Escenario Base 7639)', () => {
     const r2 = computeProyectoMod40({
       ...base,
+      // Paridad con el Excel: sin la regla de la fecha del derecho (claude/90).
+      reglaDerecho: false,
       palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
     })!;
     expect(r2).not.toBeNull();
@@ -596,6 +598,10 @@ describe('Ley 73 — cliente CAFE (Excel corregido)', () => {
 describe('Proyecto Mod40 — cliente CAFE (Excel corregido)', () => {
   const r = computeProyectoMod40({
     ...baseCafe,
+    // Paridad con el Excel: sin la regla de la fecha del derecho (claude/90).
+    // Con la regla, la base "sin proyecto" usa la mínima del año de D (ver
+    // derecho73.test.ts).
+    reglaDerecho: false,
     palancas: { ...palancasExcel73, recuperarSemanasDescontadas: true },
   })!;
 
@@ -665,6 +671,7 @@ describe('Proyecto Mod40 — cliente CAFE (Excel corregido)', () => {
   it('override de SAR92 mueve el efectivo al retiro', () => {
     const r2 = computeProyectoMod40({
       ...baseCafe,
+      reglaDerecho: false, // mismo supuesto que `r` (paridad Excel)
       palancas: {
         ...palancasExcel73,
         recuperarSemanasDescontadas: true,

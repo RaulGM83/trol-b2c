@@ -167,6 +167,11 @@ export interface EntradaCalculo {
    */
   fechaTramite?: Date;
   /**
+   * Regla de la fecha del derecho (motor v5.7, claude/90). Default true. Sólo
+   * se apaga para reproducir el Excel CALCULADORA en los tests de paridad.
+   */
+  reglaDerecho?: boolean;
+  /**
    * Serie INPC para las actualizaciones de la línea de captura del Mod 40.
    * El servidor la lee de `trol3.inpc_mensual`; sin ella el motor usa el
    * fallback embebido de `inpc.ts`, que puede ir un mes atrás del INEGI.
@@ -261,8 +266,24 @@ export interface ResultadoLey73 {
     fechaDerechos: Date;
     /** Meses de retroactivo (tope 12). */
     meses: number;
-    /** pensionMensual × meses. */
+    /** Suma de las mensualidades (cada una con el incremento de su mes). */
     monto: number;
+  } | null;
+  /**
+   * Derecho ya ganado (no cotiza, >500 semanas, conservación vigente y D ≤ hoy):
+   * el monto sale a la fecha del derecho y se actualiza con los incrementos de
+   * febrero. null si no aplica (activo, derecho futuro, con Mod 40 o cotizando).
+   */
+  derecho: {
+    /** D: la más tardía entre la última cotización y los 60 años. */
+    fecha: Date;
+    /** Edad a D (el factor de edad usa la regla del .5). */
+    edad: number;
+    ajusteEdad: number;
+    /** Mensualidad a D, antes de incrementos. */
+    pensionALaFecha: number;
+    /** Producto de los incrementos de febrero de D a hoy. */
+    factorActualizacion: number;
   } | null;
   /** Costo de la estrategia futura de cotización (Mod40/Mod10). */
   costoEstrategiaFutura: number;

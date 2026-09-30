@@ -811,8 +811,22 @@ function Calc73Panel({
                   value: fmt(r.retroactivoAlPensionarse.monto),
                   destacado: true,
                 },
+                ...(r.derecho
+                  ? [
+                      {
+                        label: "Edad al derecho",
+                        value: `${r.derecho.edad.toFixed(1)} años`,
+                      },
+                      {
+                        label: "Incrementos de febrero",
+                        value: `×${r.derecho.factorActualizacion.toFixed(3)}`,
+                      },
+                    ]
+                  : []),
               ],
-              nota: "Si el cliente presenta su solicitud en la fecha de retiro elegida sin volver a cotizar, el IMSS le paga la pensión desde que adquirió el derecho, topado a 12 meses.",
+              nota: r.derecho
+                ? "El derecho ya se ganó: la pensión se calcula a esa fecha (edad y mínima garantizada de entonces) y sube cada febrero con la inflación. Pensionarse después sin cotizar no cambia el monto; el IMSS paga el retroactivo topado a 12 meses."
+                : "Si el cliente presenta su solicitud en la fecha de retiro elegida sin volver a cotizar, el IMSS le paga la pensión desde que adquirió el derecho, topado a 12 meses.",
             },
           ]
         : []),
@@ -1092,7 +1106,23 @@ function Calc73Panel({
                 value={fmt(r.retroactivoAlPensionarse.monto)}
                 destacado
               />
+              {r.derecho && (
+                <>
+                  <Stat label="Edad al derecho" value={`${r.derecho.edad.toFixed(1)} años`} />
+                  <Stat
+                    label="Incrementos de febrero"
+                    value={`×${r.derecho.factorActualizacion.toFixed(3)}`}
+                  />
+                </>
+              )}
             </div>
+            {r.derecho && (
+              <p className="text-xs text-muted-foreground leading-snug">
+                El derecho ya se ganó: la pensión se calcula a esa fecha (edad y
+                mínima garantizada de entonces) y sube cada febrero con la
+                inflación. Pensionarse después sin cotizar no cambia el monto.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground leading-snug">
               Si el cliente presenta su solicitud en la fecha de retiro elegida
               sin volver a cotizar, el IMSS le paga la pensión desde que
