@@ -17,6 +17,7 @@ import { ventanillaEstado, actasEstado, horarioLegible, MXN_POR_CREDITO, type Es
 import { ChecklistOportunidad, type ItemChecklist } from '@/components/trol3/ChecklistOportunidad';
 import { DocumentosPanel } from '@/components/trol3/DocumentosPanel';
 import { CompartirLinks } from '@/components/trol3/CompartirLinks';
+import { DiagnosticoBasico } from '@/components/trol3/DiagnosticoBasico';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { MesaViraal } from '@/components/trol3/MesaViraal';
 import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
@@ -612,6 +613,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 </div>
                 <p className="mt-2 text-[11px] text-muted">{(perRel as Any)?.app_visto_en ? `Abrió su cuenta por última vez el ${fmtFecha((perRel as Any).app_visto_en)}.` : 'Todavía no ha abierto su cuenta.'}</p>
               </section>
+              <DiagnosticoBasico personaId={e.persona_id} nombre={e.nombre ?? null} />
               {baseRel ? (
                 <section className="rounded-2xl border border-line bg-white p-5">
                   <div className="flex items-center justify-between gap-2">

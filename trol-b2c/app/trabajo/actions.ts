@@ -12,6 +12,7 @@ import { avisar } from '@/lib/trol3/avisar';
 import { crearActa, crearVentanilla, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
 import { sincronizarConsultaJordan } from '@/lib/jordan/procesar';
 import { extraerPropuestas } from '@/lib/granola/procesar';
+import { armarDiagnosticoBasico } from '@/lib/trol3/diagnostico-basico';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String((e as Any)?.message ?? e) });
@@ -1441,6 +1442,26 @@ export async function marcarMiLinkCompartido(personaId: string) {
   await requireMiembro();
   const { error } = await t3().rpc('marcar_mi_link_compartido', { p_persona: personaId });
   if (error) return fail(error);
+  return ok();
+}
+
+/**
+ * Diagnóstico básico por chat (claude/91): el texto que acompaña la imagen. Se pide al
+ * abrir la tarjeta, no al pintar el expediente (arma consultas que no hacen falta siempre).
+ */
+export async function diagnosticoBasicoMensaje(personaId: string) {
+  const m = await requireMiembro();
+  const d = await armarDiagnosticoBasico(personaId, m.nombre);
+  if (!d) return fail('Sin datos para el diagnóstico');
+  return ok({ mensaje: d.mensaje, conLink: !!d.link });
+}
+
+/** El asesor copió o descargó el diagnóstico básico: queda en la historia (204). */
+export async function registrarDiagnosticoBasico(personaId: string, accion: 'imagen' | 'descarga' | 'mensaje') {
+  await requireMiembro();
+  const { error } = await t3().rpc('registrar_diagnostico_basico', { p_persona: personaId, p_accion: accion });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
 }
 
