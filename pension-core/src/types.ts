@@ -268,11 +268,15 @@ export interface ResultadoLey73 {
     meses: number;
     /** Suma de las mensualidades (cada una con el incremento de su mes). */
     monto: number;
+    /** Mensualidades desde el derecho que ya no se cobran (más allá de 12). */
+    mesesPerdidos: number;
+    /** mesesPerdidos × la pensión de hoy (pesos de hoy). */
+    montoPerdido: number;
   } | null;
   /**
-   * Derecho ya ganado (no cotiza, >500 semanas, conservación vigente y D ≤ hoy):
-   * el monto sale a la fecha del derecho y se actualiza con los incrementos de
-   * febrero. null si no aplica (activo, derecho futuro, con Mod 40 o cotizando).
+   * Con 0 % de cotización futura (>500 semanas y conservación vigente): el monto
+   * sale a la fecha del derecho D y se actualiza con los incrementos de febrero;
+   * la edad de retiro ya no sube el factor. D puede ser futura. null si cotiza.
    */
   derecho: {
     /** D: la más tardía entre la última cotización y los 60 años. */

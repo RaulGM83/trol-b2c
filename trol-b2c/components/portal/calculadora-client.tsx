@@ -811,6 +811,14 @@ function Calc73Panel({
                   value: fmt(r.retroactivoAlPensionarse.monto),
                   destacado: true,
                 },
+                ...(r.retroactivoAlPensionarse.mesesPerdidos > 0
+                  ? [
+                      {
+                        label: `Pierde (${r.retroactivoAlPensionarse.mesesPerdidos} meses)`,
+                        value: fmt(r.retroactivoAlPensionarse.montoPerdido),
+                      },
+                    ]
+                  : []),
                 ...(r.derecho
                   ? [
                       {
@@ -825,7 +833,7 @@ function Calc73Panel({
                   : []),
               ],
               nota: r.derecho
-                ? "El derecho ya se ganó: la pensión se calcula a esa fecha (edad y mínima garantizada de entonces) y sube cada febrero con la inflación. Pensionarse después sin cotizar no cambia el monto; el IMSS paga el retroactivo topado a 12 meses."
+                ? "Sin cotizar, la pensión se calcula a la fecha del derecho (edad y mínima garantizada de entonces) y sube cada febrero con la inflación. Pensionarse después no cambia el monto: el IMSS paga 12 meses de retroactivo y lo demás se pierde."
                 : "Si el cliente presenta su solicitud en la fecha de retiro elegida sin volver a cotizar, el IMSS le paga la pensión desde que adquirió el derecho, topado a 12 meses.",
             },
           ]
@@ -1106,6 +1114,12 @@ function Calc73Panel({
                 value={fmt(r.retroactivoAlPensionarse.monto)}
                 destacado
               />
+              {r.retroactivoAlPensionarse.mesesPerdidos > 0 && (
+                <Stat
+                  label={`Pierde (${r.retroactivoAlPensionarse.mesesPerdidos} meses)`}
+                  value={fmt(r.retroactivoAlPensionarse.montoPerdido)}
+                />
+              )}
               {r.derecho && (
                 <>
                   <Stat label="Edad al derecho" value={`${r.derecho.edad.toFixed(1)} años`} />
@@ -1118,9 +1132,10 @@ function Calc73Panel({
             </div>
             {r.derecho && (
               <p className="text-xs text-muted-foreground leading-snug">
-                El derecho ya se ganó: la pensión se calcula a esa fecha (edad y
+                Sin cotizar, la pensión se calcula a la fecha del derecho (edad y
                 mínima garantizada de entonces) y sube cada febrero con la
-                inflación. Pensionarse después sin cotizar no cambia el monto.
+                inflación. Pensionarse después no cambia el monto: sólo se
+                cobran 12 meses de retroactivo y lo demás se pierde.
               </p>
             )}
             <p className="text-xs text-muted-foreground leading-snug">

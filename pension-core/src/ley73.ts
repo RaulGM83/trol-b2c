@@ -208,22 +208,20 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       : porAnio(PMG_LEY73, fechaRetiro.getUTCFullYear()); // K16
   const pensionMaxima = porAnio(UMA, anioHoy) * 25 * DIAS_MES_PENSION; // K17
 
-  // ---- Derecho ya ganado (motor v5.7, claude/90) ----
-  // Quien ya no cotiza y cumplió los requisitos ganó su derecho en D (la más
-  // tardía entre la última cotización y los 60 años). El monto se calcula a D
-  // —edad a D con la regla del .5, mínima garantizada del año de D— y sube cada
-  // febrero con la inflación. Pensionarse a los 61 o a los 66 no cambia el
-  // monto, sólo los meses de retroactivo. Con Mod 40 retro o cotizando no
-  // aplica: ahí se gana un derecho nuevo.
-  const fechaDerecho = fechaDelDerecho(fnac, ultimaCot);
+  // ---- Fecha del derecho con 0 % de cotización (motor v5.7, claude/90) ----
+  // Quien ya no va a cotizar gana su derecho en D = la más tardía entre su
+  // última cotización y los 60 años. Con Mod 40 retro la última cotización es
+  // la fecha de trámite (la línea cubre hasta ahí); si hoy cotiza, es el día que
+  // deja de hacerlo (también la fecha de trámite). El monto se calcula a D —edad
+  // a D con la regla del .5, mínima garantizada del año de D— y sube cada
+  // febrero con la inflación. Pensionarse después sin cotizar NO sube el factor
+  // de edad: sólo mueve el retroactivo (tope 12 meses) y lo que se pierde de más.
+  // Aplica aunque D sea futura (p. ej. 57 años sin cotizar: su D son los 60).
+  // Cotizando (pct > 0) no aplica: el derecho se gana al retiro.
+  const ultimaCotDerecho = recuperaRetro ? fechaTramite : ultimaCot;
+  const fechaDerecho = fechaDelDerecho(fnac, ultimaCotDerecho);
   const aplicaDerecho =
-    entrada.reglaDerecho !== false &&
-    pct === 0 &&
-    !recuperaRetro &&
-    perfil.status_empleo !== 'empleado' &&
-    perfil.conserva_derechos &&
-    !faltanSemanas &&
-    diasEntre(fechaDerecho, hoy) >= 0;
+    entrada.reglaDerecho !== false && pct === 0 && !faltanSemanas && !pierdeConservacion;
   let derecho: ResultadoLey73['derecho'] = null;
   let formulaD = 0;
   let pmgD = 0;
@@ -259,20 +257,23 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   // El derecho se adquiere al cumplir TODOS los requisitos: 60 años, más de
   // 500 semanas y estar dado de baja → la fecha es la más reciente entre
   // cumplir 60 y la última cotización. Solo aplica si se pensiona sin volver
-  // a cotizar (pct = 0) y sin Mod40 retroactivo (sería contradictorio cobrar
-  // pensión retroactiva por meses que se están pagando al IMSS). Con la
+  // a cotizar (pct = 0). Con Mod 40 retro, D es la fecha de trámite (fin de la
+  // línea), así que no se cruza con los meses pagados al IMSS. Con la
   // conservación vencida tampoco: `negativa` ya lo cubre.
   let retroactivoAlPensionarse: ResultadoLey73['retroactivoAlPensionarse'] = null;
-  if (pct === 0 && !recuperaRetro && !negativa && pensionMensual !== null) {
+  if (pct === 0 && !negativa && pensionMensual !== null) {
     const fechaDerechos = fechaDerecho;
-    const meses = Math.min(12, Math.round(diasEntre(fechaDerechos, fechaRetiro) / DIAS_MES));
+    const mesesDesdeDerecho = Math.max(0, Math.round(diasEntre(fechaDerechos, fechaRetiro) / DIAS_MES));
+    const meses = Math.min(12, mesesDesdeDerecho);
+    // Lo que pasa de 12 meses ya no se cobra: esperar sin cotizar cuesta.
+    const mesesPerdidos = Math.max(0, mesesDesdeDerecho - 12);
     if (meses > 0) {
       // Con el derecho ya ganado cada mensualidad lleva el incremento de su mes
       // (un retroactivo que cruza febrero no es parejo).
       const monto = derecho
         ? round(retroactivoDesdeDerecho(formulaD, pmgD, pensionMaxima, fechaDerecho, fechaRetiro, meses), -2)
         : pensionMensual * meses;
-      retroactivoAlPensionarse = { fechaDerechos, meses, monto };
+      retroactivoAlPensionarse = { fechaDerechos, meses, monto, mesesPerdidos, montoPerdido: pensionMensual * mesesPerdidos };
     }
   }
 

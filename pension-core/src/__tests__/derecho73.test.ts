@@ -68,16 +68,41 @@ describe('Ley 73 con el derecho ya ganado = motor v5.7', () => {
     const b = computeLey73(entrada(sergio, salSergio, palancas(72)));
     expect(b.pensionMensual).toBe(a.pensionMensual);
   });
-  it('no aplica si vuelve a cotizar, si está empleado o sin la regla', () => {
+  it('no aplica si vuelve a cotizar, ni sin la regla', () => {
     expect(computeLey73(entrada(sergio, salSergio, palancas(68, { pctTiempoCotizando: 1, salarioMod40: 2933 }))).derecho).toBeNull();
-    expect(computeLey73(entrada({ ...sergio, status_empleo: 'empleado' }, salSergio, palancas(70))).derecho).toBeNull();
     const sin = computeLey73({ ...entrada(sergio, salSergio, palancas(edadHoy('1956-10-26'))), reglaDerecho: false });
     expect(sin.derecho).toBeNull();
     expect(sin.pensionMensual).toBe(30200); // v5.6.1: 30,182
   });
-  it('derecho futuro (aún no cumple 60): cálculo de siempre', () => {
-    const joven = { ...sergio, fecha_nacimiento: '1968-01-01' };
-    expect(computeLey73(entrada(joven, salSergio, palancas(60))).derecho).toBeNull();
+  it('empleado con 0 %: el derecho es el día que deja de cotizar; esperar no sube el factor', () => {
+    const emp = { ...sergio, status_empleo: 'empleado' } as PerfilSemilla;
+    const a = computeLey73(entrada(emp, salSergio, palancas(edadHoy('1956-10-26'))));
+    const b = computeLey73(entrada(emp, salSergio, palancas(72)));
+    expect(a.derecho!.fecha.toISOString().slice(0, 10)).toBe('2026-09-28');
+    expect(b.pensionMensual).toBe(a.pensionMensual);
+  });
+  it('derecho futuro (57 años sin cotizar): se calcula a los 60 aunque se retire a los 65', () => {
+    const joven = { ...sergio, fecha_nacimiento: '1969-01-15' } as PerfilSemilla;
+    const a60 = computeLey73(entrada(joven, salSergio, palancas(60)));
+    const a65 = computeLey73(entrada(joven, salSergio, palancas(65)));
+    expect(a60.derecho!.fecha.toISOString().slice(0, 10)).toBe('2029-01-15');
+    expect(a65.derecho!.ajusteEdad).toBe(0.75);
+    expect(a65.pensionMensual).toBe(a60.pensionMensual);
+    // a los 65 ya pasaron 60 meses desde el derecho: cobra 12 y pierde 48
+    expect(a65.retroactivoAlPensionarse!.meses).toBe(12);
+    expect(a65.retroactivoAlPensionarse!.mesesPerdidos).toBe(48);
+  });
+  it('con Mod 40 retro y 0 %: el derecho es la fecha de trámite; esperar sólo mueve el retroactivo', () => {
+    const m40 = { ...sergio, fecha_nacimiento: '1966-04-21', aplica_mod40: true,
+      fechas: { ...sergio.fechas, ultima_cotizacion_valida: '2025-11-30' } } as PerfilSemilla;
+    const p = (e: number) => palancas(e, { recuperarSemanasMod40Retro: true, salarioCotizacionRetro: 'MAXIMO' });
+    const hoy = computeLey73(entrada(m40, salSergio, p(edadHoy('1966-04-21'))));
+    const a62 = computeLey73(entrada(m40, salSergio, p(62)));
+    expect(hoy.retro).not.toBeNull();
+    expect(hoy.derecho!.fecha.toISOString().slice(0, 10)).toBe('2026-09-28');
+    expect(a62.pensionMensual).toBe(hoy.pensionMensual);
+    expect(a62.retroactivoAlPensionarse!.meses).toBe(12);
+    expect(a62.retroactivoAlPensionarse!.mesesPerdidos).toBeGreaterThan(0);
   });
 });
 

@@ -68,7 +68,12 @@
 // 2026.09.30.2 — mínima garantizada Ley 73 igual a la del motor n8n: 2025 =
 // 9,412.98 (confirmada con la nómina IMSS de César, claude/90) y 2026 = 10,635
 // (antes 9,415.69 y 10,600 del Excel). Decisión de Raul, 30-sep.
-export const ENGINE_VERSION = '2026.09.30.2';
+// 2026.09.30.3 — la regla del derecho se generaliza a todo 0 % de cotización:
+// con Mod 40 retro (D = fecha de trámite), empleado que deja de cotizar (D = la
+// baja) y derecho futuro (D = los 60). Esperar para pensionarse ya no sube el
+// factor de edad; el retroactivo dice además cuántas mensualidades se pierden
+// más allá de 12. Caso: Fernando Beltrán (BEMF660421), Raul 30-sep.
+export const ENGINE_VERSION = '2026.09.30.3';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.
