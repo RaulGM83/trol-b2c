@@ -150,7 +150,7 @@ export async function armarDiagnosticoBasico(personaId: string, miembroNombre: s
   let alerta: string | null = null;
   if (es73 && !pensionado && conserva && finCons && !cotizando && mesesHasta(finCons) > 0 && mesesHasta(finCons) <= 18) {
     alerta = `Tus derechos de Ley 73 vencen el ${fechaLarga(finCons)}. Hay que actuar antes.`;
-  } else if (limiteM40 && (codigos.has('mod40_retro') || codigos.has('mod40_prospectiva')) && mesesHasta(limiteM40) > 0 && mesesHasta(limiteM40) <= 12) {
+  } else if (limiteM40 && codigos.has('mod40_retro') && mesesHasta(limiteM40) > 0 && mesesHasta(limiteM40) <= 12) {
     alerta = `Tu fecha límite para inscribirte a Modalidad 40 es el ${fechaLarga(limiteM40)}.`;
   } else if (codigos.has('pension_hoy')) {
     alerta = 'Cada mes que pasa sin hacer tu trámite es pensión que no cobras.';

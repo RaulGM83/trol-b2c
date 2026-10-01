@@ -94,6 +94,7 @@ export const CHECK_LABEL: Record<string, string> = {
   derechos_vigentes: 'Derechos vigentes (Ley 73)',
   situacion_entendida: 'Entiendo mi situación',
   datos_vigentes: 'Información actualizada',
+  ventana_mod40: 'Ventana de Modalidad 40',
 };
 
 /** Exige miembro autenticado; redirige a login si no hay sesión. */
