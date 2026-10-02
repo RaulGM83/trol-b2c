@@ -634,7 +634,7 @@ export async function buscarPorTelefono(telefono: string): Promise<DuenoTelefono
   return { persona_id: pid, nombre: p.data.nombre as string | null, apellidos: p.data.apellidos as string | null, curp: p.data.curp as string | null, etapa: p.data.etapa as string | null };
 }
 
-export async function altaPersona(telefono: string, nombre: string, canal: string, curp?: string) {
+export async function altaPersona(telefono: string, nombre: string, canal: string, curp?: string, origen?: { tipo: OrigenTipo; ref?: string | null; canal?: string | null; texto?: string | null } | null) {
   const m = await requireMiembro();
   const db = t3();
   const c = (curp ?? '').trim().toUpperCase();
@@ -669,6 +669,11 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
     // declarar() espeja la CURP en personas y dispara el checklist de identidad.
     const r = await db.rpc('declarar', { p_persona: pid, p_campo: 'curp', p_valor: c, p_actor: 'asesor', p_actor_id: m.id, p_capa: 'declarado' });
     if (r.error) aviso = `Persona creada, pero no se guardó la CURP: ${r.error.message}`;
+  }
+  // 210 · Quién lo trajo, si lo dijeron en el alta (sólo trazabilidad).
+  if (origen) {
+    const r = await db.rpc('fijar_origen', { p_persona: pid, p_tipo: origen.tipo, p_ref: origen.ref || null, p_canal: origen.canal || canal || null, p_texto: origen.texto?.trim() || null });
+    if (r.error) aviso = (aviso ? aviso + ' ' : '') + `No se guardó quién lo trajo: ${r.error.message}`;
   }
   // Alta desde plataforma = cliente cálido: se pide la información pensional de una vez (Jordan).
   // Sin CURP la consulta queda pendiente y se dispara sola en cuanto alguien la capture.
@@ -1977,4 +1982,54 @@ export async function depositarCashback(ids: string[], referencia: string) {
   revalidatePath('/trabajo/millas');
   const r = data as { depositados: number; total: number };
   return ok({ texto: `${r.depositados} movimiento${r.depositados === 1 ? '' : 's'} marcado${r.depositados === 1 ? '' : 's'} como depositado${r.depositados === 1 ? '' : 's'} ($${Number(r.total).toLocaleString('es-MX')}).` });
+}
+
+// ── 210 · Relación completa (claude/95) ─────────────────────────────────────
+
+export type OrigenTipo = 'cliente' | 'aliado' | 'equipo' | 'otro';
+export type OrigenPersona = {
+  registrado_en: string | null; canal: string | null; campania: string | null; codigo: string | null;
+  tipo: OrigenTipo | null; ref: string | null; nombre: string | null; referido_estado: string | null;
+};
+
+/** Quién lo trajo. Sólo trazabilidad: un aliado queda `por_revisar`, la atribución la decide el equipo. */
+export async function fijarOrigen(personaId: string, tipo: OrigenTipo, ref?: string | null, canal?: string | null, texto?: string | null) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('fijar_origen', { p_persona: personaId, p_tipo: tipo, p_ref: ref || null, p_canal: canal || null, p_texto: texto?.trim() || null });
+  if (error) return fail(error.message === 'referidor_invalido' ? 'Elige a quién lo refirió (no puede ser él mismo).' : error.message === 'canal_requerido' ? 'Di por qué medio llegó.' : error);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok({ origen: data as OrigenPersona });
+}
+
+/** Oportunidad identificada por el asesor: nace `detectada`, el motor no la cierra. Crédito a pensionados cierra las demás. */
+export async function abrirOportunidad(personaId: string, codigo: string, nota: string) {
+  await requireMiembro();
+  const { data, error } = await t3().rpc('abrir_oportunidad', { p_persona: personaId, p_codigo: codigo, p_nota: nota.trim() || null });
+  if (error) return fail(error);
+  const r = data as { id: string; estado: string; ya_estaba: boolean; cerradas?: number };
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera');
+  return ok({ resultado: r, texto: r.ya_estaba ? `Ya estaba ${r.estado}.` : r.cerradas ? `Abierta. Cerró ${r.cerradas} que ya no aplican.` : 'Abierta.' });
+}
+
+/** Sesión programada por fuera (teléfono, WhatsApp, en persona): queda en la agenda a nombre de quien la atiende. */
+export async function registrarSesion(personaId: string, inicioISO: string, miembroId: string | null, notas: string) {
+  const m = await requireMiembro();
+  if (!inicioISO || Number.isNaN(Date.parse(inicioISO))) return fail('Falta la fecha y hora.');
+  const { error } = await t3().from('citas').insert({ persona_id: personaId, miembro_id: miembroId || m.id, inicio: inicioISO, origen: 'asesor', fuente: 'manual', notas: notas.trim() || null, titulo: 'Sesión de asesoría' });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera'); revalidatePath('/trabajo/hoy');
+  return ok();
+}
+
+export async function cancelarCita(citaId: string, personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().from('citas').update({ estado: 'cancelada' }).eq('id', citaId).eq('persona_id', personaId);
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera'); revalidatePath('/trabajo/hoy');
+  return ok();
+}
+
+/** Actualizar la información del IMSS desde Relación: consulta real y con costo (la UI confirma antes). */
+export async function actualizarSisec(personaId: string) {
+  return pedirConsulta(personaId, 'imss_historial', false, 'actualizar desde Relación', true);
 }

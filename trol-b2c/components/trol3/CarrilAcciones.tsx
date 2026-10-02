@@ -20,6 +20,8 @@ export type FilaCarril = {
   toque?: { n: number; tipo?: 'plantilla' | 'lukas' | 'llamada' } | null; tramo?: number;
   /** 189 · cuántas de las cinco preguntas del paso 0 ya tenemos (o dijo que no sabe). */
   base_listos?: number | null;
+  /** 210 · la siguiente sesión programada (origen `sesion` en Favoritos; `cita` en Calientes). */
+  cita_proxima?: string | null;
 };
 
 export const MOTIVOS_FRIO: [string, string][] = [

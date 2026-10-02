@@ -2,16 +2,21 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { altaPersona, buscarPorTelefono, type DuenoTelefono } from '@/app/trabajo/actions';
+import { altaPersona, buscarPorTelefono, type DuenoTelefono, type OrigenTipo } from '@/app/trabajo/actions';
+import { OrigenPicker } from '@/components/trol3/RelacionExtras';
+import type { Miembro } from '@/components/trol3/CarrilAcciones';
 
 const CURP_RE = /^[A-Z]{4}\d{6}[A-Z]{6}[A-Z0-9]\d$/;
 
-export function AltaPersonaForm({ onDone }: { onDone?: () => void }) {
+export function AltaPersonaForm({ onDone, aliados = [], miembros = [] }: { onDone?: () => void; aliados?: { id: string; nombre: string }[]; miembros?: Miembro[] }) {
   const router = useRouter();
   const [tel, setTel] = useState('');
   const [nombre, setNombre] = useState('');
   const [curp, setCurp] = useState('');
   const [canal, setCanal] = useState('organico');
+  // 210 · quién lo trajo (sólo trazabilidad; se puede corregir después en Relación).
+  const [conOrigen, setConOrigen] = useState(false);
+  const [origen, setOrigen] = useState<{ tipo: OrigenTipo; ref: string; canal: string; texto: string; refNombre?: string }>({ tipo: 'cliente', ref: '', canal: 'organico', texto: '' });
   const [err, setErr] = useState<string | null>(null);
   const [existente, setExistente] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -44,10 +49,12 @@ export function AltaPersonaForm({ onDone }: { onDone?: () => void }) {
       <select value={canal} onChange={(e) => setCanal(e.target.value)} className="w-full rounded-lg border border-line px-3 py-2">
         <option value="organico">Orgánico</option><option value="meta">Meta</option><option value="referido">Referido</option><option value="referido_vip">Referido VIP</option><option value="linkedin">LinkedIn</option><option value="aliado">Aliado</option>
       </select>
+      <button type="button" className="text-xs underline" onClick={() => setConOrigen((x) => !x)}>{conOrigen ? 'Sin referidor' : '¿Quién lo trajo? (referido, aliado, evento…)'}</button>
+      {conOrigen ? <div className="rounded-xl bg-cream p-3"><OrigenPicker value={origen} onChange={setOrigen} aliados={aliados} miembros={miembros} /></div> : null}
       {err && <p className="text-xs text-red-600">{err} {existente && <Link href={`/trabajo/p/${existente}`} className="font-semibold underline">Abrir expediente</Link>}</p>}
       <button disabled={pending || curpInvalida || curpChoca} onClick={() => start(async () => {
         setErr(null); setExistente(null);
-        const r = await altaPersona(tel, nombre, canal, curpLimpia || undefined);
+        const r = await altaPersona(tel, nombre, canal, curpLimpia || undefined, conOrigen && ((origen.tipo !== 'cliente' && origen.tipo !== 'aliado') || origen.ref) ? { tipo: origen.tipo, ref: origen.ref || null, canal: origen.canal, texto: origen.texto } : null);
         if (!r.ok) {
           const rr = r as { error?: string; persona_id?: string };
           setExistente(rr.persona_id ?? null);
@@ -61,7 +68,7 @@ export function AltaPersonaForm({ onDone }: { onDone?: () => void }) {
 }
 
 /** Botón "Dar de alta" que despliega el formulario en un panel. */
-export function AltaPersonaBoton() {
+export function AltaPersonaBoton({ aliados = [], miembros = [] }: { aliados?: { id: string; nombre: string }[]; miembros?: Miembro[] } = {}) {
   const [abierto, setAbierto] = useState(false);
   return (
     <div className="relative">
@@ -70,7 +77,7 @@ export function AltaPersonaBoton() {
         <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-line bg-white p-4 shadow-lg">
           <h2 className="mb-1 text-sm font-bold">Dar de alta (recepción)</h2>
           <p className="mb-3 text-xs text-muted">Solo teléfono confirmado. Tú quedas como experto asignado.</p>
-          <AltaPersonaForm onDone={() => setAbierto(false)} />
+          <AltaPersonaForm onDone={() => setAbierto(false)} aliados={aliados} miembros={miembros} />
         </div>
       )}
     </div>

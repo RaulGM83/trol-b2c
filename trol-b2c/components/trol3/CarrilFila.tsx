@@ -40,6 +40,7 @@ export function etiqueta(f: FilaCarril, miembros: Miembro[] = []): [string, stri
       return [f.ultimo_toque ? `Último toque ${hace(f.ultimo_toque)}` : 'Nunca tocado', PILL.tibios];
     case 'favoritos':
       if (f.en_proceso) return [f.pide_equipo ? 'En proceso · nos toca' : 'En proceso', PILL.proceso];
+      if (f.origen === 'sesion') return [f.cita_proxima ? `Sesión el ${dia(f.cita_proxima)}` : 'Sesión programada', PILL.favoritos];
       return [f.marca?.hasta ? `Hasta el ${dia(f.marca.hasta)}` : 'Sin fecha', PILL.favoritos];
     case 'frios':
       return [`${motivo || (f.origen === 'sin_telefono' ? 'Sin teléfono' : f.origen === 'sin_potencial' ? 'Sin oportunidad' : f.origen)}${f.marca?.en ? ` · ${dia(f.marca.en)}` : ''}`, PILL.frios];
@@ -75,8 +76,10 @@ export type FilaCompleta = FilaCarril & {
  * mini-ruta de paradas · qué sigue y último contacto · acciones. Lo que cambia por carril lo
  * decide CarrilAcciones; aquí sólo se pinta.
  */
-export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izquierda, atenuada }: {
+export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izquierda, atenuada, conCarril }: {
   f: FilaCompleta; libres?: number; alcance?: 'mios' | 'pozo'; esAdmin?: boolean; miembros?: Miembro[]; equipo?: boolean; izquierda?: React.ReactNode; atenuada?: boolean;
+  /** 210 · en una búsqueda la fila dice en qué carril está. */
+  conCarril?: boolean;
 }) {
   const [txt, cls] = etiqueta(f, miembros);
   const uc = f.ultimo_contacto;
@@ -88,6 +91,7 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
     <li className={`grid grid-cols-1 items-center gap-3 border-t border-line py-3 ${izquierda ? 'md:grid-cols-[24px_170px_200px_96px_minmax(0,1fr)_auto]' : 'md:grid-cols-[170px_200px_96px_minmax(0,1fr)_auto]'} ${atenuada ? 'opacity-70' : ''}`}>
       {izquierda}
       <div className="flex flex-wrap gap-1">
+        {conCarril ? <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${PILL[f.carril] ?? PILL.frios}`}>{({ favoritos: 'Favorito', calientes: 'Caliente', tibios: 'Tibio', frios: 'Frío', descartado: 'Descartado' } as Record<string, string>)[f.carril] ?? f.carril}</span> : null}
         <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cls}`}>{txt}</span>
         {f.carril === 'tibios' && f.toque?.n ? <span className="inline-block rounded-md border border-line bg-white px-1.5 py-0.5 text-[10px] font-semibold text-muted">toque {f.toque.n}/4{f.toque.tipo ? ` · ${f.toque.tipo === 'lukas' ? (f.chat_abierto ? 'Lukas' : 'llamada') : f.toque.tipo}` : ''}</span> : null}
         {f.carril === 'frios' && f.vuelve_el ? <span className="inline-block rounded-md border border-line bg-white px-1.5 py-0.5 text-[10px] font-semibold text-muted">vuelve el {dia(f.vuelve_el)}</span> : null}

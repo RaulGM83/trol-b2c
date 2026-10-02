@@ -21,6 +21,8 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
   // Una sola RPC: con búsqueda (>=4 chars o teléfono) filtra; sin búsqueda trae la actividad reciente (u ordenado por la columna elegida).
   const r = await db.rpc('buscar_personas', { p_q: q, p_limit: q.length >= 4 ? 40 : 30, p_orden: orden, p_dir: dir });
   const rows: Any[] = r.data ?? [];
+  // 210 · para "¿quién lo trajo?" en el alta.
+  const [{ data: aliadosAlta }, { data: miembrosAlta }] = await Promise.all([db.from('aliados').select('id,nombre').eq('activo', true).order('nombre'), db.from('miembros').select('id,nombre').eq('activo', true).order('nombre')]);
   const error: string | null = r.error?.message ?? null;
 
   const Th = ({ col, children, right }: { col: string; children: React.ReactNode; right?: boolean }) => {
@@ -42,7 +44,7 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
         <h1 className="text-xl font-extrabold">Personas {q ? <span className="text-sm font-normal text-muted">· resultados para “{q}”</span> : <span className="text-sm font-normal text-muted">{orden === 'actividad' ? '· actividad reciente' : '· ordenado'}</span>}</h1>
         <div className="flex items-center gap-2">
           {orden !== 'actividad' && <Link href={q ? `/trabajo?q=${encodeURIComponent(q)}` : '/trabajo'} className="text-xs text-muted underline">Quitar orden</Link>}
-          <AltaPersonaBoton />
+          <AltaPersonaBoton aliados={(aliadosAlta ?? []) as { id: string; nombre: string }[]} miembros={(miembrosAlta ?? []) as { id: string; nombre: string | null }[]} />
         </div>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}

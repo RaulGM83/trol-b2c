@@ -14,7 +14,7 @@ export const metadata = { title: 'Mi cartera · Trol equipo' };
 // Las reglas viven en la base (carril_de, mi_*); esta página sólo pinta y ofrece los gestos.
 const CARRILES: Carril[] = ['favoritos', 'calientes', 'tibios', 'frios'];
 
-export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string } }) {
+export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string } }) {
   const m = await requireMiembro();
   const tab: Carril = CARRILES.includes(searchParams.tab as Carril) ? (searchParams.tab as Carril) : 'calientes';
   const vista = searchParams.vista === 'equipo' ? 'equipo' : 'mios';
@@ -22,6 +22,10 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const alcance: 'mios' | 'pozo' = searchParams.alcance === 'pozo' ? 'pozo' : 'mios';
   const esAdmin = (m.roles ?? []).some((r) => r === 'admin' || r === 'coach');
   const db = t3();
+  // 210 · Buscar sin salir de la cartera: cada resultado trae su carril y sus gestos (claude/95).
+  const q = (searchParams.q ?? '').trim();
+  const busqueda = q.length >= 2 ? await db.rpc('buscar_cartera', { p_q: q, p_limit: 20 }) : null;
+  const encontrados: FilaCompleta[] = (busqueda?.data ?? []) as FilaCompleta[];
 
   const [{ data, error }, { data: misTareas }, { data: miembrosRaw }] = await Promise.all([
     tab === 'calientes' ? db.rpc('mi_calientes', { p_vista: vista })
@@ -37,7 +41,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const nombre = (m.nombre ?? '').split(' ')[0];
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance === 'pozo' ? 'pozo' : undefined, tema: searchParams.tema, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
+    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance === 'pozo' ? 'pozo' : undefined, tema: searchParams.tema, q: q || undefined, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
     return `/trabajo/cartera?${sp.toString()}`;
   };
   const query = `${equipo ? '&vista=equipo' : ''}`;
@@ -55,8 +59,8 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
     : tab === 'favoritos' ? 'Los que cuidas por la razón que sea, más los trámites en proceso (entran solos). No cuentan en el tope.'
     : 'Descansan con motivo. Vuelven solos a Tibios cuando toca el siguiente toque, cumplen 60 o 65, o se les cierra una ventana; a Calientes si escriben.';
 
-  const lista = (filas: FilaCompleta[], vacio: string, atenuar?: (f: FilaCompleta) => boolean) => (
-    filas.length ? <ul className="mt-2">{filas.map((f) => <CarrilFila key={f.persona_id} f={f} libres={d.libres ?? 99} {...comunes} atenuada={atenuar?.(f)} />)}</ul> : <p className="py-4 text-sm text-muted">{vacio}</p>
+  const lista = (filas: FilaCompleta[], vacio: string, atenuar?: (f: FilaCompleta) => boolean, conCarril = false) => (
+    filas.length ? <ul className="mt-2">{filas.map((f) => <CarrilFila key={f.persona_id} f={f} libres={d.libres ?? 99} {...comunes} atenuada={atenuar?.(f)} conCarril={conCarril} />)}</ul> : <p className="py-4 text-sm text-muted">{vacio}</p>
   );
 
   return (
@@ -73,6 +77,19 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
       </div>
       <CarteraTabs activa={tab} pendientes={nPend} vencidas={nVenc} conteos={conteo} query={query} />
       {error ? <p className="text-sm text-red-600">No se pudo cargar: {error.message}</p> : null}
+      <form method="get" action="/trabajo/cartera" className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="tab" value={tab} />
+        {equipo ? <input type="hidden" name="vista" value="equipo" /> : null}
+        <input name="q" defaultValue={q} placeholder="Buscar en la cartera: nombre, teléfono o CURP" className="min-w-[280px] flex-1 rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+        <button type="submit" className="rounded-xl bg-ink px-4 py-2 text-sm font-bold text-white">Buscar</button>
+        {q ? <Link href={href({ q: undefined })} className="text-xs underline">limpiar</Link> : null}
+      </form>
+      {q ? (
+        <div className="rounded-2xl border-2 border-ink bg-white px-5 pb-2 pt-5">
+          <div className="flex items-baseline justify-between"><h2 className="text-sm font-bold">Resultados para “{q}” <span className="font-normal text-muted">· {encontrados.length}</span></h2><span className="text-xs text-muted">cada uno con su carril</span></div>
+          {busqueda?.error ? <p className="text-sm text-red-600">No se pudo buscar: {busqueda.error.message}</p> : lista(encontrados, 'Nadie coincide. Prueba con el teléfono o la CURP.', undefined, true)}
+        </div>
+      ) : null}
 
       {tab === 'calientes' ? (() => {
         const filas: FilaCompleta[] = d.filas ?? [];

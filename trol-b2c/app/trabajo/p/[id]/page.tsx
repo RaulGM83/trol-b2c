@@ -24,6 +24,9 @@ import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CobroPanel } from '@/components/trol3/CobroPanel';
 import { RegistroRapido, ActivarCard, PropuestaForm, type Puede } from '@/components/trol3/RelacionPanel';
 import { AsesoriaSesion } from '@/components/trol3/AsesoriaSesion';
+import { CarrilCard, DatosClaveCard, SesionCard, AgregarOportunidad, type CitaMini } from '@/components/trol3/RelacionExtras';
+import type { FilaCarril } from '@/components/trol3/CarrilAcciones';
+import type { OrigenPersona } from '@/app/trabajo/actions';
 import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
@@ -133,6 +136,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
   if (!e) notFound();
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const { data: personaMeta } = await db.from('personas').select('created_at').eq('id', params.id).maybeSingle();
+  // 210 · Relación completa (claude/95): carril, quién lo trajo, aliados para corregirlo, costo de actualizar el IMSS.
+  const [{ data: carrilRaw }, { data: origenRaw }, { data: aliadosRaw }] = await Promise.all([
+    db.rpc('carril_de', { p: params.id }),
+    searchParams.tab == null || searchParams.tab === 'relacion' ? db.rpc('origen_de', { p_persona: params.id }) : Promise.resolve({ data: null }),
+    searchParams.tab == null || searchParams.tab === 'relacion' ? db.from('aliados').select('id,nombre').eq('activo', true).order('nombre') : Promise.resolve({ data: [] }),
+  ]);
+  const origenPersona = (origenRaw ?? null) as OrigenPersona | null;
+  const aliadosLista = ((aliadosRaw ?? []) as { id: string; nombre: string }[]);
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
   const rows: DatoRow[] = (campos ?? []).filter((c: Any) => c.campo !== 'semilla').map((c: Any) => { const d = datosMap.get(c.campo); return { campo: c.campo, nombre: c.nombre, tipo: c.tipo, grupo: c.grupo, opciones: c.opciones ?? null, valor: d?.valor ?? null, capa: d?.capa, proveedor: d?.proveedor, origen_tipo: d?.origen_tipo, obtenido_en: d?.obtenido_en, vigente: d?.vigente }; });
   // Edad actual: derivada de la fecha de nacimiento, SIEMPRE a hoy y con un
@@ -495,6 +506,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
         />
   );
 
+  const nssHeader = String((datosMap.get('nss')?.valor as unknown) ?? '').trim() || null;
+  const filaCarril: FilaCarril | null = carrilRaw ? {
+    ...(carrilRaw as Any), persona_id: e.persona_id, nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || null,
+    chat_abierto: chatAbierto, telefono: tel?.normalizado ?? null, no_contactar: !!tel?.no_contactar, cabecera_id: e.cabecera_id ?? null,
+    oportunidad: pa?.oportunidad?.nombre ?? null, oportunidad_id: pa?.oportunidad?.id ?? null, oportunidad_estado: pa?.oportunidad?.estado ?? null,
+  } : null;
+  const CARRIL_NOMBRE: Record<string, string> = { favoritos: 'Favorito', calientes: 'Caliente', tibios: 'Tibio', frios: 'Frío', descartado: 'Descartado' };
+  const CARRIL_PILL: Record<string, string> = { calientes: 'bg-red-100 text-red-900', tibios: 'bg-amber-100 text-amber-900', favoritos: 'bg-sky-100 text-sky-900', frios: 'bg-slate-100 text-slate-700', descartado: 'bg-slate-100 text-slate-700' };
   return (
     <div className="space-y-4">
       {/* Header · se esconde al compartir pantalla (189): sólo queda el cliente y sus pasos */}
@@ -503,9 +522,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
           <div>
             <h1 className="text-2xl font-extrabold">{e.nombre ?? '(sin nombre)'} {e.apellidos ?? ''}</h1>
             <div className="mt-1 text-sm text-muted">
-              {edadDecimal ? `${edadDecimal} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
+              {edadDecimal ? `${edadDecimal} años` : 'edad desconocida'} · {e.curp ?? <span className="text-red-600">sin CURP</span>} · NSS {nssHeader ?? <span className="text-amber-700">falta</span>} · {tel?.valor ?? 'sin teléfono'}{tel?.no_contactar ? ' · NO CONTACTAR' : ''}{email ? ` · ${email.valor}` : ''}
             </div>
-            <div className="mt-1 text-xs text-muted">Etapa <b>{e.etapa}</b> · {referido && (aliadoRef as Any)?.nombre ? <MarcaReferido aliadoNombre={(aliadoRef as Any).nombre} estado={referido.estado} /> : <>canal {e.canal_origen ?? '—'}</>} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
+            <div className="mt-1 text-xs text-muted">{filaCarril ? <Link href={href('relacion')} className={`mr-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${CARRIL_PILL[filaCarril.carril] ?? ''}`} title="Carril en Mi cartera (210)">{CARRIL_NOMBRE[filaCarril.carril] ?? filaCarril.carril}</Link> : null}Etapa <b>{e.etapa}</b> · {referido && (aliadoRef as Any)?.nombre ? <MarcaReferido aliadoNombre={(aliadoRef as Any).nombre} estado={referido.estado} /> : <>canal {e.canal_origen ?? '—'}</>} · {saldoPuntos} pts · Experto asignado: <b>{cabecera ? cabecera.nombre ?? cabecera.email : 'sin asignar'}</b></div>
             {referido?.estado === 'por_revisar' && (aliadoRef as Any)?.nombre ? <DecisionReferido referidoId={referido.id} aliadoNombre={(aliadoRef as Any).nombre} personaId={params.id} /> : null}
           </div>
           <div className="text-right text-xs">
@@ -613,6 +632,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 </div>
                 <p className="mt-2 text-[11px] text-muted">{(perRel as Any)?.app_visto_en ? `Abrió su cuenta por última vez el ${fmtFecha((perRel as Any).app_visto_en)}.` : 'Todavía no ha abierto su cuenta.'}</p>
               </section>
+              {filaCarril ? <CarrilCard fila={filaCarril} takoUrl={takoChat} esAdmin={esAdmin || (m.roles ?? []).includes('coach')} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} /> : null}
+              <DatosClaveCard personaId={e.persona_id} curp={e.curp ?? null} nss={nssHeader} fechaSisec={rawFechaSisec ?? null} registradoEn={personaMeta?.created_at ? String(personaMeta.created_at) : null}
+                costoConsulta={costoProv('jordan') ?? costoProv('belvo')} origen={origenPersona} aliados={aliadosLista} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} personaNombre={e.nombre ?? 'el cliente'} />
+              <SesionCard personaId={e.persona_id} citas={((citas ?? []) as Any[]).map((c) => ({ id: c.id, inicio: c.inicio, estado: c.estado, origen: c.origen, notas: c.notas ?? null, miembro_id: c.miembro_id ?? null, fuente: c.fuente ?? null })) as CitaMini[]}
+                miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} yo={m.id} agendarSlot={<AgendarBoton info={(linkCitas ?? null) as LinkCitas | null} />} />
               <DiagnosticoBasico personaId={e.persona_id} nombre={e.nombre ?? null} />
               {baseRel ? (
                 <section className="rounded-2xl border border-line bg-white p-5">
@@ -629,6 +653,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
               ) : null}
               <ActivarCard personaId={e.persona_id} chatAbierto={chatAbierto} takoUrl={takoChat} op={opTop} puede={(puedePl ?? null) as Puede | null} />
               <PropuestaForm personaId={e.persona_id} ops={opsProp} pensionBase={e.pension_base == null ? null : Number(e.pension_base)} />
+              <AgregarOportunidad personaId={e.persona_id} catalogo={((cat ?? []) as Any[]).filter((c) => c.activo !== false).sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99)).map((c) => ({ codigo: c.codigo as string, nombre: c.nombre as string, nombre_cliente: c.nombre_cliente ?? null }))} abiertas={opsAbiertas.map((o: Any) => o.codigo as string)} />
+              <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} personaId={e.persona_id} />
             </aside>
           </div>
         );
