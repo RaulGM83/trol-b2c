@@ -7,6 +7,9 @@ import { PropuestaForm } from '@/components/trol3/RelacionPanel';
 import { PASOS_TODOS, PASO_CLIENTE, tituloPaso, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
 import { PasoCero } from '@/components/trol3/PasoCero';
 import { CompartirContext } from '@/lib/trol3/compartir';
+import { CaminoContext, type CaminoSel } from '@/lib/trol3/camino-context';
+import { etiquetaOrigen } from '@/lib/trol3/caminos';
+import { MOTOR_VERSION } from '@trol/pension-core/version';
 import { HistoriaLaboral } from '@/components/trol3/HistoriaLaboral';
 import { FichaPanel } from '@/components/trol3/FichaPanel';
 import { Copiloto } from '@/components/trol3/Copiloto';
@@ -33,6 +36,8 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   // 3b · la herramienta abierta dentro del paso 3 (null = los caminos)
   const [fichaCod, setFichaCod] = useState<string | null>(null); // 170 · ficha abierta al lado
   const [herr, setHerr] = useState<'calculadora' | 'infonavit' | null>(null);
+  // 209 · El camino que la calculadora embebida debe abrir (ver / partir de aquí), claude/94.
+  const [caminoSel, setCaminoSel] = useState<CaminoSel | null>(null);
   const [pending, start] = useTransition();
   // Modo "Compartiendo": la pantalla de trabajo es la que ve el cliente en la videollamada.
   // Esconde lo que es del equipo (guion, notas, valores internos, PnL); lo demás es transparente.
@@ -56,7 +61,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
     );
   }
 
-  const ir = (n: number) => { setPaso(n); setHerr(null); setNota(ses.notas?.[String(n)] ?? ''); start(async () => { await marcarAsesoria(ses.id, personaId, { paso: n }); router.refresh(); }); };
+  const ir = (n: number) => { setPaso(n); setHerr(null); setCaminoSel(null); setNota(ses.notas?.[String(n)] ?? ''); start(async () => { await marcarAsesoria(ses.id, personaId, { paso: n }); router.refresh(); }); };
   const guardarNota = () => { if ((ses.notas?.[String(paso)] ?? '') === nota) return; start(async () => { const r = await marcarAsesoria(ses.id, personaId, { paso, nota }); setMsg(r.ok ? 'Nota guardada.' : (r as { error?: string }).error ?? 'No se guardó.'); }); };
   const vistos = new Set(ses.pasos_vistos ?? []);
   const c = vista.cliente; const num = vista.numeros;
@@ -84,8 +89,10 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   const opsProp = vista.oportunidades.filter((o) => ['detectada', 'presentada', 'interesada'].includes(o.estado)).map((o) => ({ id: o.id, nombre: o.nombre, estado: o.estado, propuesta: o.propuesta ?? null }));
   const armar = () => start(async () => { setMsgDiag('Armando el diagnóstico: junta los hechos y redacta. Tarda cerca de un minuto…'); const r = (await armarDiagnosticoAsesoria(ses.id, personaId, idsParaDiag)) as { ok: boolean; error?: string; aviso?: string | null }; setMsgDiag(r.ok ? (r.aviso ?? 'Diagnóstico armado.') : (r.error ?? 'No se pudo armar.')); if (r.ok) router.refresh(); });
 
+  const abrirCamino = (modo: CaminoSel['modo'], id: string) => { setCaminoSel({ modo, id }); setHerr('calculadora'); };
   return (
     <CompartirContext.Provider value={compartiendo}>
+    <CaminoContext.Provider value={{ sel: caminoSel, setSel: setCaminoSel, mostrarCostos: !compartiendo || ses.mostrar_costos }}>
     <div className={`${ancho ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}${compartiendo ? ' [&_.text-sm]:text-base [&_.text-xs]:text-sm' : ''}`}>
       <nav className={ancho ? 'hidden' : 'space-y-1'}>
         {PASOS_TODOS.map((p) => (
@@ -173,10 +180,14 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
                     return (
                       <div key={k.id} className={rec ? 'rounded-2xl border-2 border-ink bg-lime/10 p-4' : 'rounded-2xl border border-line p-4'}>
                         <div className="flex items-center justify-between gap-2"><div className="text-sm font-bold">{k.etiqueta}</div>{rec ? <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold">Recomendado</span> : null}</div>
-                        <div className="text-xs text-muted">{k.tipo}{k.edad ? ` · retiro a los ${k.edad}` : ''}</div>
+                        <div className="text-xs text-muted">{k.tipo}{k.edad ? ` · retiro a los ${k.edad}` : ''}{k.partio_de ? ` · ajuste de ${etiquetaOrigen(k.partio_de, cams)}` : ''}</div>
                         <div className="mt-2 text-2xl font-extrabold">{mxn(k.pension)}<span className="text-xs font-normal text-muted"> al mes</span></div>
                         {compartiendo && !ses.mostrar_costos ? null : <div className="text-xs text-muted">{k.costo ? `Inversión total: ${mxn(k.costo)}` : 'Sin inversión'}{k.viable ? '' : ' · no alcanza pensión'}</div>}
-                        {!rec ? <button disabled={pending} className={`${line} mt-3`} onClick={() => start(async () => { await marcarAsesoria(ses.id, personaId, { escenario: k.id }); router.refresh(); })}>Es el que recomiendo</button> : null}
+                        {!compartiendo && k.motor_version && k.motor_version !== MOTOR_VERSION ? <div className="mt-1 text-[11px] font-semibold text-amber-700" title={`Cerrado con ${k.motor_version}; hoy calcula ${MOTOR_VERSION}`}>motor anterior</div> : null}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {herramientas?.calculadora ? <><button type="button" className={line} title="La calculadora en sólo lectura, con lo que se guardó al cerrar" onClick={() => abrirCamino('ver', k.id)}>Ver</button><button type="button" className={line} title="Carga sus palancas con los datos de hoy; al cerrar nace otro camino" onClick={() => abrirCamino('partir', k.id)}>Partir de aquí</button></> : null}
+                          {!rec ? <button disabled={pending} className={line} onClick={() => start(async () => { await marcarAsesoria(ses.id, personaId, { escenario: k.id }); router.refresh(); })}>Es el que recomiendo</button> : null}
+                        </div>
                       </div>
                     );
                   })}
@@ -195,9 +206,9 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         {paso === 3 && herr !== null && (
           <>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white p-2">
-              <button type="button" className={dark} onClick={() => { setHerr(null); router.refresh(); }}>← Volver a los caminos{cams.length ? ` (${cams.length})` : ''}</button>
-              {herrOk.map((h) => <button key={h.k} type="button" onClick={() => setHerr(h.k)} className={h.k === herr ? 'rounded-lg bg-lime px-3 py-2 text-xs font-bold' : 'rounded-lg px-3 py-2 text-xs font-bold hover:bg-cream'}>{h.titulo}</button>)}
-              {compartiendo ? null : <span className="ml-auto pr-2 text-[11px] text-muted">Cierra el escenario en la herramienta y vuelve: aparece como camino.</span>}
+              <button type="button" className={dark} onClick={() => { setHerr(null); setCaminoSel(null); router.refresh(); }}>← Volver a los caminos{cams.length ? ` (${cams.length})` : ''}</button>
+              {herrOk.map((h) => <button key={h.k} type="button" onClick={() => { setHerr(h.k); if (h.k !== 'calculadora') setCaminoSel(null); }} className={h.k === herr ? 'rounded-lg bg-lime px-3 py-2 text-xs font-bold' : 'rounded-lg px-3 py-2 text-xs font-bold hover:bg-cream'}>{h.titulo}</button>)}
+              {compartiendo ? null : <span className="ml-auto pr-2 text-[11px] text-muted">{caminoSel?.modo === 'ver' ? 'Sólo lectura. “Partir de aquí” lo abre para ajustar.' : 'Cierra el escenario en la herramienta y vuelve: aparece como camino.'}</span>}
             </div>
             {herramientas?.[herr]}
           </>
@@ -299,6 +310,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
       </div>
     </div>
     {fichaAbierta ? <FichaPanel ficha={fichaAbierta} fichas={fichas} personaId={personaId} onAbrir={setFichaCod} onCerrar={() => setFichaCod(null)} /> : null}
+    </CaminoContext.Provider>
     </CompartirContext.Provider>
   );
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,8 @@ import {
   type ResumenClienteData,
 } from "@/components/resumen-cliente"
 import { EscenariosCerrados } from "@/components/portal/escenarios-cerrados"
+import { hidratarCamino, pensionPresentada, type CaminoHidratado, type CaminoModo } from "@/lib/trol3/caminos"
+import { useCaminoCtx, type CaminoSel } from "@/lib/trol3/camino-context"
 import {
   camposDe,
   PanelDatosAUtilizar,
@@ -359,6 +361,63 @@ export type SnapshotEscenario = {
   ventana?: Record<string, unknown>
 }
 
+/**
+ * 209 · Un camino cerrado cargado en un panel (claude/94). "ver" pinta lo que se
+ * guardó, sin recalcular; "partir" carga sus palancas sobre la semilla de hoy.
+ */
+type CaminoEnPanel = { modo: CaminoModo; c: CaminoHidratado }
+
+const fmtFechaDia = (iso: string | null | undefined) =>
+  iso
+    ? new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso))
+    : "—"
+
+/**
+ * Lo que hay que decirle al asesor cuando parte de un camino: si el motor
+ * cambió (presentado vs hoy) y si la semilla del cliente cambió desde que se
+ * cerró. En "ver" no aplica: ahí no se recalcula nada.
+ */
+function avisosDeCamino(args: {
+  camino: CaminoEnPanel | null
+  semillaHoy: SemillaV2 | null | undefined
+  pensionHoyConSusPalancas: number | null
+}): string[] {
+  const { camino, semillaHoy, pensionHoyConSusPalancas } = args
+  if (!camino || camino.modo !== "partir") return []
+  const out: string[] = []
+  const c = camino.c
+  if (c.motor_version && c.motor_version !== MOTOR_VERSION) {
+    const antes = pensionPresentada(c)
+    const hoy = pensionHoyConSusPalancas
+    const dif = antes !== null && hoy !== null ? hoy - antes : null
+    out.push(
+      `Este camino se calculó con ${c.motor_version}; hoy calcula ${MOTOR_VERSION}. Con las mismas palancas: presentado ${fmt(antes)} · hoy ${fmt(hoy)}` +
+        (dif !== null ? ` · diferencia ${dif >= 0 ? "+" : "−"}${fmt(Math.abs(dif))}` : "") +
+        ".",
+    )
+  }
+  const gen = semillaHoy?.meta?.generado_en ?? null
+  if (c.semillaGeneradaEn && gen && c.semillaGeneradaEn !== gen) {
+    out.push(
+      `Los datos del cliente cambiaron desde que se cerró (semilla del ${fmtFechaDia(c.semillaGeneradaEn)}; hoy la del ${fmtFechaDia(gen)}). Se calcula con los de hoy.`,
+    )
+  }
+  return out
+}
+
+function AvisosCamino({ avisos }: { avisos: string[] }) {
+  if (!avisos.length) return null
+  return (
+    <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex flex-col gap-1">
+      {avisos.map((a, i) => (
+        <p key={i} className="text-sm text-amber-900 leading-snug">
+          {a}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 /** Contexto compartido para la descarga de PDF en los 3 paneles. */
 type PdfCtx = {
   curp: string
@@ -453,6 +512,54 @@ export function CalculadoraClient({
   const [escenariosCerrados, setEscenariosCerrados] = useState(0)
   const setValor = (campo: keyof DatosAUtilizar, v: number | undefined) =>
     setDatos((d) => ({ ...d, [campo]: v }))
+
+  // 209 · El camino cargado (claude/94). Lo pide la asesoría por contexto (paso 3)
+  // o se elige aquí mismo (pestaña Calculadoras). Se lee completo de
+  // trol3.escenarios: la vista de la lista no trae el snapshot.
+  const [tab, setTab] = useState<string>(tabDefault)
+  const caminoCtx = useCaminoCtx()
+  const [selLocal, setSelLocal] = useState<CaminoSel | null>(null)
+  const sel = caminoCtx ? caminoCtx.sel : selLocal
+  const setSel = caminoCtx ? caminoCtx.setSel : setSelLocal
+  const mostrarCostos = caminoCtx ? caminoCtx.mostrarCostos : true
+  const [camino, setCamino] = useState<CaminoHidratado | null>(null)
+  useEffect(() => {
+    let vivo = true
+    if (!sel) {
+      setCamino(null)
+      return
+    }
+    ;(async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .schema("trol3")
+        .from("escenarios")
+        .select("id,tipo,creado_en,inputs,resultado")
+        .eq("id", sel.id)
+        .maybeSingle()
+      if (!vivo) return
+      if (error || !data) {
+        toast.error(`No se pudo abrir el camino${error ? `: ${error.message}` : ""}`)
+        setSel(null)
+        return
+      }
+      const h = hidratarCamino(data as Parameters<typeof hidratarCamino>[0])
+      if (!h) {
+        toast.error("Ese escenario no es un camino de Ley 73 ni de Ley 97.")
+        setSel(null)
+        return
+      }
+      setCamino(h)
+      setTab(h.ley === "Ley97" ? "c97" : "c73")
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel?.id, sel?.modo])
+  const caminoActivo: CaminoEnPanel | null = sel && camino && camino.id === sel.id ? { modo: sel.modo, c: camino } : null
+  // En "ver" cada panel calcula sobre la semilla del snapshot; en "partir", sobre la de hoy.
+  const semillaVer = caminoActivo?.modo === "ver" && camino?.semilla ? camino.semilla : semilla
 
   /**
    * Guarda los campos del panel que llama. `campos` acota el alcance: un panel
@@ -554,7 +661,49 @@ export function CalculadoraClient({
         )}
       </div>
 
-      <Tabs defaultValue={tabDefault} className="flex-col w-full">
+      {caminoActivo && camino && (
+        <div
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-sm ${
+            caminoActivo.modo === "ver" ? "border-slate-300 bg-slate-50" : "border-[var(--brand-accent)] bg-[var(--brand-accent)]/10"
+          }`}
+        >
+          <span className="font-semibold">
+            {caminoActivo.modo === "ver" ? "Viendo" : "Ajustando"} el camino “{camino.etiqueta}”
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {camino.ley === "Ley97" ? "Ley 97" : "Ley 73"} · cerrado el {fmtFechaDia(camino.cerrado_en)}
+            {camino.motor_version ? ` · ${camino.motor_version}` : ""}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {caminoActivo.modo === "ver"
+              ? "Sólo lectura: lo que se guardó al cerrar, sin recalcular."
+              : "Palancas cargadas; se calcula con los datos de hoy. Al cerrar nace otro escenario; el original no se toca."}
+          </span>
+          <span className="ml-auto flex gap-1">
+            {caminoActivo.modo === "ver" && (
+              <Button type="button" size="sm" onClick={() => setSel({ modo: "partir", id: camino.id })}>
+                Partir de aquí
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => setSel(null)}>
+              {caminoActivo.modo === "ver" ? "Cerrar" : "Descartar cambios"}
+            </Button>
+          </span>
+        </div>
+      )}
+
+      {cerrarEscenario && (
+        <EscenariosCerrados
+          personaId={cerrarEscenario.personaId}
+          consultaAliadoId={cerrarEscenario.consultaAliadoId}
+          refrescar={escenariosCerrados}
+          onVer={(id) => setSel({ modo: "ver", id })}
+          onPartir={(id) => setSel({ modo: "partir", id })}
+          activoId={caminoActivo?.c.id ?? null}
+        />
+      )}
+
+      <Tabs value={tab} onValueChange={setTab} className="flex-col w-full">
         <TabsList className="!h-8 p-0.5 w-fit">
           <TabsTrigger value="c73" className="!px-3 !py-1 text-sm">
             Calculadora 73{perfil.ley === "Ley73" ? " ★" : ""}
@@ -574,7 +723,11 @@ export function CalculadoraClient({
 
         <TabsContent value="c73" className="mt-3 w-full">
           <Calc73Panel
-            semilla={semilla}
+            key={caminoActivo?.c.ley === "Ley73" ? `${caminoActivo.modo}-${caminoActivo.c.id}` : "libre"}
+            semilla={caminoActivo?.c.ley === "Ley73" ? semillaVer : semilla}
+            semillaHoy={semilla}
+            camino={caminoActivo?.c.ley === "Ley73" ? caminoActivo : null}
+            mostrarCostos={mostrarCostos}
             pdfCtx={pdfCtx}
             cerrar={cerrarEscenario}
             onCerrado={() => setEscenariosCerrados((n) => n + 1)}
@@ -582,7 +735,11 @@ export function CalculadoraClient({
         </TabsContent>
         <TabsContent value="c97" className="mt-3 w-full">
           <Calc97Panel
-            semilla={semilla}
+            key={caminoActivo?.c.ley === "Ley97" ? `${caminoActivo.modo}-${caminoActivo.c.id}` : "libre"}
+            semilla={caminoActivo?.c.ley === "Ley97" ? semillaVer : semilla}
+            semillaHoy={semilla}
+            camino={caminoActivo?.c.ley === "Ley97" ? caminoActivo : null}
+            mostrarCostos={mostrarCostos}
             rescate={rescate}
             cerrar={cerrarEscenario}
             onCerrado={() => setEscenariosCerrados((n) => n + 1)}
@@ -620,14 +777,6 @@ export function CalculadoraClient({
         </TabsContent>
       </Tabs>
 
-      {cerrarEscenario && (
-        <EscenariosCerrados
-          personaId={cerrarEscenario.personaId}
-          consultaAliadoId={cerrarEscenario.consultaAliadoId}
-          refrescar={escenariosCerrados}
-        />
-      )}
-
       <p className="text-xs text-muted-foreground">
         Estimaciones con base en el historial IMSS del cliente y parámetros vigentes
         ({ANIO}). No constituyen una resolución del IMSS ni una promesa de pensión.
@@ -642,11 +791,20 @@ export function CalculadoraClient({
 
 function Calc73Panel({
   semilla,
+  semillaHoy,
+  camino = null,
+  mostrarCostos = true,
   pdfCtx,
   cerrar,
   onCerrado,
 }: {
   semilla: SemillaV2
+  /** 209 · La semilla de hoy, para avisar si cambió desde que se cerró el camino. */
+  semillaHoy?: SemillaV2 | null
+  /** 209 · Camino cargado: "ver" (sólo lectura, sin recalcular) o "partir" (palancas sobre la semilla de hoy). */
+  camino?: CaminoEnPanel | null
+  /** 209 · En "ver" compartiendo pantalla: costos sólo si la sesión los muestra. */
+  mostrarCostos?: boolean
   pdfCtx: PdfCtx
   cerrar?: CerrarEscenarioCtx | null
   onCerrado?: () => void
@@ -654,13 +812,19 @@ function Calc73Panel({
   const { perfil, saldos, salario_60m } = semilla
   const edadActual = edadActualDe(perfil.fecha_nacimiento)
   const edades = useMemo(() => opcionesEdad(edadActual), [edadActual])
+  const ver = camino?.modo === "ver"
+  const ocultarCostos = ver && !mostrarCostos
 
-  const [palancas, setPalancas] = useState<Palancas>({
-    ...PALANCAS_DEFAULT,
-    edadRetiro: edades[0],
-    recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
-    recuperarSemanasMod40Retro: true,
-  })
+  const [palancas, setPalancas] = useState<Palancas>(
+    camino
+      ? { ...PALANCAS_DEFAULT, ...camino.c.palancas }
+      : {
+          ...PALANCAS_DEFAULT,
+          edadRetiro: edades[0],
+          recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
+          recuperarSemanasMod40Retro: true,
+        },
+  )
   const set = <K extends keyof Palancas>(k: K, v: Palancas[K]) =>
     setPalancas((p) => ({ ...p, [k]: v }))
 
@@ -670,7 +834,11 @@ function Calc73Panel({
   // esta pestaña modela. Moverla pasa semanas del tramo futuro al retroactivo
   // sin cambiar el total, y con eso las dos pestañas cobran la misma línea.
   const hoyIso = useMemo(() => isoFecha(new Date()), [])
-  const [fechaTramiteIso, setFechaTramiteIso] = useState(hoyIso)
+  // Con un camino: en "ver" la fecha con la que se cerró; en "partir" esa misma si
+  // todavía no pasó (si ya pasó, hoy: el plan no puede arrancar en el pasado).
+  const [fechaTramiteIso, setFechaTramiteIso] = useState(
+    camino?.c.fechaTramiteIso && (ver || camino.c.fechaTramiteIso >= hoyIso) ? camino.c.fechaTramiteIso : hoyIso,
+  )
   const fechaTramite = useMemo(
     () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(hoyIso) ?? new Date(),
     [fechaTramiteIso, hoyIso],
@@ -680,7 +848,19 @@ function Calc73Panel({
     () => ({ perfil, saldos, salario_60m, palancas, fechaTramite }),
     [perfil, saldos, salario_60m, palancas, fechaTramite],
   )
-  const r = useMemo(() => computeLey73(entrada), [entrada])
+  const rCalc = useMemo(() => computeLey73(entrada), [entrada])
+  // 209 · "Ver" no recalcula: pinta el resultado que se guardó al cerrar.
+  const r = (ver ? (camino!.c.resultado as ReturnType<typeof computeLey73>) : rCalc)
+  // 209 · Al partir, lo que da el motor de hoy con las palancas del camino (antes de mover nada).
+  const rOrigen = useMemo(
+    () =>
+      camino && camino.modo === "partir"
+        ? computeLey73({ perfil, saldos, salario_60m, palancas: { ...PALANCAS_DEFAULT, ...camino.c.palancas }, fechaTramite })
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [camino?.c.id],
+  )
+  const avisos = avisosDeCamino({ camino, semillaHoy, pensionHoyConSusPalancas: rOrigen?.pensionMensual ?? null })
 
   // Referencia "sin estrategia": misma edad, 0% cotización, sin recuperaciones
   const sinEstrategia = useMemo(
@@ -697,22 +877,29 @@ function Calc73Panel({
     [entrada, palancas],
   )
 
-  // Barrido pensión/costo por edad con las palancas actuales
+  // Barrido pensión/costo por edad con las palancas actuales. En "ver" es el
+  // que se guardó al cerrar (o nada: no se inventa una tabla que no se enseñó).
   const barrido = useMemo(
     () =>
-      edades.map((edad) => {
-        const res = computeLey73({
-          ...entrada,
-          palancas: { ...palancas, edadRetiro: edad },
-        })
-        return { edad, pension: res.pensionMensual, costo: res.costoTotal }
-      }),
-    [edades, entrada, palancas],
+      ver
+        ? ((camino!.c.barrido ?? []) as { edad: number; pension: number | null; costo: number }[]).map((b) => ({
+            edad: Number(b.edad),
+            pension: b.pension === null || b.pension === undefined ? null : Number(b.pension),
+            costo: Number(b.costo ?? 0),
+          }))
+        : edades.map((edad) => {
+            const res = computeLey73({
+              ...entrada,
+              palancas: { ...palancas, edadRetiro: edad },
+            })
+            return { edad, pension: res.pensionMensual, costo: res.costoTotal }
+          }),
+    [ver, camino, edades, entrada, palancas],
   )
 
   const d = r.detalle
   const deltaSin =
-    r.pensionMensual !== null && sinEstrategia.pensionMensual !== null
+    !ver && r.pensionMensual !== null && sinEstrategia.pensionMensual !== null
       ? r.pensionMensual - sinEstrategia.pensionMensual
       : null
 
@@ -908,7 +1095,7 @@ function Calc73Panel({
     <PanelLayout
       referencia={<DatosCliente semilla={semilla} />}
       palancas={
-        <>
+        <fieldset disabled={ver} className={ver ? "contents opacity-70" : "contents"}>
           <FechaTramiteInput
             id="l73-fecha-tramite"
             value={fechaTramiteIso}
@@ -985,12 +1172,14 @@ function Calc73Panel({
             pdfCtx={pdfCtx}
             idSuffix="73"
             buildPayload={buildPdf}
-            cerrar={cerrar}
+            cerrar={ver ? null : cerrar}
             onCerrado={onCerrado}
             buildSnapshot={(etiqueta) => ({
               tipo: "calc_ley73" as const,
               inputs: {
                 motor_version: MOTOR_VERSION,
+                // 209 · trazabilidad: de qué camino partió este escenario.
+                ...(camino?.modo === "partir" ? { partio_de: camino.c.id } : {}),
                 resumen: {
                   etiqueta,
                   pension_mensual: aCentenas(r.pensionMensual),
@@ -1012,9 +1201,10 @@ function Calc73Panel({
               resultado: r as unknown as Record<string, unknown>,
             })}
           />
-        </>
+        </fieldset>
       }
     >
+      <AvisosCamino avisos={avisos} />
       {perfil.ley === "Ley97" && (
         <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-start gap-3">
           <span
@@ -1041,7 +1231,7 @@ function Calc73Panel({
         pension={r.pensionMensual}
         negativa={r.negativa}
         etiquetaDelta="vs sin estrategia"
-        referencia={sinEstrategia.pensionMensual}
+        referencia={ver ? null : sinEstrategia.pensionMensual}
         delta={deltaSin}
         stats={[
           { label: "Retiro estimado", value: fmtFecha(d.fechaRetiro) },
@@ -1164,7 +1354,7 @@ function Calc73Panel({
         </Card>
       )}
 
-      {(r.retro || r.costoEstrategiaFutura > 0) && (
+      {!ocultarCostos && (r.retro || r.costoEstrategiaFutura > 0) && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Costo de la estrategia</CardTitle>
@@ -1194,16 +1384,22 @@ function Calc73Panel({
         </Card>
       )}
 
-      <TablaBarrido
-        titulo="Pensión por edad de retiro (con las palancas actuales)"
-        columnas={["Edad", "Pensión mensual", "Costo total estrategia"]}
-        filas={barrido.map((b) => [
-          `${b.edad}`,
-          b.pension === null ? "Negativa" : fmt(b.pension),
-          fmt(b.costo),
-        ])}
-        resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
-      />
+      {ver && !barrido.length ? (
+        <p className="text-xs text-muted-foreground">
+          Este camino se cerró antes de que se guardara la tabla por edad; no se recalcula.
+        </p>
+      ) : (
+        <TablaBarrido
+          titulo={ver ? "Pensión por edad de retiro (como se presentó)" : "Pensión por edad de retiro (con las palancas actuales)"}
+          columnas={ocultarCostos ? ["Edad", "Pensión mensual"] : ["Edad", "Pensión mensual", "Costo total estrategia"]}
+          filas={barrido.map((b) =>
+            ocultarCostos
+              ? [`${b.edad}`, b.pension === null ? "Negativa" : fmt(b.pension)]
+              : [`${b.edad}`, b.pension === null ? "Negativa" : fmt(b.pension), fmt(b.costo)],
+          )}
+          resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
+        />
+      )}
     </PanelLayout>
   )
 }
@@ -1214,10 +1410,13 @@ function Calc73Panel({
 
 function Calc97Panel({
   semilla,
+  semillaHoy,
+  camino = null,
+  mostrarCostos = true,
   rescate,
   cerrar,
   onCerrado,
-  datos,
+  datos: datosHoy,
   setValor,
   onGuardar,
   guardando = false,
@@ -1225,6 +1424,12 @@ function Calc97Panel({
   pdfCtx,
 }: {
   semilla: SemillaV2
+  /** 209 · La semilla de hoy, para avisar si cambió desde que se cerró el camino. */
+  semillaHoy?: SemillaV2 | null
+  /** 209 · Camino cargado: "ver" (sólo lectura, sin recalcular) o "partir" (palancas, incluir y destino sobre los datos de hoy). */
+  camino?: CaminoEnPanel | null
+  /** 209 · Reservado para la paridad con Ley 73 (en Ley 97 no hay costos que esconder). */
+  mostrarCostos?: boolean
   rescate?: { sinCostoDesde?: number; costoPct?: number } | null
   cerrar?: CerrarEscenarioCtx | null
   onCerrado?: () => void
@@ -1238,23 +1443,32 @@ function Calc97Panel({
   const { perfil, saldos, salario_60m } = semilla
   const edadActual = edadActualDe(perfil.fecha_nacimiento)
   const edades = useMemo(() => opcionesEdad(edadActual), [edadActual])
+  const ver = camino?.modo === "ver"
+  void mostrarCostos
+  // 209 · En "ver" los datos a utilizar son los que se guardaron al cerrar; en
+  // "partir" los de hoy (los montos son dato del cliente, no del escenario).
+  const datos = ver ? camino!.c.datos : datosHoy
 
-  const [palancas, setPalancas] = useState<Palancas>({
-    ...PALANCAS_DEFAULT,
-    edadRetiro: edades[0],
-    recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
-  })
+  const [palancas, setPalancas] = useState<Palancas>(
+    camino
+      ? { ...PALANCAS_DEFAULT, ...camino.c.palancas }
+      : {
+          ...PALANCAS_DEFAULT,
+          edadRetiro: edades[0],
+          recuperarSemanasDescontadas: semanasRecuperables(perfil) > 0,
+        },
+  )
   const set = <K extends keyof Palancas>(k: K, v: Palancas[K]) =>
     setPalancas((p) => ({ ...p, [k]: v }))
 
   // Qué dinero entra al cálculo. Sólo de la sesión: es una pregunta de
-  // escenario, no un dato del cliente.
-  const [incluir, setIncluir] = useState<Incluir>({})
+  // escenario, no un dato del cliente. Con un camino, lo que se cerró.
+  const [incluir, setIncluir] = useState<Incluir>(camino ? camino.c.incluir : {})
   const setIncluirClave = (k: keyof Incluir, v: boolean) =>
     setIncluir((i) => ({ ...i, [k]: v }))
   // La vivienda no es un sí/no: son tres destinos. Arranca en "a la pensión"
   // —es lo que pasa si nadie hace nada— y el asesor decide desde ahí.
-  const [destinoInfonavit, setDestinoInfonavit] = useState<DestinoInfonavit>("pension")
+  const [destinoInfonavit, setDestinoInfonavit] = useState<DestinoInfonavit>(camino ? camino.c.destinoInfonavit : "pension")
 
   // Las palancas que ve el motor: las del escenario más los datos capturados.
   // Los montos no viven en `palancas` porque se comparten con la pestaña de
@@ -1286,14 +1500,39 @@ function Calc97Panel({
     () => ({ perfil, saldos, salario_60m, palancas: palancasConDatos }),
     [perfil, saldos, salario_60m, palancasConDatos],
   )
-  const r = useMemo(() => computeLey97(entrada), [entrada])
+  const rCalc = useMemo(() => computeLey97(entrada), [entrada])
+  // 209 · "Ver" no recalcula: pinta el resultado que se guardó al cerrar.
+  const r = (ver ? (camino!.c.resultado as ReturnType<typeof computeLey97>) : rCalc)
+  // 209 · Al partir, lo que da el motor de hoy con las palancas del camino (antes de mover nada).
+  const rOrigen = useMemo(
+    () => (camino && camino.modo === "partir" ? computeLey97({ perfil, saldos, salario_60m, palancas: palancasConDatos }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [camino?.c.id],
+  )
+  const avisos = avisosDeCamino({ camino, semillaHoy, pensionHoyConSusPalancas: rOrigen ? aCentenas(rOrigen.pensionTotal) : null })
   const d = r.detalle
   // Cliente en el piso: su cuenta individual no alcanza la mínima garantizada
   // y el gobierno completa. Lo calcula el motor, que es quien sabe cuánto
   // pone cada fuente.
   const enPMG = d.enPmg
 
-  const barrido = useMemo(
+  type FilaBarrido97 = { edad: number; cuentaIndividual: number | null; encima: number | null; total: number | null; saldoCta: number; saldoEncima: number }
+  // 209 · En "ver", la tabla que se guardó al cerrar (o nada).
+  const barridoVer = useMemo<FilaBarrido97[]>(
+    () =>
+      ver
+        ? ((camino!.c.barrido ?? []) as Record<string, unknown>[]).map((b) => ({
+            edad: Number(b.edad),
+            cuentaIndividual: b.cuenta_individual == null ? null : Number(b.cuenta_individual),
+            encima: b.encima == null ? null : Number(b.encima),
+            total: b.total == null ? null : Number(b.total),
+            saldoCta: Number(b.saldo_cuenta_individual ?? 0),
+            saldoEncima: Number(b.saldo_encima ?? 0),
+          }))
+        : [],
+    [ver, camino],
+  )
+  const barridoCalc = useMemo<FilaBarrido97[]>(
     () =>
       edades.map((edad) => {
         const res = computeLey97({
@@ -1337,6 +1576,7 @@ function Calc97Panel({
       }),
     [edades, entrada, palancasConDatos],
   )
+  const barrido = ver ? barridoVer : barridoCalc
 
   const buildPdf = (): PdfEscenarioData => ({
     calculadora: "Calculadora Ley 97",
@@ -1454,7 +1694,7 @@ function Calc97Panel({
     <PanelLayout
       referencia={<DatosCliente semilla={semilla} />}
       palancas={
-        <>
+        <fieldset disabled={ver} className={ver ? "contents opacity-70" : "contents"}>
           <SelectorEdad
             edades={edades}
             value={palancas.edadRetiro}
@@ -1491,7 +1731,7 @@ function Calc97Panel({
             destinoInfonavit={destinoInfonavit}
             onDestinoInfonavit={setDestinoInfonavit}
             rescateSinCostoDesde={rescate?.sinCostoDesde ?? RESCATE_SIN_COSTO_DESDE}
-            onGuardar={onGuardar ? () => onGuardar(camposDe(VEHICULOS_97)) : undefined}
+            onGuardar={onGuardar && !ver ? () => onGuardar(camposDe(VEHICULOS_97)) : undefined}
             guardando={guardando}
             guardadoAt={guardadoAt}
           />
@@ -1499,12 +1739,14 @@ function Calc97Panel({
             pdfCtx={pdfCtx}
             idSuffix="97"
             buildPayload={buildPdf}
-            cerrar={cerrar}
+            cerrar={ver ? null : cerrar}
             onCerrado={onCerrado}
             buildSnapshot={(etiqueta) => ({
               tipo: "calc_ley97" as const,
               inputs: {
                 motor_version: MOTOR_VERSION,
+                // 209 · trazabilidad: de qué camino partió este escenario.
+                ...(camino?.modo === "partir" ? { partio_de: camino.c.id } : {}),
                 // Lo que la lista enseña sin abrir el snapshot. El destino de
                 // la vivienda va aquí porque es la decisión que más mueve el
                 // resultado y la que más se va a querer comparar después.
@@ -1535,9 +1777,10 @@ function Calc97Panel({
               resultado: r as unknown as Record<string, unknown>,
             })}
           />
-        </>
+        </fieldset>
       }
     >
+      <AvisosCamino avisos={avisos} />
       <HeroPension
         pension={aCentenas(r.pensionTotal)}
         negativa={r.negativa}
@@ -1586,8 +1829,13 @@ function Calc97Panel({
         </CardContent>
       </Card>
 
+      {ver && !barrido.length ? (
+        <p className="text-xs text-muted-foreground">
+          Este camino se cerró antes de que se guardara la tabla por edad; no se recalcula.
+        </p>
+      ) : (
       <TablaBarrido
-        titulo="Pensión por edad de retiro (con las palancas actuales)"
+        titulo={ver ? "Pensión por edad de retiro (como se presentó)" : "Pensión por edad de retiro (con las palancas actuales)"}
         columnas={[
           "Edad",
           "Pensión cta. individual",
@@ -1607,6 +1855,7 @@ function Calc97Panel({
         resaltada={barrido.findIndex((b) => b.edad === palancas.edadRetiro)}
         nota={`Saldos en millones de pesos. ${NOTA_PESOS}`}
       />
+      )}
     </PanelLayout>
   )
 }

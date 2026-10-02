@@ -91,7 +91,9 @@ export function periodos(h: VistaAsesoria['historial']): Periodo[] {
   });
 }
 
-export type Camino = { id: string; etiqueta: string; tipo: string; edad: number | null; pension: number | null; costo: number | null; viable: boolean; creado_en: string };
+export type Camino = { id: string; etiqueta: string; tipo: string; edad: number | null; pension: number | null; costo: number | null; viable: boolean; creado_en: string;
+  /** 209 · de qué camino partió (inputs.partio_de), motor con el que se cerró y si guardó la tabla por edad. */
+  partio_de: string | null; motor_version: string | null; con_barrido: boolean };
 const TIPO: Record<string, string> = { calc_ley73: 'Ley 73', calc_ley97: 'Ley 97', calc_mod40: 'Modalidad 40' };
 
 /** Los escenarios que el asesor cerró en la calculadora, como caminos comparables. */
@@ -104,6 +106,8 @@ export function caminos(v: VistaAsesoria): Camino[] {
       pension: r.pension_mensual ?? s.resultado?.pensionMensual ?? null,
       costo: s.resultado?.costoTotal ?? null,
       viable: (s.resultado?.status ?? 'viable') === 'viable', creado_en: s.creado_en,
+      partio_de: s.inputs?.partio_de ? String(s.inputs.partio_de) : null, motor_version: s.inputs?.motor_version ?? null,
+      con_barrido: Array.isArray(s.inputs?.barrido) && s.inputs.barrido.length > 0,
     };
   });
 }
