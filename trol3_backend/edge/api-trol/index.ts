@@ -176,7 +176,7 @@ async function subirDocumentosBase64(consultaId: string, docs: DocEntrada[]): Pr
 // escrito del otro. `resumen` en el body manda sobre esta tabla; un evento que
 // no esté aquí y venga sin resumen no ensucia su historial (p.ej. los nudges).
 const RESUMEN_EVENTO: Record<string, string> = {
-  consulta_lista: "Llegó tu información oficial del IMSS y actualizamos tus números.",
+  consulta_lista: "Llegó tu información del IMSS y actualizamos tus números.",
   oportunidad_nueva: "Tu experto encontró una oportunidad nueva para tu pensión.",
   cita_agendada: "Quedó agendada tu sesión con tu experto.",
   diagnostico_listo: "Tu diagnóstico ya está disponible en tu cuenta.",
