@@ -60,9 +60,13 @@ export function CarrilCard({ fila, takoUrl, esAdmin, miembros }: { fila: FilaCar
 }
 
 // ── Datos clave ────────────────────────────────────────────────────────────
-export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn, costoConsulta, origen, aliados, miembros, personaNombre }: {
+export type OpinionAfore = { afore: string; atencion: number | null; asesoria: number | null; recomendaria: number | null; comentario: string | null; actualizado_en: string };
+
+export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn, costoConsulta, origen, aliados, miembros, personaNombre, opinion = null }: {
   personaId: string; curp: string | null; nss: string | null; fechaSisec: string | null; registradoEn: string | null; costoConsulta: number | null;
   origen: OrigenPersona | null; aliados: { id: string; nombre: string }[]; miembros: Miembro[]; personaNombre: string;
+  /** 216 · lo que opina de su AFORE (trol3.opiniones_afore). */
+  opinion?: OpinionAfore | null;
 }) {
   const router = useRouter();
   const [confirmar, setConfirmar] = useState(false);
@@ -89,6 +93,13 @@ export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn,
         )}
       </div>
       {msg ? <p className="mt-1 text-xs text-muted">{msg}</p> : null}
+      {opinion ? (
+        <p className="mt-3 text-sm" title={opinion.comentario ? `«${opinion.comentario}»` : undefined}>
+          Su AFORE <b>{opinion.afore}</b>: la recomendaría <b className={opinion.recomendaria != null && opinion.recomendaria <= 6 ? 'text-red-700' : ''}>{opinion.recomendaria ?? '—'}/10</b>
+          <span className="text-xs text-muted"> · atención {opinion.atencion ?? '—'}★ · herramientas {opinion.asesoria ?? '—'}★ · {fmtDia(opinion.actualizado_en)}</span>
+          {opinion.comentario ? <span className="block text-xs text-muted">«{opinion.comentario}»</span> : null}
+        </p>
+      ) : null}
       <p className="mt-3 text-sm">Registrado el <b>{fmtDia(registradoEn)}</b></p>
       <OrigenLinea personaId={personaId} origen={origen} aliados={aliados} miembros={miembros} personaNombre={personaNombre} />
     </section>

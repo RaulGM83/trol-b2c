@@ -24,7 +24,7 @@ import { BeneficiosPanel } from '@/components/trol3/BeneficiosPanel';
 import { CobroPanel } from '@/components/trol3/CobroPanel';
 import { RegistroRapido, ActivarCard, PropuestaForm, type Puede } from '@/components/trol3/RelacionPanel';
 import { AsesoriaSesion } from '@/components/trol3/AsesoriaSesion';
-import { CarrilCard, DatosClaveCard, SesionCard, AgregarOportunidad, type CitaMini } from '@/components/trol3/RelacionExtras';
+import { CarrilCard, DatosClaveCard, SesionCard, AgregarOportunidad, type CitaMini, type OpinionAfore } from '@/components/trol3/RelacionExtras';
 import type { FilaCarril } from '@/components/trol3/CarrilAcciones';
 import type { OrigenPersona } from '@/app/trabajo/actions';
 import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
@@ -137,11 +137,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const catMap = new Map((cat ?? []).map((c: Any) => [c.codigo, c]));
   const { data: personaMeta } = await db.from('personas').select('created_at').eq('id', params.id).maybeSingle();
   // 210 · Relación completa (claude/95): carril, quién lo trajo, aliados para corregirlo, costo de actualizar el IMSS.
-  const [{ data: carrilRaw }, { data: origenRaw }, { data: aliadosRaw }] = await Promise.all([
+  const [{ data: carrilRaw }, { data: origenRaw }, { data: aliadosRaw }, { data: opinionRaw }] = await Promise.all([
     db.rpc('carril_de', { p: params.id }),
     searchParams.tab == null || searchParams.tab === 'relacion' ? db.rpc('origen_de', { p_persona: params.id }) : Promise.resolve({ data: null }),
     searchParams.tab == null || searchParams.tab === 'relacion' ? db.from('aliados').select('id,nombre').eq('activo', true).order('nombre') : Promise.resolve({ data: [] }),
+    // 216 · lo que opina de su AFORE.
+    db.from('opiniones_afore').select('afore,atencion,asesoria,recomendaria,comentario,actualizado_en').eq('persona_id', params.id).maybeSingle(),
   ]);
+  const opinionAfore = (opinionRaw ?? null) as OpinionAfore | null;
   const origenPersona = (origenRaw ?? null) as OrigenPersona | null;
   const aliadosLista = ((aliadosRaw ?? []) as { id: string; nombre: string }[]);
   const datosMap = new Map((datos ?? []).map((d: Any) => [d.campo, d]));
@@ -634,7 +637,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
               </section>
               {filaCarril ? <CarrilCard fila={filaCarril} takoUrl={takoChat} esAdmin={esAdmin || (m.roles ?? []).includes('coach')} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} /> : null}
               <DatosClaveCard personaId={e.persona_id} curp={e.curp ?? null} nss={nssHeader} fechaSisec={rawFechaSisec ?? null} registradoEn={personaMeta?.created_at ? String(personaMeta.created_at) : null}
-                costoConsulta={costoProv('jordan') ?? costoProv('belvo')} origen={origenPersona} aliados={aliadosLista} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} personaNombre={e.nombre ?? 'el cliente'} />
+                costoConsulta={costoProv('jordan') ?? costoProv('belvo')} origen={origenPersona} aliados={aliadosLista} opinion={opinionAfore} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} personaNombre={e.nombre ?? 'el cliente'} />
               <SesionCard personaId={e.persona_id} citas={((citas ?? []) as Any[]).map((c) => ({ id: c.id, inicio: c.inicio, estado: c.estado, origen: c.origen, notas: c.notas ?? null, miembro_id: c.miembro_id ?? null, fuente: c.fuente ?? null })) as CitaMini[]}
                 miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} yo={m.id} agendarSlot={<AgendarBoton info={(linkCitas ?? null) as LinkCitas | null} />} />
               <DiagnosticoBasico personaId={e.persona_id} nombre={e.nombre ?? null} />
