@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
         const pid = await personaId(b, req.headers);
         if (b.campo === "curp" && typeof b.valor === "string") {
           b.valor = curpNormalizada(b.valor as string);
-          if (!curpValida(b.valor as string)) return json({ ok: false, error: "curp_formato_invalido", mensaje: "CURP no válida (18 caracteres, formato oficial). Pídela de nuevo." }, 400);
+          if (!curpValida(b.valor as string)) return json({ ok: false, error: "curp_formato_invalido", mensaje: "CURP no válida (deben ser 18 caracteres, como viene en tu CURP). Pídela de nuevo." }, 400);
         }
         const { data, error } = await db.rpc("declarar", { p_persona: pid, p_campo: b.campo, p_valor: b.valor, p_actor: b.actor ?? "bot", p_actor_id: b.actor_id ?? null, p_capa: "declarado" });
         if (error) return json({ ok: false, error: error.message, hint: (error as { hint?: string }).hint }, 400);
@@ -393,7 +393,7 @@ Deno.serve(async (req) => {
           }
           if (campo === "curp" && typeof valor === "string") {
             valor = curpNormalizada(valor);
-            if (!curpValida(valor as string)) { out["curp"] = { error: "formato_invalido", mensaje: "CURP no válida: deben ser 18 caracteres con el formato oficial. Pídela de nuevo." }; continue; }
+            if (!curpValida(valor as string)) { out["curp"] = { error: "formato_invalido", mensaje: "CURP no válida: deben ser 18 caracteres, como viene en tu CURP. Pídela de nuevo." }; continue; }
           }
           if (campo === "afore_actual" && typeof valor === "string") valor = normalizaAfore(valor);
           if (campo === "status_empleo" && typeof valor === "string") valor = valor.toLowerCase();
