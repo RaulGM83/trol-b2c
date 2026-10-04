@@ -299,8 +299,8 @@ function SecOperacion({ d }: { d: ReturnType<typeof derivar> }) {
           <View style={[s.suma, s.sumaTotal]}><Text style={[s.sumaLbl, { color: DARK, fontWeight: 700 }]}>Valor de escrituración</Text><Text style={s.sumaVal}>{mx(op.esc)}</Text></View>
           {d.sobreprecio > 0 ? (
             <Text style={[s.sup, { marginTop: 4 }]}>
-              Se escritura por arriba del precio de venta y la diferencia — {mx(d.sobreprecio)} — se te entrega en
-              efectivo el día de la firma.
+              Se escritura por arriba del precio de venta ({mx(d.sobreprecioEsc)} más) y recibes {mx(d.sobreprecio)} en
+              efectivo el día de la firma{d.sobreprecioConstructora > 0 ? `; ${mx(d.sobreprecioConstructora)} corresponden a la constructora` : ''}.
             </Text>
           ) : null}
           {Number(op.remanente ?? 0) > 0 ? (

@@ -49,7 +49,11 @@ export function derivar(a: Any) {
     aportaciones: Number(fila?.aportaciones_aplicadas ?? 0),
     rescate: Number(fila?.bloques?.IV_rescate ?? 0) > 0,
     notCliente: Number(op.not_cliente ?? 0),
-    sobreprecio: Number(op.sobreprecio ?? 0),
+    // 217 · `sobreprecio` = lo que el cliente RECIBE en la firma (asesorías viejas: todo el sobreprecio);
+    // `sobreprecioEsc` = lo escriturado de más; `sobreprecioConstructora` = lo que retiene la constructora.
+    sobreprecio: Number(op.efectivo_firma ?? op.sobreprecio ?? 0),
+    sobreprecioEsc: Number(op.sobreprecio ?? 0),
+    sobreprecioConstructora: Number(op.sobreprecio_constructora ?? 0),
     corte,
     aniosDespues: Math.max(corte - aniosVenta, 0),
     ventajaCorte: Number(fila?.ventaja_corte ?? 0),

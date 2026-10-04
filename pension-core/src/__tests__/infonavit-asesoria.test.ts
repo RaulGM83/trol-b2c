@@ -370,6 +370,60 @@ describe('sobreprecio de escrituración', () => {
     montoCerca(b5, 180_000 * Math.pow(1.08, 5));
   });
 
+  // 217 · La constructora retiene su % de TODO el sobreprecio (Raul, 3-oct-2026):
+  // "si pide 100,000 más, se le entregarán 75,000"; Trol no absorbe nada.
+  describe('la parte de la constructora (217)', () => {
+    // Laureles 2 PA tal cual está en el catálogo, saldo $970,000.
+    const laureles2 = (sobreprecio: number) => inmueble({
+      avaluo: 1_100_000, escrituracion: 885_000, costo_aliado: 815_000, renta: 4_500,
+      notariales_credito: 30_000, notariales_adicionales: 25_000, aliado_cubre_notariales: true,
+      sobreprecio, pct_sobreprecio_constructora: 0.25,
+    });
+    const t970 = titular({ regimen: 73, edad: 52, ssv: 970_000, salario_imss: 30_000 });
+
+    it('sin sobreprecio no hay crédito: le sobran $55,000 atorados y no es viable', () => {
+      const r = calcular(cliente(t970), laureles2(0));
+      expect(r.operacion.credito).toBe(0);
+      montoCerca(r.operacion.remanente, 970_000 - 885_000 - 30_000);
+      expect(r.senales.some((x) => x.startsWith('credito_bajo_minimo'))).toBe(true);
+      const min = sobreprecioMinimo(laureles2(0), 970_000, 100_000);
+      montoCerca(min.requerido, 155_000);
+      montoCerca(min.escrituraMinima, 1_040_000);
+      expect(min.viable).toBe(true);
+    });
+
+    it('con el sobreprecio mínimo: crédito de $100,000, $116,250 al cliente y $38,750 a la constructora', () => {
+      const r = calcular(cliente(t970), laureles2(155_000));
+      montoCerca(r.operacion.esc, 1_040_000);
+      montoCerca(r.operacion.credito, 100_000);
+      montoCerca(r.operacion.sobreprecio, 155_000);
+      montoCerca(r.operacion.sobreprecio_constructora, 38_750);
+      montoCerca(r.operacion.efectivo_firma, 116_250);
+      expect(r.senales.some((x) => x.startsWith('credito_bajo_minimo'))).toBe(false);
+    });
+
+    it('al avalúo: $215,000 de sobreprecio, $161,250 al cliente', () => {
+      const r = calcular(cliente(t970), laureles2(500_000));
+      montoCerca(r.operacion.esc, 1_100_000);
+      montoCerca(r.operacion.credito, 160_000);
+      montoCerca(r.operacion.efectivo_firma, 161_250);
+    });
+
+    it('el bloque V capitaliza sólo lo que el cliente recibe; el descuento carga todo el sobreprecio', () => {
+      const r = calcular(cliente(t970), laureles2(155_000), null, { alterno: 0.08 });
+      montoCerca(r.tabla[3].bloques.V_efectivo_firma, 116_250 * Math.pow(1.08, 5));
+      montoCerca(r.tabla[3].bloques.detalle.descuento, -155_000);
+    });
+
+    it('sin el campo (asesorías viejas) se comporta como antes: todo al cliente', () => {
+      const viejo = inmueble({ avaluo: 1_100_000, escrituracion: 885_000, renta: 4_500, notariales_credito: 30_000,
+        notariales_adicionales: 25_000, aliado_cubre_notariales: true, sobreprecio: 155_000 });
+      const r = calcular(cliente(t970), viejo);
+      montoCerca(r.operacion.efectivo_firma, 155_000);
+      expect(r.operacion.sobreprecio_constructora).toBe(0);
+    });
+  });
+
   // Si el bloque V estuviera mal cableado, `calcular` lanzaría: la verificación
   // interna compara bloques contra efectivo − notariales − contrafactual.
   it('la verificación interna aguanta con sobreprecio en toda la batería', () => {
@@ -420,22 +474,22 @@ describe('crédito mínimo', () => {
     expect(m.requerido).toBeGreaterThan(m.techo);
   });
 
-  it('la señal avisa cuánto falta para llegar al mínimo', () => {
+  it('la señal avisa cuánto falta para llegar al mínimo (217: el mínimo por defecto es $100,000)', () => {
     const r = calcular(
       cliente(titular({ ssv: 907_000 })),
       inmueble({ ...laureles, renta: 4_500, notariales_adicionales: 23_800, aliado_cubre_notariales: true }),
     );
     expect(r.operacion.credito).toBe(0);
-    expect(r.senales).toContain('credito_bajo_minimo:50000');
+    expect(r.senales).toContain('credito_bajo_minimo:100000');
   });
 
   it('con el sobreprecio mínimo la señal desaparece', () => {
-    const m = sobreprecioMinimo(laureles, 907_000, 50_000);
+    const m = sobreprecioMinimo(laureles, 907_000, 100_000);
     const r = calcular(
       cliente(titular({ ssv: 907_000 })),
       inmueble({ ...laureles, renta: 4_500, notariales_adicionales: 23_800, aliado_cubre_notariales: true, sobreprecio: m.requerido }),
     );
-    montoCerca(r.operacion.credito, 50_000);
+    montoCerca(r.operacion.credito, 100_000);
     expect(r.senales.some((x) => x.startsWith('credito_bajo_minimo'))).toBe(false);
   });
 });

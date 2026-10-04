@@ -136,7 +136,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   supuestos: SupuestosGlobales;
   historial: AsesoriaGuardada[];
 }) {
-  const creditoMin = Number(supuestos.credito_minimo ?? 50000);
+  const creditoMin = Number(supuestos.credito_minimo ?? 100000);
   const minCotitular = Number(supuestos.saldo_min_cotitular ?? 100000);
   const enCatalogo = proyectos.filter((p) => p.disponible);
   // Default: el inmueble que le genera el crédito más chico por encima del mínimo.
@@ -203,7 +203,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     mantenimiento: supuestos.mantenimiento, gestion: supuestos.gestion, aplica_gestion: supuestos.aplica_gestion,
     comision_venta: supuestos.comision_venta, uma_mensual: supuestos.uma_mensual,
     monto_max_credito: supuestos.monto_max_credito, horizontes: supuestos.horizontes,
-    credito_minimo: Number(supuestos.credito_minimo ?? 50000),
+    credito_minimo: Number(supuestos.credito_minimo ?? 100000),
     base_plusvalia: supuestos.base_plusvalia === 'avaluo' ? 'avaluo' : 'escrituracion',
   }), [supuestos]);
 
@@ -225,7 +225,10 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     notariales_adicionales: proyecto.notariales_adicionales, comision_desarrollador: proyecto.comision_desarrollador,
     aliado_cubre_notariales: proyecto.aliado_cubre_notariales,
     sobreprecio,
+    // 217 · la constructora retiene su % de todo el sobreprecio; el cliente recibe el resto.
+    pct_sobreprecio_constructora: proyecto.pct_excedente_constructora ?? 0,
   };
+  const pctConstructora = Math.max(0, Math.min(1, proyecto?.pct_excedente_constructora ?? 0));
 
   // Horizonte de medición default: venta + 3 años, con piso de 5. La venta de referencia
   // sale de una corrida con corte fijo de 5 para que la recomendación no se retroalimente.
@@ -304,7 +307,9 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     const inicio = margen + comisionDesarrollador;
     const gestion = aliadoRenta ? proyecto.renta * supuestos.gestion * elegida.horizonte : 0;
     const reventa = aliadoVende ? -elegida.bloques.detalle.comision_venta : 0;
-    return { bruto, excedente, aConstructora, margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa,
+    // 217 · lo que la constructora retiene del sobreprecio: sale del bolsillo del cliente, no del margen de Trol.
+    const constructoraSobreprecio = r.operacion.sobreprecio_constructora ?? 0;
+    return { bruto, excedente, aConstructora, margen, comisionDesarrollador, notarialesRegalados, inicio, gestion, reventa, constructoraSobreprecio,
       total: inicio + gestion + reventa, sobreEscrituracion: (inicio + gestion + reventa) / proyecto.escrituracion };
   })();
 
@@ -469,7 +474,8 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 Escriturar por arriba del precio de venta · tope {money(proyecto.avaluo - proyecto.escrituracion)} (el avalúo)
               </span>
               <span className="text-xs">
-                Se le entregan <b>{money(sobreprecio)}</b> en efectivo a la firma
+                Se le entregan <b>{money(sobreprecio * (1 - pctConstructora))}</b> en efectivo a la firma
+                {pctConstructora > 0 && sobreprecio > 0 ? <span className="text-muted"> · la constructora se queda {money(sobreprecio * pctConstructora)} ({pct(pctConstructora, 0)})</span> : null}
               </span>
             </div>
             <input type="range" min={0} max={proyecto.avaluo - proyecto.escrituracion} step={5000}
@@ -479,6 +485,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               Entra más saldo de vivienda a la operación en vez de quedarse al {pct(supuestos.r_ssv, 0)} en Infonavit.
               Sube lo que se escritura y por tanto el crédito, la retención y los intereses;{' '}
               <b>no sube lo que el inmueble vale</b>: la plusvalía sigue corriendo sobre {money(proyecto.escrituracion)}.
+              {pctConstructora > 0 ? <> De cada $100,000 de más, el cliente recibe {money(100000 * (1 - pctConstructora))}; el resto es de la constructora y Trol no lo absorbe.</> : null}
             </p>
           </div>
         )}
@@ -643,7 +650,8 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               <Mini label="Remanente en Infonavit" v={money(r.operacion.remanente)} />
               <Mini label="Renta neta" v={money(r.operacion.renta_neta)} />
               <Mini label="Se liquida el crédito" v={r.mes_liquida_credito ? `mes ${r.mes_liquida_credito}` : `> ${supuestos.horizontes[supuestos.horizontes.length - 1]} meses`} />
-              {r.operacion.sobreprecio > 0 && <Mini label="Efectivo a la firma" v={money(r.operacion.sobreprecio)} />}
+              {r.operacion.sobreprecio > 0 && <Mini label="Efectivo a la firma" v={money(r.operacion.efectivo_firma)} />}
+              {r.operacion.sobreprecio_constructora > 0 && <Mini label="Del sobreprecio, a la constructora" v={money(r.operacion.sobreprecio_constructora)} />}
               {r.operacion.sobreprecio > 0 && <Mini label="Escriturado" v={money(r.operacion.esc)} />}
             </div>
             {r.senales.length > 0 && (
@@ -818,6 +826,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                       {pnl.notarialesRegalados > 0 ? <Fila indent label="Notariales que regalamos al cliente" vals={[-pnl.notarialesRegalados]} negativo /> : null}
                       <Fila indent label="Sobrante repartible" vals={[pnl.excedente]} />
                       {pnl.aConstructora > 0 ? <Fila indent label={`Parte de la constructora (${pct(proyecto?.pct_excedente_constructora ?? 0, 0)} del sobrante)`} vals={[-pnl.aConstructora]} negativo /> : null}
+                      {pnl.constructoraSobreprecio > 0 ? <Fila indent label="Además, del sobreprecio escriturado (lo paga el cliente, no Trol)" vals={[pnl.constructoraSobreprecio]} /> : null}
                       <Fila indent label="Margen para Trol" vals={[pnl.margen]} />
                       <Fila indent label="Comisión del desarrollador (sobre costo aliado)" vals={[pnl.comisionDesarrollador]} />
                       <Fila fuerte label="Total al inicio" vals={[pnl.inicio]} />

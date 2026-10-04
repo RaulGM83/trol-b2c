@@ -90,6 +90,13 @@ export interface InmuebleInfonavit {
    * de venta real. Capitalizar la escritura inflada sobrestimaría la propuesta.
    */
   sobreprecio?: number;
+  /**
+   * 217 · Lo que la constructora retiene del sobreprecio (Laureles: 25%). Si el cliente pide
+   * $100,000 más de escritura, recibe $75,000 y la constructora $25,000; Trol no absorbe nada.
+   * Se retiene sobre TODO el sobreprecio, incluido el que hace falta para llegar al crédito
+   * mínimo. Ausente (asesorías guardadas antes de 217) = 0: se presentan como se cerraron.
+   */
+  pct_sobreprecio_constructora?: number;
 }
 
 export interface SupuestosInfonavit {
@@ -127,7 +134,7 @@ export const SUPUESTOS_DEFAULT: SupuestosInfonavit = {
   comision_venta: 0.05, base_plusvalia: 'escrituracion',
   uma_mensual: 3586.68, monto_max_credito: 2935002,
   horizontes: [18, 24, 36, 60], max_meses_motor: 96,
-  credito_minimo: 50000,
+  credito_minimo: 100000,
 };
 
 export const PALANCAS_DEFAULT: PalancasInfonavit = {
@@ -202,8 +209,12 @@ export interface OperacionInfonavit {
   base: number;
   renta_neta: number; saldo_apl: number; remanente: number;
   credito: number; pmt: number; not_credito: number; not_cliente: number;
-  /** Efectivo que se le entrega al cliente en la firma. */
+  /** Sobreprecio escriturado (lo que se financia de más). */
   sobreprecio: number;
+  /** 217 · Lo que de ese sobreprecio se queda la constructora. */
+  sobreprecio_constructora: number;
+  /** 217 · Efectivo que se le entrega al cliente en la firma = sobreprecio − constructora. */
+  efectivo_firma: number;
   pct_salario: number; flujo_mensual: number;
 }
 
@@ -227,9 +238,13 @@ function operacion(dc: ClienteDerivado, inm: InmuebleInfonavit, sup: SupuestosIn
     pmt = credito * i / (1 - Math.pow(1 + i, -n)); // sistema francés
   }
   const not_cliente = inm.aliado_cubre_notariales ? 0 : inm.notariales_adicionales;
+  // 217: la constructora retiene su % de todo el sobreprecio; el resto es lo que el cliente recibe.
+  const pctC = Math.max(0, Math.min(1, inm.pct_sobreprecio_constructora ?? 0));
+  const sobreprecio_constructora = sobreprecio * pctC;
+  const efectivo_firma = sobreprecio - sobreprecio_constructora;
   return {
     esc, base, renta_neta, saldo_apl, remanente, credito, pmt,
-    not_credito: K, not_cliente, sobreprecio,
+    not_credito: K, not_cliente, sobreprecio, sobreprecio_constructora, efectivo_firma,
     pct_salario: dc.salario ? pmt / dc.salario : 0,
     flujo_mensual: renta_neta - pmt,
   };
@@ -300,8 +315,9 @@ function efectivoVenta(op: OperacionInfonavit, motor: SerieMotor, dc: ClienteDer
     + isrDevuelto(motor, dc, sup, t)
     + op.remanente * Math.pow(1 + sup.r_ssv, t / 12)
     // El efectivo de la firma ya está en su bolsa desde el mes cero y trabaja
-    // a su rendimiento alterno, no al de la subcuenta.
-    + op.sobreprecio * Math.pow(1 + pal.alterno, t / 12);
+    // a su rendimiento alterno, no al de la subcuenta. (217: sólo lo que él recibe;
+    // la parte de la constructora se fue en la firma.)
+    + op.efectivo_firma * Math.pow(1 + pal.alterno, t / 12);
 }
 
 export interface FilaHorizonte {
@@ -394,8 +410,9 @@ export function calcular(
     const b4 = rescate * Math.pow(1 + r, t / 12);
     // V. El efectivo de la firma, capitalizado a su rendimiento alterno. El costo de
     // haberlo sacado ya está en el bloque I como `descuento` negativo (se escrituró por
-    // arriba de lo que vale), así que lo que queda neto es sólo lo que ese dinero rinde.
-    const b5 = op.sobreprecio * Math.pow(1 + pal.alterno, t / 12);
+    // arriba de lo que vale: TODO el sobreprecio), así que lo que queda neto es lo que
+    // rinde lo que sí recibió; la parte de la constructora (217) es costo puro.
+    const b5 = op.efectivo_firma * Math.pow(1 + pal.alterno, t / 12);
     const ventaja = b1 + b2 + b3 + b4 + b5;
     const efv = efectivoVenta(op, motor, dc, sup, pal, g, t);
     const cf = contrafactual(dc, sup, t);
