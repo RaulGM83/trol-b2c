@@ -12,3 +12,7 @@ grant execute on function public.list_aliados() to authenticated;
 grant execute on function public.admin_activar_calculadora(uuid, boolean) to authenticated;
 grant execute on function public.admin_set_documento_sisec(uuid, text) to authenticated;
 grant execute on function public.admin_upsert_asesor(text, text) to authenticated;
+-- Vista de asesores del portal (/clientes/[id]): candado is_advisor_user() adentro.
+grant execute on function public.actualizar_cliente_contacto(uuid, text, text, text, text) to authenticated;
+grant execute on function public.actualizar_sisec_cliente(uuid) to authenticated;
+grant execute on function public.solicitar_diagnostico_cliente(uuid) to authenticated;
