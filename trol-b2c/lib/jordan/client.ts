@@ -1,6 +1,7 @@
 // ============================================================================
-// Cliente de Jordan Digital para los dos servicios on demand: Semanas
-// Ventanilla (trámite presencial en el IMSS) y Actas del Registro Civil.
+// Cliente de Jordan Digital para los servicios on demand: Semanas Ventanilla
+// (trámite presencial en el IMSS), Actas del Registro Civil y, desde 219, la
+// Constancia de vigencia de derechos (salud) del IMSS.
 //
 // La app habla directo con Jordan —no pasa por n8n— para que la llave viva en
 // Vercel y el PDF caiga en la bóveda `expediente` sin tocar Drive. Sólo
@@ -21,6 +22,7 @@ export type TipoActa = (typeof TIPOS_ACTA)[number];
 
 export type EstadoVentanilla = 'recibida' | 'en_ventanilla' | 'lista' | 'error' | 'cancelada';
 export type EstadoActa = 'QUEUED' | 'PROCESSING' | 'DONE' | 'ERROR' | 'CANCELLED';
+export type EstadoVigencia = 'processing' | 'completed' | 'failed';
 
 export type Ventanilla = {
   sid: string; curp: string; nss: string; estado: EstadoVentanilla;
@@ -31,13 +33,18 @@ export type Acta = {
   id: string; external_id?: string; term: string; act_type: string; status: EstadoActa;
   charged?: boolean; charged_amount?: number; pdf_url?: string; error_code?: string; error_message?: string; duplicated?: boolean;
 };
+/** 219 · Constancia de vigencia (docs/vigencias). `persona` sólo viene al crear; `error` sólo en failed. */
+export type Vigencia = {
+  id: string; status: EstadoVigencia; curp?: string; nombre?: string; nss?: string;
+  persona?: { nombre?: string; nss?: string; curp?: string }; creditos_restantes?: number; pdf_url?: string; error?: string;
+};
 export type EstadoServicio = {
   abierto: boolean; dias?: string; hora_inicio: string; hora_fin: string; zona?: string; motivo?: string;
   proxima_apertura?: string | null; costo_creditos?: number; eta_min?: number;
 };
 
 export class JordanError extends Error {
-  constructor(public status: number, public code: string | null, message: string) { super(message); }
+  constructor(public status: number, public code: string | null, message: string, public extra: Record<string, unknown> = {}) { super(message); }
 }
 
 function apiKey() {
@@ -47,7 +54,7 @@ function apiKey() {
 }
 
 /** Dónde recibe la app los avisos de Jordan. En producción app.trol.mx. */
-export function webhookUrl(servicio: 'ventanilla' | 'actas') {
+export function webhookUrl(servicio: 'ventanilla' | 'actas' | 'vigencias') {
   const base = process.env.JORDAN_WEBHOOK_BASE || process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   return `${base.replace(/\/$/, '')}/api/jordan/${servicio}`;
 }
@@ -64,7 +71,7 @@ async function llamar<T>(path: string, init: RequestInit & { publico?: boolean }
   try { json = texto ? JSON.parse(texto) : {}; } catch { json = { error_message: texto.slice(0, 300) }; }
   if (!res.ok) {
     // Jordan redacta error_message para mostrarse tal cual; error_code es estable para la lógica.
-    throw new JordanError(res.status, (json.error_code as string) ?? null, (json.error_message as string) ?? (json.error as string) ?? `Jordan respondió ${res.status}`);
+    throw new JordanError(res.status, (json.error_code as string) ?? null, (json.error_message as string) ?? (json.error as string) ?? `Jordan respondió ${res.status}`, json);
   }
   return json as T;
 }
@@ -98,6 +105,19 @@ export function crearActa(args: { tipo: TipoActa; curp: string; conFolio: boolea
 }
 export const verActa = (id: string) => llamar<Acta>(`/actas/${encodeURIComponent(id)}`);
 
+// ── Vigencia de derechos (219) ───────────────────────────────────────────────
+/** POST /consulta con modo "vigencias" (sin modo sería semanas). Jordan admite una activa por CURP: un 409
+ *  trae el `id` de la que ya corre y lo reutilizamos en vez de fallar. 1 crédito, reembolsado si falla. */
+export async function crearVigencia(args: { curp: string }) {
+  try {
+    return await llamar<Vigencia>('/consulta', { method: 'POST', body: JSON.stringify({ curp: args.curp, modo: 'vigencias', webhook_url: webhookUrl('vigencias') }) });
+  } catch (e) {
+    if (e instanceof JordanError && e.status === 409 && e.extra?.id) return { id: String(e.extra.id), status: 'processing' as const };
+    throw e;
+  }
+}
+export const verVigencia = (id: string) => llamar<Vigencia>(`/consulta/${encodeURIComponent(id)}`);
+
 // ── PDF ──────────────────────────────────────────────────────────────────────
 /** Descarga con la llave (no con el enlace firmado del payload: ese es una llave en sí y no lo guardamos). */
 export async function descargarPdf(path: string): Promise<Buffer> {
@@ -111,6 +131,7 @@ export async function descargarPdf(path: string): Promise<Buffer> {
 }
 export const pdfVentanilla = (sid: string) => descargarPdf(`/ventanilla/${encodeURIComponent(sid)}/pdf`);
 export const pdfActa = (id: string) => descargarPdf(`/actas/${encodeURIComponent(id)}/pdf`);
+export const pdfVigencia = (id: string) => descargarPdf(`/consulta/${encodeURIComponent(id)}/pdf`);
 
 /** Hora de apertura legible para el asesor ("lunes 08:00"). */
 export function horarioLegible(e: EstadoServicio | null) {

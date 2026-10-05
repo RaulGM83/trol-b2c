@@ -186,6 +186,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [sobreprecio, setSobreprecio] = useState(0);
   // Faltantes que el asesor resuelve aquí mismo, sin salir de la pestaña.
   const [sbcNuevo, setSbcNuevo] = useState('');
+  const [fnacNueva, setFnacNueva] = useState('');
   const [pmgDecidida, setPmgDecidida] = useState(false);
   const [msgFalta, setMsgFalta] = useState<string | null>(null);
   const [resolviendo, resolver] = useTransition();
@@ -381,9 +382,19 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 )}
 
                 {f === 'fecha_nacimiento' && (
-                  <p className="mt-2 text-xs text-muted">
-                    Captúrala en <span className="font-semibold">Información</span>; desde ahí se guarda con su procedencia.
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input type="date" value={fnacNueva} onChange={(ev) => setFnacNueva(ev.target.value)} max={new Date().toISOString().slice(0, 10)}
+                      className="w-44 rounded-lg border border-line px-2 py-1 text-sm" />
+                    {fnacNueva && (
+                      <span className="text-xs text-muted">= {Math.floor((Date.now() - new Date(fnacNueva).getTime()) / 86_400_000 / 365.25)} años</span>
+                    )}
+                    <button disabled={resolviendo || !fnacNueva} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                      onClick={() => resolver(async () => {
+                        const res = (await declararAsesor(personaId, 'fecha_nacimiento', fnacNueva, 'declarado')) as R;
+                        setMsgFalta(res.ok ? null : res.error ?? 'error');
+                      })}>Guardar en el expediente</button>
+                    <span className="basis-full text-[11px] text-muted">Sin CURP se guarda como dato declarado; cuando llegue la CURP, la fecha validada lo sustituye.</span>
+                  </div>
                 )}
 
                 {f === 'conserva_valor' && (

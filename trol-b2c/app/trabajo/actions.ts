@@ -9,7 +9,7 @@ import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { avisar } from '@/lib/trol3/avisar';
-import { crearActa, crearVentanilla, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
+import { crearActa, crearVentanilla, crearVigencia, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
 import { sincronizarConsultaJordan } from '@/lib/jordan/procesar';
 import { extraerPropuestas } from '@/lib/granola/procesar';
 import { armarDiagnosticoBasico } from '@/lib/trol3/diagnostico-basico';
@@ -511,6 +511,27 @@ export async function pedirActa(personaId: string, tipo: TipoActa, conFolio: boo
     await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { jordan_id: a.id, tipo_acta: tipo, con_folio: conFolio, cadena: cad, estado_jordan: a.status, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
     revalidatePath(`/trabajo/p/${personaId}`);
     return ok({ consulta_id: res.consulta_id, jordan_id: a.id });
+  } catch (e) {
+    return cerrarConsultaRechazada(res.consulta_id, personaId, e);
+  }
+}
+
+/** 219 · Constancia de vigencia de derechos (salud) del IMSS (Jordan, 1 crédito). Sólo asesor; el PDF queda en Documentos sin mostrarse al cliente. */
+export async function pedirVigencia(personaId: string, motivo: string) {
+  const m = await requireMiembro();
+  const admin = createAdminClient().schema('trol3');
+  const { data: p } = await admin.from('personas').select('curp').eq('id', personaId).maybeSingle();
+  const curp = (p?.curp as string | null)?.trim().toUpperCase();
+  if (!curp || curp.length !== 18) return fail('Falta la CURP.');
+  const { data, error } = await t3().rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'vigencia_imss', p_actor: 'asesor', p_actor_id: m.id, p_pagador: 'trol', p_notificar: false, p_motivo: motivo || 'vigencia de derechos: ver cómo lo tiene el IMSS', p_forzar: false, p_proveedor: 'jordan_vigencia' });
+  if (error) return fail(error);
+  const res = data as { ok?: boolean; consulta_id?: string; motivo?: string };
+  if (!res?.ok || !res.consulta_id) return fail(res?.motivo === 'vigencia_en_curso' ? 'Ya hay una constancia de vigencia en curso para esta persona.' : `No enviada: ${res?.motivo ?? 'sin motivo'}`);
+  try {
+    const v = await crearVigencia({ curp });
+    await admin.from('consultas').update({ estado: 'en_proceso', payload_in: { jordan_id: v.id, estado_jordan: v.status, nombre_imss: v.persona?.nombre ?? null, nss_imss: v.persona?.nss ?? null, enviado_en: new Date().toISOString() } }).eq('id', res.consulta_id);
+    revalidatePath(`/trabajo/p/${personaId}`);
+    return ok({ consulta_id: res.consulta_id, jordan_id: v.id, nombre: v.persona?.nombre ?? null });
   } catch (e) {
     return cerrarConsultaRechazada(res.consulta_id, personaId, e);
   }

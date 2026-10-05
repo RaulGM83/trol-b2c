@@ -21,7 +21,7 @@ export function firmaOk(raw: string, req: Request) {
 }
 
 /** Ubica la consulta trol3 por la referencia que Jordan devuelve y la sincroniza. */
-export async function atenderWebhook(req: Request, tipo: 'imss_ventanilla' | 'acta') {
+export async function atenderWebhook(req: Request, tipo: 'imss_ventanilla' | 'acta' | 'vigencia_imss') {
   const raw = await req.text();
   if (!firmaOk(raw, req)) return NextResponse.json({ ok: false, error: 'firma' }, { status: 401 });
   let body: Record<string, unknown> = {};
@@ -31,6 +31,7 @@ export async function atenderWebhook(req: Request, tipo: 'imss_ventanilla' | 'ac
   let consultaId: string | null = null;
   if (tipo === 'acta' && typeof body.external_id === 'string' && /^[0-9a-f-]{36}$/i.test(body.external_id)) consultaId = body.external_id;
   if (!consultaId) {
+    // Actas y vigencias (219) referencian por `id` de Jordan, guardado en payload_in.jordan_id.
     const ref = tipo === 'imss_ventanilla' ? body.sid : body.id;
     if (typeof ref === 'string' && ref) {
       const clave = tipo === 'imss_ventanilla' ? 'sid' : 'jordan_id';

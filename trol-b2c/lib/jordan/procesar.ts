@@ -1,5 +1,5 @@
 // ============================================================================
-// Cierre de una consulta Jordan (ventanilla o acta). Lo usan tres caminos que
+// Cierre de una consulta Jordan (ventanilla, acta o vigencia 219). Lo usan tres caminos que
 // tienen que hacer EXACTAMENTE lo mismo: el webhook de Jordan, el cron de
 // reconciliación y el botón "Revisar" del asesor. Por eso vive aquí y no en
 // la ruta: si cada uno cerrara a su manera, un día uno de los tres mentiría.
@@ -10,7 +10,10 @@
 // ============================================================================
 import { createAdminClient } from '@/lib/supabase/admin';
 import { guardarPdfGenerado, notificarSisecPdf } from '@/lib/trol3/documentos';
-import { JordanError, MXN_POR_CREDITO, pdfActa, pdfVentanilla, verActa, verVentanilla, type TipoActa } from './client';
+import { JordanError, MXN_POR_CREDITO, pdfActa, pdfVentanilla, pdfVigencia, verActa, verVentanilla, verVigencia, type TipoActa } from './client';
+
+/** Tipos de consulta que cierra este módulo (y que reconcilia el cron). */
+export const TIPOS_JORDAN = ['imss_ventanilla', 'acta', 'vigencia_imss'] as const;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Sincronizacion = { ok: boolean; estado: string; cambio: boolean; mensaje: string };
@@ -79,6 +82,27 @@ export async function sincronizarConsultaJordan(consultaId: string): Promise<Sin
       return { ok: true, estado: 'error', cambio: true, mensaje: a.error_message ?? `Jordan la marcó ${a.status}; sin cobro.` };
     }
 
+    if (c.tipo === 'vigencia_imss') {
+      // 219 · Constancia de vigencia de derechos (salud). Sólo asesor: el documento no se le muestra al cliente.
+      const id = pin.jordan_id as string | undefined;
+      if (!id) return { ok: false, estado: c.estado, cambio: false, mensaje: 'La consulta no tiene id de Jordan; no se llegó a enviar.' };
+      const v = await verVigencia(id);
+      if (v.status === 'processing') {
+        await anotar({ estado_jordan: v.status });
+        return { ok: true, estado: 'en_proceso', cambio: false, mensaje: 'Jordan sigue trabajando con el IMSS.' };
+      }
+      if (v.status === 'completed') {
+        const buf = await pdfVigencia(id);
+        const doc = await guardarPdfGenerado({ personaId: c.persona_id, tipo: 'constancia_vigencia', buffer: buf, nombreArchivo: `${curp}_vigencia_imss_${fechaCdmx()}.pdf` });
+        await t3.from('documentos').update({ consulta_id: c.id, visibilidad: ['trol'] }).eq('id', doc.documentoId);
+        await cerrar('completada', { jordan_id: id, nombre_imss: v.nombre ?? null, nss_imss: v.nss ?? null, documento_id: doc.documentoId }, null, 1 * MXN_POR_CREDITO);
+        return { ok: true, estado: 'completada', cambio: true, mensaje: 'Constancia de vigencia guardada en Documentos (sólo asesor).' };
+      }
+      // failed: Jordan ya devolvió el crédito.
+      await cerrar('error', { jordan_id: id }, v.error ?? 'Jordan: failed', 0);
+      return { ok: true, estado: 'error', cambio: true, mensaje: v.error ?? 'El IMSS no entregó la constancia; crédito devuelto.' };
+    }
+
     return { ok: false, estado: c.estado, cambio: false, mensaje: `Tipo ${c.tipo} no es de Jordan.` };
   } catch (e) {
     // Un fallo aquí NO cierra la consulta: el cron o el asesor vuelven a intentar.
@@ -91,6 +115,6 @@ export async function sincronizarConsultaJordan(consultaId: string): Promise<Sin
 /** Consultas Jordan abiertas, para el cron. */
 export async function consultasJordanAbiertas(limite = 50) {
   const t3 = createAdminClient().schema('trol3');
-  const { data } = await t3.from('consultas').select('id,tipo,created_at').in('tipo', ['imss_ventanilla', 'acta']).in('estado', ['solicitada', 'en_proceso']).order('created_at', { ascending: true }).limit(limite);
+  const { data } = await t3.from('consultas').select('id,tipo,created_at').in('tipo', [...TIPOS_JORDAN]).in('estado', ['solicitada', 'en_proceso']).order('created_at', { ascending: true }).limit(limite);
   return (data ?? []) as { id: string; tipo: string; created_at: string }[];
 }

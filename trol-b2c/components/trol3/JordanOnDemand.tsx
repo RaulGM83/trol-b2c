@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { pedirActa, pedirVentanilla, revisarConsultaJordan } from '@/app/trabajo/actions';
+import { pedirActa, pedirVentanilla, pedirVigencia, revisarConsultaJordan } from '@/app/trabajo/actions';
 import type { TipoActa } from '@/lib/jordan/client';
 
 // Los dos servicios on demand de Jordan (132). Individuales, con el costo a la
@@ -8,6 +8,8 @@ import type { TipoActa } from '@/lib/jordan/client';
 //   · Ventanilla: sólo aparece cuando la consulta automática no pudo.
 //   · Actas: las pide Trol para un trámite (Infonavit sobre todo); el cliente
 //     ve el PDF en /mi cuando ya existe.
+//   · Vigencia de derechos (219): constancia de salud del IMSS, para ver cómo
+//     tiene el IMSS a la persona (activo, último patrón, UMF). Sólo asesor.
 
 export type ConsultaJordan = { id: string; tipo: string; estado: string; error: string | null; created_at: string; completed_at: string | null; payload_in: Record<string, unknown> | null };
 export type ServicioInfo = { abierto: boolean; horario: string; costo: number | null };
@@ -17,7 +19,7 @@ const mxn = (n: number | null) => (n == null ? 'costo por confirmar' : new Intl.
 const fecha = (s: string | null | undefined) => (s ? new Date(s).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) : '—');
 const btnDark = 'rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 const btn = 'rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold hover:bg-cream disabled:opacity-50';
-const ESTADO_JORDAN: Record<string, string> = { recibida: 'en cola en Jordan', en_ventanilla: 'en ventanilla del IMSS', QUEUED: 'en cola en Jordan', PROCESSING: 'en trámite con el Registro Civil' };
+const ESTADO_JORDAN: Record<string, string> = { recibida: 'en cola en Jordan', en_ventanilla: 'en ventanilla del IMSS', QUEUED: 'en cola en Jordan', PROCESSING: 'en trámite con el Registro Civil', processing: 'Jordan la pide al IMSS' };
 
 function FilaAbierta({ c, personaId, etiqueta }: { c: ConsultaJordan; personaId: string; etiqueta: string }) {
   const [msg, setMsg] = useState<string | null>(null);
@@ -125,5 +127,50 @@ export function ActasBloque({ personaId, servicio, tieneCurp, abiertas, ultimas 
         {msg && <p className="text-muted">{msg}</p>}
       </div>
     </section>
+  );
+}
+
+/** 219 · Constancia de vigencia de derechos (salud) del IMSS. No es la conservación de derechos pensionarios:
+ *  dice si hoy tiene servicio médico, con qué patrón y en qué UMF. Útil cuando el reporte de semanas falla
+ *  o hay duda de si sigue activo. 1 crédito; el PDF queda en Documentos sólo para el asesor. */
+export function VigenciaBloque({ personaId, costo, tieneCurp, abierta, ultima }: {
+  personaId: string; costo: number | null; tieneCurp: boolean; abierta: ConsultaJordan | null; ultima: ConsultaJordan | null;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const puede = tieneCurp && !abierta;
+  return (
+    <div className="mt-3 space-y-2 border-t border-line pt-3 text-xs">
+      <div className="font-bold">Vigencia de derechos (salud) en el IMSS</div>
+      <p className="text-muted">Constancia oficial: si hoy tiene servicio médico, su último patrón y su UMF. Sirve para ver cómo lo tiene el IMSS cuando el reporte de semanas falla o dudas si sigue activo. Suele tardar unos minutos; sólo la ve el asesor.</p>
+      {abierta ? <FilaAbierta c={abierta} personaId={personaId} etiqueta="Vigencia" /> : null}
+      {!abierta && ultima ? (
+        <div className={`rounded-lg p-2 ${ultima.estado === 'completada' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'}`}>
+          Última constancia: <b>{ultima.estado === 'completada' ? 'en Documentos' : ultima.estado}</b> · {fecha(ultima.completed_at ?? ultima.created_at)}{ultima.error ? ` · ${ultima.error}` : ''}
+        </div>
+      ) : null}
+      {!tieneCurp ? <p className="text-amber-700">Jordan la pide por CURP: captúrala en Identidad antes.</p> : null}
+      {!abierta && (confirmando ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2">
+          <p className="text-amber-900">Se pide la constancia por <b>{mxn(costo)}</b>. Si el IMSS no la entrega, Jordan devuelve el crédito. ¿Confirmas?</p>
+          <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (opcional)" className="mt-2 w-full rounded-lg border border-line px-2 py-1.5" />
+          <div className="mt-2 flex gap-2">
+            <button disabled={pending} className={btnDark} onClick={() => start(async () => {
+              const r = (await pedirVigencia(personaId, motivo)) as R & { nombre?: string | null };
+              setConfirmando(false);
+              setMsg(r.ok ? `Pedida${r.nombre ? ` (el IMSS lo tiene como ${r.nombre})` : ''}. Suele llegar en unos minutos; usa "Revisar" si no aparece.` : r.error ?? 'error');
+            })}>{pending ? 'Pidiendo…' : 'Sí, pedir la constancia'}</button>
+            <button disabled={pending} className={btn} onClick={() => setConfirmando(false)}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button disabled={!puede || pending} className={btn + ' w-full py-2'} title={!tieneCurp ? 'Falta la CURP' : ''} onClick={() => { setMsg(null); setConfirmando(true); }}>
+          Pedir constancia de vigencia · {mxn(costo)}
+        </button>
+      ))}
+      {msg && <p className="text-muted">{msg}</p>}
+    </div>
   );
 }

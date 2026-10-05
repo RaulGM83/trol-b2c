@@ -10,7 +10,7 @@ import { ExpedienteAcciones, ConsultaForm, NotaForm, CitaForm, SaldoInfonavitAcc
 import { DatosTabla, type DatoRow } from '@/components/trol3/DatosTabla';
 import { CredencialInfonavit } from '@/components/trol3/CredencialInfonavit';
 import { ContactoEditable } from '@/components/trol3/ContactoEditable';
-import { VentanillaBloque, ActasBloque, type ConsultaJordan, type ServicioInfo } from '@/components/trol3/JordanOnDemand';
+import { VentanillaBloque, ActasBloque, VigenciaBloque, type ConsultaJordan, type ServicioInfo } from '@/components/trol3/JordanOnDemand';
 import { AgendarBoton, type LinkCitas } from '@/components/trol3/Citas';
 import { ReunionesPanel, type ReunionRow } from '@/components/trol3/Reuniones';
 import { ventanillaEstado, actasEstado, horarioLegible, MXN_POR_CREDITO, type EstadoServicio } from '@/lib/jordan/client';
@@ -79,7 +79,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const [{ data: ultimaImss }, { data: proveedores }, { data: consultasJordan }] = await Promise.all([
     db.from('v_ultima_consulta_imss').select('*').eq('persona_id', params.id).maybeSingle(),
     db.from('proveedores').select('codigo,nombre,costo_unitario').eq('activo', true),
-    db.from('consultas').select('id,tipo,estado,error,created_at,completed_at,payload_in').eq('persona_id', params.id).in('tipo', ['imss_ventanilla', 'acta']).order('created_at', { ascending: false }).limit(10),
+    db.from('consultas').select('id,tipo,estado,error,created_at,completed_at,payload_in').eq('persona_id', params.id).in('tipo', ['imss_ventanilla', 'acta', 'vigencia_imss']).order('created_at', { ascending: false }).limit(12),
   ]);
   const costoProv = (codigo: string) => { const x = (proveedores ?? []).find((p: Any) => p.codigo === codigo); return x?.costo_unitario == null ? null : Number(x.costo_unitario); };
   const [svcVentanilla, svcActas, { data: linkCitas }, { data: reuniones }] = await Promise.all([infoServicio(ventanillaEstado, costoProv('jordan_ventanilla')), infoServicio(actasEstado, costoProv('jordan_actas')), db.rpc('link_citas_para', { p_persona: params.id }), db.from('v_reuniones').select('*').eq('persona_id', params.id).order('inicio', { ascending: false }).limit(6)]);
@@ -88,6 +88,9 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const ventanillaUltima = cj.find((c) => c.tipo === 'imss_ventanilla' && !['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
   const actasAbiertas = cj.filter((c) => c.tipo === 'acta' && ['solicitada', 'en_proceso'].includes(c.estado));
   const actasUltimas = cj.filter((c) => c.tipo === 'acta' && !['solicitada', 'en_proceso'].includes(c.estado));
+  // 219 · constancia de vigencia de derechos (salud): sólo asesor.
+  const vigenciaAbierta = cj.find((c) => c.tipo === 'vigencia_imss' && ['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
+  const vigenciaUltima = cj.find((c) => c.tipo === 'vigencia_imss' && !['solicitada', 'en_proceso'].includes(c.estado)) ?? null;
   // ¿Quién lo trajo? El % de la venta sólo importa si es de un aliado (124), y
   // la marca de quién lo refirió va en la cabecera (125). El primero manda: si
   // alguien más comparte su link después, no le quita el cliente a quien lo
@@ -802,6 +805,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 ultima={ventanillaUltima}
                 mostrar={['error', 'sin_resultado'].includes(String((ultimaImss as Any)?.estado ?? ''))}
               />
+              <VigenciaBloque personaId={e.persona_id} costo={costoProv('jordan_vigencia')} tieneCurp={!!e.curp} abierta={vigenciaAbierta} ultima={vigenciaUltima} />
             </section>
             {opsAbiertas.length ? (
               <section className="rounded-2xl border border-line bg-white p-5">
