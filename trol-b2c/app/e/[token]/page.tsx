@@ -2,9 +2,11 @@
 // token = uuid del cliente (opaco; nunca exponemos el teléfono en la URL).
 // Prellena el celular del lado servidor, registra la apertura y manda al OTP.
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { LoginForm } from '@/app/login/login-form';
+import { BOT_UA } from '@/lib/magic';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +35,9 @@ export default async function EntradaCampania({
   // Resolver al cliente por id (service role) para prellenar y registrar la apertura.
   let telPrefill = '';
   let nombre = '';
+  // Vista previa de WhatsApp/Meta: se registra como 'preview', no como apertura del cliente.
+  const ua = (headers().get('user-agent') ?? '').slice(0, 300) || null;
+  const esBot = !!ua && BOT_UA.test(ua);
   try {
     const admin = createAdminClient();
     let { data: cli } = await admin
@@ -63,13 +68,13 @@ export default async function EntradaCampania({
       if (per) {
         const { data: tel } = await admin.schema('trol3').from('contactos').select('valor').eq('persona_id', per.id).eq('tipo', 'telefono').order('principal', { ascending: false }).limit(1).maybeSingle();
         cli = { id: per.legacy_cliente_id ?? per.id, nombre: per.nombre, telefono: tel?.valor ?? '' } as { id: string; nombre: string | null; telefono: string | null };
-        await admin.schema('trol3').rpc('emitir_evento', { p_persona: per.id, p_tipo: 'link_abierto', p_actor: 'cliente', p_actor_id: per.id, p_payload: { campania } });
+        if (!esBot) await admin.schema('trol3').rpc('emitir_evento', { p_persona: per.id, p_tipo: 'link_abierto', p_actor: 'cliente', p_actor_id: per.id, p_payload: { campania } });
       }
     }
     if (cli) {
       telPrefill = soloDigitos(cli.telefono ?? '').slice(-10);
       nombre = (cli.nombre ?? '').trim().split(/\s+/)[0] ?? '';
-      try { await admin.from('links_campania').insert({ cliente_id: cli.id, campania, evento: 'apertura' }); } catch {}
+      try { await admin.from('links_campania').insert({ cliente_id: cli.id, campania, evento: esBot ? 'preview' : 'apertura', user_agent: ua }); } catch {}
     }
   } catch {
     // Atribución/prefill best-effort: si falla, igual mostramos el login.

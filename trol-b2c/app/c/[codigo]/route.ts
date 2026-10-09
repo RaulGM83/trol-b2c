@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { canjearMagicLink } from '@/lib/magic';
+import { canjearMagicLink, contextoDesdeRequest } from '@/lib/magic';
 
 // 149: la puerta corta y amistosa a su cuenta Trol.
 //   https://app.trol.mx/c/AB7K9QX2PMRT
+// ?ir=1 sólo lo agrega la antesala anti-preview (ver lib/magic.ts).
 // Sin ?d= ni ?c= a la vista: el destino lo dice la ruta y la campaña vive en la
 // fila del token. Es el link que el cliente lee dentro del mensaje de WhatsApp,
 // así que tiene que parecer nuestro — de eso depende que lo abra.
@@ -16,5 +17,5 @@ export async function GET(req: Request, { params }: { params: { codigo: string }
   // Se acepta en minúsculas: hay clientes que lo teclean a mano desde otro teléfono.
   const codigo = (params.codigo ?? '').trim().toUpperCase();
   if (!FORMA.test(codigo)) return NextResponse.redirect(new URL('/login', url.origin));
-  return canjearMagicLink(codigo, url.origin, { destino: '/mi', campania: null });
+  return canjearMagicLink(codigo, url.origin, { destino: '/mi', campania: null }, contextoDesdeRequest(req));
 }

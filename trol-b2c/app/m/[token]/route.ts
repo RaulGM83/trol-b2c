@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canjearMagicLink } from '@/lib/magic';
+import { canjearMagicLink, contextoDesdeRequest } from '@/lib/magic';
 
 // Magic link largo (legacy). Sigue vivo por los links de 48 hex ya repartidos y
 // porque es el único que puede aterrizar en /diagnostico. Los nuevos se generan
@@ -14,5 +14,5 @@ export async function GET(req: Request, { params }: { params: { token: string } 
 
   const token = params.token ?? '';
   if (!/^[0-9a-f]{48}$/.test(token)) return NextResponse.redirect(new URL('/login', url.origin));
-  return canjearMagicLink(token, url.origin, { destino, campania });
+  return canjearMagicLink(token, url.origin, { destino, campania }, contextoDesdeRequest(req));
 }
