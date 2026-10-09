@@ -25,6 +25,8 @@ export interface Proyecto {
   renta_estimada: boolean; plusvalia: number; plusvalia_validada: boolean;
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
+  /** Ficha PDF pública del inmueble (bucket fichas-inmuebles); va a la cotización y a la propuesta. */
+  ficha_url?: string | null;
 }
 
 export interface SupuestosGlobales {
@@ -476,6 +478,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
             {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
             {proyecto.notas ? <> · {proyecto.notas}</> : null}
+            {proyecto.ficha_url ? <> · <a href={proyecto.ficha_url} target="_blank" rel="noreferrer" className="font-semibold underline">Ficha del inmueble ↗</a></> : null}
           </p>
         )}
         {proyecto && proyecto.avaluo > proyecto.escrituracion && (
@@ -883,7 +886,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               if (!r || !proyecto || !inmueble || !horizonte) return;
               const res = (await guardarAsesoriaInfonavit({
                 personaId,
-                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada } },
+                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada, ficha_url: proyecto.ficha_url ?? null } },
                 resultado: r,
                 proyectoId: proyecto.id,
                 cotitularPersonaId: cotitular?.personaId ?? null,

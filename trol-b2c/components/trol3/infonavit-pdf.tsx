@@ -10,7 +10,7 @@
 //  · Se habla sólo de lo que aplica: si no hay crédito, no se explica el crédito.
 //  · La plusvalía NUNCA lleva cifra en la narrativa: la tasa va como nota al pie y los montos
 //    solo en el detalle. No se promete renta inmediata: "se pone en renta".
-import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { derivar } from '@/lib/infonavit/derivar';
 import type { Any } from '@/lib/trol3/server';
 import { LOGO_TROL_BLANCO, LOGO_TROL_RATIO } from '@/lib/marca/logo';
@@ -290,6 +290,12 @@ function SecOperacion({ d }: { d: ReturnType<typeof derivar> }) {
         El inmueble se escritura en {mx(op.esc)}. Nadie te pide dinero para comprarlo: se paga con tu ahorro
         {hayCredito ? ' y un crédito Infonavit que la renta va pagando' : ''}.
       </Text>
+      {d.fichaUrl ? (
+        <Text style={{ fontSize: 8.4, marginBottom: 6, color: GRAY }}>
+          {'Ficha del inmueble (ubicación, rentas de la zona y potencial de crecimiento): '}
+          <Link src={d.fichaUrl} style={{ color: DARK, textDecoration: 'underline' }}>ver la ficha</Link>
+        </Text>
+      ) : null}
       <View style={s.two}>
         <View style={s.col}>
           <View style={s.suma}><Text style={s.sumaLbl}>Tu Subcuenta de Vivienda, como enganche</Text><Text style={s.sumaVal}>{mx(op.saldo_apl)}</Text></View>

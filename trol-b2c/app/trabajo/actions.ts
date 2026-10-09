@@ -951,7 +951,7 @@ export async function guardarProyecto(patch: {
   avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number; renta_estimada: boolean;
   plusvalia: number; plusvalia_validada: boolean; notariales_credito: number; notariales_adicionales: number;
   comision_desarrollador: number; aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
-  pct_excedente_constructora: number;
+  pct_excedente_constructora: number; ficha_url?: string | null;
 }) {
   await requireMiembro();
   if (!patch.desarrollo?.trim()) return fail(new Error('Ponle nombre al desarrollo.'));
@@ -962,7 +962,7 @@ export async function guardarProyecto(patch: {
   patch.comision_desarrollador = prop(patch.comision_desarrollador ?? 0);
   if (patch.pct_excedente_constructora < 0 || patch.pct_excedente_constructora > 1) return fail(new Error('El excedente a constructora va de 0 a 1 (o captúralo como %, p. ej. 25).'));
   const { id, ...campos } = patch;
-  const fila = { ...campos, updated_at: new Date().toISOString() };
+  const fila = { ...campos, ficha_url: campos.ficha_url?.trim() || null, updated_at: new Date().toISOString() };
   const db = t3();
   const { error } = id
     ? await db.from('proyectos_inmobiliarios').update(fila).eq('id', id)

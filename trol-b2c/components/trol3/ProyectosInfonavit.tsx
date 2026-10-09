@@ -12,6 +12,7 @@ export interface ProyectoRow {
   renta_estimada: boolean; plusvalia: number; plusvalia_validada: boolean;
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
+  ficha_url?: string | null;
 }
 
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -23,7 +24,7 @@ const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white 
 const VACIO: ProyectoRow = {
   id: '', clave: null, desarrollo: '', zona: '', m2: null, avaluo: 0, escrituracion: 0, costo_aliado: null, pct_excedente_constructora: 0,
   renta: 0, renta_estimada: true, plusvalia: 0.06, plusvalia_validada: false, notariales_credito: 0,
-  notariales_adicionales: 0, comision_desarrollador: 0, aliado_cubre_notariales: true, disponible: true, notas: '',
+  notariales_adicionales: 0, comision_desarrollador: 0, aliado_cubre_notariales: true, disponible: true, notas: '', ficha_url: '',
 };
 
 function Campo({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
@@ -67,6 +68,7 @@ function Editor({ inicial, onListo }: { inicial: ProyectoRow; onListo: () => voi
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.disponible} onChange={(e) => set('disponible', e.target.checked)} /> Disponible</label>
       </div>
       <Campo label="Notas"><textarea value={p.notas ?? ''} onChange={(e) => set('notas', e.target.value)} rows={2} className={`${inp} mt-1`} /></Campo>
+      <Campo label="Ficha del inmueble (URL del PDF)" sub="Bucket público fichas-inmuebles; se enlaza en la cotización y en la propuesta extendida"><input type="url" value={p.ficha_url ?? ''} onChange={(e) => set('ficha_url', e.target.value)} className={inp} placeholder="https://…/storage/v1/object/public/fichas-inmuebles/ficha-….pdf" /></Campo>
       <div className="mt-3 flex items-center gap-2">
         <button disabled={pending} className={btnDark} onClick={() => start(async () => {
           const r = (await guardarProyecto({ ...p, id: p.id || null })) as R;
@@ -112,7 +114,7 @@ export function ProyectosInfonavit({ proyectos, supuestos }: { proyectos: Proyec
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="font-bold">{p.desarrollo} {p.disponible ? null : <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-muted">no disponible</span>}</h2>
-                  <p className="text-xs text-muted">{p.zona ?? 'sin zona'}{p.m2 ? ` · ${p.m2} m²` : ''}</p>
+                  <p className="text-xs text-muted">{p.zona ?? 'sin zona'}{p.m2 ? ` · ${p.m2} m²` : ''}{p.ficha_url ? <> · <a href={p.ficha_url} target="_blank" rel="noreferrer" className="underline">ficha</a></> : null}</p>
                 </div>
                 <div className="flex gap-2">
                   <button className={btn} onClick={() => { setEditando(p.id); setNuevo(false); }}>Editar</button>

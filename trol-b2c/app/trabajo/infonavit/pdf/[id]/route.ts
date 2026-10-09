@@ -13,9 +13,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!a) return new Response('No encontrado', { status: 404 });
 
   const ids = [a.persona_id, a.cotitular_persona_id].filter(Boolean) as string[];
-  const [{ data: pers }, { data: m }] = await Promise.all([
+  // Asesorías guardadas antes de que la ficha existiera: la URL se toma del catálogo.
+  const fichaCongelada = (a.entrada as Any)?.proyecto?.ficha_url as string | null | undefined;
+  const [{ data: pers }, { data: m }, { data: proy }] = await Promise.all([
     db.from('personas').select('id,nombre,apellidos').in('id', ids),
     a.miembro_id ? db.from('miembros').select('nombre,email,firma').eq('id', a.miembro_id).maybeSingle() : Promise.resolve({ data: null }),
+    !fichaCongelada && a.proyecto_id ? db.from('proyectos_inmobiliarios').select('ficha_url').eq('id', a.proyecto_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const nombre = (id: string | null) => {
     const p = ((pers ?? []) as Any[]).find((x) => x.id === id);
@@ -32,6 +35,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     cotitularNombre: nombre(a.cotitular_persona_id),
     miembro: (m as Any)?.firma ?? (m as Any)?.nombre ?? (m as Any)?.email ?? null,
     saldoSinConfirmar,
+    fichaUrl: fichaCongelada ?? (proy as Any)?.ficha_url ?? null,
   } as Any, modo))) as AsyncIterable<Uint8Array>;
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));

@@ -64,6 +64,9 @@ export function derivar(a: Any) {
     pmt: Number(op.pmt ?? 0),
     desarrollo: ent.proyecto?.desarrollo ?? '',
     zona: ent.proyecto?.zona ?? '',
+    // Ficha PDF del inmueble: congelada en la entrada al guardar; las asesorías previas la
+    // reciben desde la ruta (a.fichaUrl) leyendo el catálogo.
+    fichaUrl: String(ent.proyecto?.ficha_url ?? a.fichaUrl ?? ''),
     rentaEstimada: Boolean(ent.proyecto?.renta_estimada),
     conyugal: ((ent.titulares ?? []) as Any[]).filter((t) => Number(t?.salario_imss ?? 0) > 0).length > 1,
     mejorH: Number(a.horizonte ?? r.veredicto?.mejor_horizonte),
