@@ -15,6 +15,7 @@ import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAse
 import { ETIQUETA_FALTANTE, type FaltanteInfonavit, DIAS_MES } from '@/lib/infonavit/prefill';
 import { rankearInmuebles, FACTORES_DEFAULT, type FactoresPersonales } from '@/lib/infonavit/sugerencia';
 import { SugerenciaInmueble } from '@/components/trol3/SugerenciaInmueble';
+import { NumFmt } from '@/components/trol3/NumFmt';
 import type {
   ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
   SupuestosInfonavit, TitularInfonavit,
@@ -69,15 +70,6 @@ function Campo({ label, sub, children }: { label: string; sub?: string; children
   );
 }
 
-function Num({ value, onChange, step = 1, sufijo }: { value: number; onChange: (n: number) => void; step?: number; sufijo?: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <input type="number" step={step} value={Number.isFinite(value) ? value : 0}
-        onChange={(e) => onChange(Number(e.target.value))} className={inp} />
-      {sufijo ? <span className="text-[11px] text-muted">{sufijo}</span> : null}
-    </div>
-  );
-}
 
 function Fila({ label, vals, fmt = money, negativo, indent, fuerte }: {
   label: string; vals: (number | null)[]; fmt?: (n: number | null | undefined) => string;
@@ -439,127 +431,26 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         </section>
       ) : (
       <>
-      {/* ---------------- Palancas ---------------- */}
-      <section className={card}>
-        <h2 className={h2}>Palancas</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Campo label="Plusvalía anual del escenario" sub={proyecto && !proyecto.plusvalia_validada ? 'Sin respaldo de mercado: preséntalo como supuesto' : undefined}>
-            <Num value={pal.plusvalia} step={0.005} onChange={(v) => setP('plusvalia', v)} sufijo={pct(pal.plusvalia)} />
-          </Campo>
-          <Campo label="Rendimiento alterno del cliente" sub="Su mejor uso realista del dinero: ésa es la vara honesta, no el 4% de Infonavit">
-            <Num value={pal.alterno} step={0.005} onChange={(v) => setP('alterno', v)} sufijo={pct(pal.alterno)} />
-          </Campo>
-          <Campo label="% del efectivo que va a bajar deuda">
-            <Num value={pal.pct_deuda} step={0.05} onChange={(v) => setP('pct_deuda', v)} sufijo={pct(pal.pct_deuda, 0)} />
-          </Campo>
-          <Campo label="Tasa promedio de esas deudas">
-            <Num value={pal.tasa_deuda} step={0.01} onChange={(v) => setP('tasa_deuda', v)} sufijo={pct(pal.tasa_deuda, 0)} />
-          </Campo>
-          <Campo label="Horizonte de medición (años)">
-            <Num value={corteEfectivo} onChange={(v) => { setCorteTocado(true); setP('corte_anios', v); }} sufijo="años" />
-          </Campo>
-        </div>
-        <Nota>
-          El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
-          los intereses corren sólo sobre la deuda viva, que baja cada mes. Regla rápida: conviene más crédito cuando la
-          plusvalía supera la tasa Infonavit neta del escudo fiscal (con 10.45% y marginal de 34%, ~6.9%).
-        </Nota>
-      </section>
-
-      {/* ---------------- 228 · Qué inmueble le conviene ---------------- */}
-      {!compartiendo && (
-        <SugerenciaInmueble sugerencia={sugerencia} factores={factores} onFactores={setFactores} proyectoId={proyectoId}
-          horizonteFijado={horizonteElegido != null}
-          onElegir={(id) => { setProyectoId(id); setSobreprecio(0); const p = disponibles.find((x) => x.id === id); if (p) setP('plusvalia', p.plusvalia); setNombreTocado(false); }} />
-      )}
-      {/* ---------------- Inmueble seleccionado ---------------- */}
-      <section className={card}>
-        <h2 className={h2}>Inmueble seleccionado</h2>
-        <div className="mt-3 max-w-md">
-          <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
-            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); setSobreprecio(0); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
-              {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
-            </select>
-          </Campo>
-        </div>
-        {proyecto && (
-          <p className="mt-3 text-[11px] text-muted">
-            Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
-            {proyecto.renta_estimada ? <span className="text-amber-700"> (estimada, no observada)</span> : ' (observada en la zona)'} ·
-            notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
-            {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
-            {proyecto.notas ? <> · {proyecto.notas}</> : null}
-            {proyecto.ficha_url ? <> · <a href={proyecto.ficha_url} target="_blank" rel="noreferrer" className="font-semibold underline">Ficha del inmueble ↗</a></> : null}
-          </p>
-        )}
-        {r && (
-          <div className="mt-3 border-t border-line pt-3">
-            <span className="text-[11px] font-semibold text-muted">Plazo de venta que vas a presentar</span>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-              {r.tabla.map((f) => {
-                const activo = f.horizonte === horizonte;
-                const esSugerido = f.horizonte === r.veredicto.mejor_horizonte;
-                return (
-                  <button key={f.horizonte} onClick={() => { setHorizonteElegido(f.horizonte); setNombreTocado(false); }}
-                    className={`rounded-lg px-2.5 py-1 font-semibold ${activo ? 'bg-ink text-white' : 'border border-line bg-white hover:bg-cream'}`}>
-                    {f.horizonte} meses{esSugerido ? <span className={activo ? ' text-lime' : ' text-muted'}> · sugerido</span> : null}
-                  </button>
-                );
-              })}
-              {!sigueSugerencia && (
-                <button className="text-[11px] underline text-muted" onClick={() => { setHorizonteElegido(null); setNombreTocado(false); }}>volver al sugerido</button>
-              )}
-            </div>
-            <p className="mt-1 text-[10px] text-muted">
-              Manda en la propuesta{compartiendo ? ' y' : ','} en el escenario resumido{compartiendo ? '' : ' y en el PnL interno'}. El sugerido es el de mayor
-              ventaja al corte; si el cliente tiene una fecha en mente, ésa pesa más.
-            </p>
-          </div>
-        )}
-        {proyecto && proyecto.avaluo > proyecto.escrituracion && (
-          <div className="mt-3 rounded-xl border border-line bg-cream/60 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-muted">
-                Escriturar por arriba del precio de venta · tope {money(proyecto.avaluo - proyecto.escrituracion)} (el avalúo)
-              </span>
-              <span className="text-xs">
-                Se le entregan <b>{money(sobreprecio * (1 - pctConstructora))}</b> en efectivo a la firma
-                {pctConstructora > 0 && sobreprecio > 0 ? <span className="text-muted"> · la constructora se queda {money(sobreprecio * pctConstructora)} ({pct(pctConstructora, 0)})</span> : null}
-              </span>
-            </div>
-            <input type="range" min={0} max={proyecto.avaluo - proyecto.escrituracion} step={5000}
-              value={sobreprecio} onChange={(ev) => setSobreprecio(Number(ev.target.value))}
-              className="mt-2 w-full" />
-            <p className="mt-1 text-[11px] text-muted">
-              Entra más saldo de vivienda a la operación en vez de quedarse al {pct(supuestos.r_ssv, 0)} en Infonavit.
-              Sube lo que se escritura y por tanto el crédito, la retención y los intereses;{' '}
-              <b>no sube lo que el inmueble vale</b>: la plusvalía sigue corriendo sobre {money(proyecto.escrituracion)}.
-              {pctConstructora > 0 ? <> De cada $100,000 de más, el cliente recibe {money(100000 * (1 - pctConstructora))}; el resto es de la constructora y Trol no lo absorbe.</> : null}
-            </p>
-          </div>
-        )}
-      </section>
-
       {/* ---------------- Datos del titular ---------------- */}
       <section className={card}>
         <h2 className={h2}>Datos del titular</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Campo label="Edad" sub="Define el plazo: MIN(30, 70 − edad)"><Num value={t1.edad} step={0.1} onChange={(v) => set1('edad', v)} /></Campo>
-          <Campo label="Salario mensual IMSS" sub={origen.salario}><Num value={t1.salario_imss} step={100} onChange={(v) => set1('salario_imss', v)} /></Campo>
-          <Campo label="Saldo de vivienda" sub={origen.ssv}><Num value={t1.ssv} step={1000} onChange={(v) => set1('ssv', v)} /></Campo>
-          <Campo label="Meses que seguirá cotizando" sub={origen.meses_cotizando}><Num value={t1.meses_cotizando} onChange={(v) => set1('meses_cotizando', v)} /></Campo>
-          <Campo label="Ingreso real mensual" sub={origen.ingreso_real}><Num value={t1.ingreso_real} step={1000} onChange={(v) => set1('ingreso_real', v)} /></Campo>
+          <Campo label="Edad" sub="Define el plazo: MIN(30, 70 − edad)"><NumFmt tipo="dec1" value={t1.edad} onChange={(v) => set1('edad', v)} /></Campo>
+          <Campo label="Salario mensual IMSS" sub={origen.salario}><NumFmt tipo="dinero" value={t1.salario_imss} onChange={(v) => set1('salario_imss', v)} /></Campo>
+          <Campo label="Saldo de vivienda" sub={origen.ssv}><NumFmt tipo="dinero" value={t1.ssv} onChange={(v) => set1('ssv', v)} /></Campo>
+          <Campo label="Meses que seguirá cotizando" sub={origen.meses_cotizando}><NumFmt tipo="entero" value={t1.meses_cotizando} onChange={(v) => set1('meses_cotizando', v)} /></Campo>
+          <Campo label="Ingreso real mensual" sub={origen.ingreso_real}><NumFmt tipo="dinero" value={t1.ingreso_real} onChange={(v) => set1('ingreso_real', v)} /></Campo>
           <Campo label="Otras deducciones personales (anuales)" sub="Compiten por el mismo tope del 151-IV y bajan la devolución de ISR">
-            <Num value={t1.deducciones_usadas} step={1000} onChange={(v) => set1('deducciones_usadas', v)} />
+            <NumFmt tipo="dinero" value={t1.deducciones_usadas} onChange={(v) => set1('deducciones_usadas', v)} />
           </Campo>
           {t1.regimen === 97 && (
             <Campo label="% del saldo que conserva valor (Ley 97)" sub={origen.conserva_valor}>
-              <Num value={t1.conserva_valor} step={0.05} onChange={(v) => set1('conserva_valor', v)} sufijo={pct(t1.conserva_valor, 0)} />
+              <NumFmt tipo="pct" value={t1.conserva_valor} onChange={(v) => set1('conserva_valor', v)} />
             </Campo>
           )}
         </div>
         <div className="mt-4 border-t border-line pt-3">
-          <span className="text-[11px] font-semibold text-muted">Crédito conyugal · Infonavit suma el monto máximo de cada titular</span>
+          <span className="text-[11px] font-semibold text-muted">¿Habrá cotitular? · Crédito conyugal: Infonavit suma el monto máximo de cada titular</span>
           <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
             {([['no', 'Sin cotitular'], ['cliente', 'Buscar entre clientes de Trol'], ['manual', 'Capturar a mano']] as [ModoCotitular, string][]).map(([k, l]) => (
               <button key={k} onClick={() => { setModoCotitular(k); if (k !== 'cliente') setCotitular(null); }}
@@ -643,16 +534,128 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 <option value={73}>Ley 73</option><option value={97}>Ley 97</option>
               </select>
             </Campo>
-            <Campo label="Edad" sub="En conyugal el plazo lo manda el de MAYOR edad"><Num value={t2.edad} step={0.1} onChange={(v) => set2('edad', v)} /></Campo>
-            <Campo label="Salario mensual IMSS"><Num value={t2.salario_imss} step={100} onChange={(v) => set2('salario_imss', v)} /></Campo>
-            <Campo label="Saldo de vivienda"><Num value={t2.ssv} step={1000} onChange={(v) => set2('ssv', v)} /></Campo>
-            <Campo label="Meses que seguirá cotizando"><Num value={t2.meses_cotizando} onChange={(v) => set2('meses_cotizando', v)} /></Campo>
-            <Campo label="Ingreso real mensual"><Num value={t2.ingreso_real} step={1000} onChange={(v) => set2('ingreso_real', v)} /></Campo>
+            <Campo label="Edad" sub="En conyugal el plazo lo manda el de MAYOR edad"><NumFmt tipo="dec1" value={t2.edad} onChange={(v) => set2('edad', v)} /></Campo>
+            <Campo label="Salario mensual IMSS"><NumFmt tipo="dinero" value={t2.salario_imss} onChange={(v) => set2('salario_imss', v)} /></Campo>
+            <Campo label="Saldo de vivienda"><NumFmt tipo="dinero" value={t2.ssv} onChange={(v) => set2('ssv', v)} /></Campo>
+            <Campo label="Meses que seguirá cotizando"><NumFmt tipo="entero" value={t2.meses_cotizando} onChange={(v) => set2('meses_cotizando', v)} /></Campo>
+            <Campo label="Ingreso real mensual"><NumFmt tipo="dinero" value={t2.ingreso_real} onChange={(v) => set2('ingreso_real', v)} /></Campo>
             {t2.regimen === 97 && (
-              <Campo label="% que conserva valor (Ley 97)"><Num value={t2.conserva_valor} step={0.05} onChange={(v) => set2('conserva_valor', v)} sufijo={pct(t2.conserva_valor, 0)} /></Campo>
+              <Campo label="% que conserva valor (Ley 97)"><NumFmt tipo="pct" value={t2.conserva_valor} onChange={(v) => set2('conserva_valor', v)} /></Campo>
             )}
           </div>
         )}
+      </section>
+
+
+      {/* ---------------- 230 · Palancas del cliente ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Palancas del cliente</h2>
+        <p className="mt-1 text-[11px] text-muted">Lo que depende de la persona, no del inmueble. Se guardan con la asesoría y no salen en el material del cliente.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Campo label="Rendimiento alterno del cliente" sub="Su mejor uso realista del dinero: ésa es la vara honesta, no el 4% de Infonavit">
+            <NumFmt tipo="pct" value={pal.alterno} onChange={(v) => setP('alterno', v)} />
+          </Campo>
+          <Campo label="% del efectivo que va a bajar deuda">
+            <NumFmt tipo="pct" value={pal.pct_deuda} onChange={(v) => setP('pct_deuda', v)} />
+          </Campo>
+          <Campo label="Tasa promedio de esas deudas">
+            <NumFmt tipo="pct" value={pal.tasa_deuda} onChange={(v) => setP('tasa_deuda', v)} />
+          </Campo>
+          <Campo label="Meses sin renta que puede absorber" sub="Lo que aguantaría de su bolsa entre un inquilino y otro">
+            <NumFmt tipo="entero" value={factores.meses_sin_renta} onChange={(v) => setFactores({ ...factores, meses_sin_renta: Math.max(0, v) })} sufijo="meses" />
+          </Campo>
+          <Campo label="Lo que puede destinar al pago, al mes" sub="Además de la renta. Default: 15% de su ingreso real">
+            <NumFmt tipo="dinero" value={factores.ingreso_disponible} onChange={(v) => setFactores({ ...factores, ingreso_disponible: Math.max(0, v) })} />
+          </Campo>
+          <Campo label="En cuántos meses necesita el dinero" sub="0 = sin urgencia. Con urgencia, el horizonte comparado es el más largo que quepa">
+            <NumFmt tipo="entero" value={factores.urgencia_meses ?? 0} onChange={(v) => setFactores({ ...factores, urgencia_meses: v > 0 ? Math.round(v) : null })} sufijo="meses" />
+          </Campo>
+        </div>
+        <div className="mt-4 border-t border-line pt-3">
+          <span className="text-[11px] font-semibold text-muted">Horizonte de preferencia para mantener el inmueble</span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+            {supuestos.horizontes.map((h) => {
+              const activo = horizonteElegido === h;
+              return (
+                <button key={h} onClick={() => { setHorizonteElegido(h); setNombreTocado(false); }}
+                  className={`rounded-lg px-2.5 py-1 font-semibold ${activo ? 'bg-ink text-white' : 'border border-line bg-white hover:bg-cream'}`}>
+                  {h} meses
+                </button>
+              );
+            })}
+            <button onClick={() => { setHorizonteElegido(null); setNombreTocado(false); }}
+              className={`rounded-lg px-2.5 py-1 font-semibold ${horizonteElegido == null ? 'bg-ink text-white' : 'border border-line bg-white hover:bg-cream'}`}>
+              Sin preferencia: lo sugiere el motor
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-muted">
+            Es el plazo con el que se comparan todos los inmuebles y el que se presenta en la propuesta{compartiendo ? '' : ' y en el PnL interno'}.
+            Si el cliente tiene una fecha en mente, ésa pesa más que el sugerido del motor.
+          </p>
+        </div>
+      </section>
+
+      {/* ---------------- 228 · Qué inmueble le conviene ---------------- */}
+      {!compartiendo && (
+        <SugerenciaInmueble sugerencia={sugerencia} proyectoId={proyectoId}
+          onElegir={(id) => { setProyectoId(id); setSobreprecio(0); const p = disponibles.find((x) => x.id === id); if (p) setP('plusvalia', p.plusvalia); setNombreTocado(false); }} />
+      )}
+      {/* ---------------- Inmueble seleccionado ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Inmueble seleccionado</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
+            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); setSobreprecio(0); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
+              {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
+            </select>
+          </Campo>
+          <Campo label="Plusvalía anual del mercado (este inmueble)" sub={proyecto && !proyecto.plusvalia_validada ? 'Sin respaldo de mercado: preséntalo como supuesto' : undefined}>
+            <NumFmt tipo="pct" value={pal.plusvalia} onChange={(v) => setP('plusvalia', v)} />
+          </Campo>
+        </div>
+        {proyecto && (
+          <p className="mt-3 text-[11px] text-muted">
+            Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
+            {proyecto.renta_estimada ? <span className="text-amber-700"> (estimada, no observada)</span> : ' (observada en la zona)'} ·
+            notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
+            {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
+            {proyecto.notas ? <> · {proyecto.notas}</> : null}
+            {proyecto.ficha_url ? <> · <a href={proyecto.ficha_url} target="_blank" rel="noreferrer" className="font-semibold underline">Ficha del inmueble ↗</a></> : null}
+          </p>
+        )}
+        {r && (
+          <p className="mt-3 border-t border-line pt-3 text-[11px] text-muted">
+            Plazo de venta que se presenta: <b className="text-ink">{horizonte} meses</b>
+            {horizonteElegido == null ? ' (sugerido por el motor para este inmueble)' : r.veredicto.mejor_horizonte !== horizonteElegido ? ` · el motor sugiere ${r.veredicto.mejor_horizonte} meses para este inmueble` : ' · coincide con el sugerido del motor'}.
+          </p>
+        )}
+        {proyecto && proyecto.avaluo > proyecto.escrituracion && (
+          <div className="mt-3 rounded-xl border border-line bg-cream/60 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-muted">
+                Escriturar por arriba del precio de venta · tope {money(proyecto.avaluo - proyecto.escrituracion)} (el avalúo)
+              </span>
+              <span className="text-xs">
+                Se le entregan <b>{money(sobreprecio * (1 - pctConstructora))}</b> en efectivo a la firma
+                {pctConstructora > 0 && sobreprecio > 0 ? <span className="text-muted"> · la constructora se queda {money(sobreprecio * pctConstructora)} ({pct(pctConstructora, 0)})</span> : null}
+              </span>
+            </div>
+            <input type="range" min={0} max={proyecto.avaluo - proyecto.escrituracion} step={5000}
+              value={sobreprecio} onChange={(ev) => setSobreprecio(Number(ev.target.value))}
+              className="mt-2 w-full" />
+            <p className="mt-1 text-[11px] text-muted">
+              Entra más saldo de vivienda a la operación en vez de quedarse al {pct(supuestos.r_ssv, 0)} en Infonavit.
+              Sube lo que se escritura y por tanto el crédito, la retención y los intereses;{' '}
+              <b>no sube lo que el inmueble vale</b>: la plusvalía sigue corriendo sobre {money(proyecto.escrituracion)}.
+              {pctConstructora > 0 ? <> De cada $100,000 de más, el cliente recibe {money(100000 * (1 - pctConstructora))}; el resto es de la constructora y Trol no lo absorbe.</> : null}
+            </p>
+          </div>
+        )}
+        <Nota>
+          El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
+          los intereses corren sólo sobre la deuda viva, que baja cada mes. Regla rápida: conviene más crédito cuando la
+          plusvalía supera la tasa Infonavit neta del escudo fiscal (con 10.45% y marginal de 34%, ~6.9%).
+        </Nota>
       </section>
 
       {faltaSobreprecio && minimo && (
@@ -705,6 +708,14 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                 ))}
               </ul>
             )}
+            <details className="mt-3 rounded-xl border border-line bg-cream/40 px-3 py-2">
+              <summary className="cursor-pointer text-[11px] font-semibold text-muted">Avanzado</summary>
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+          <Campo label="Horizonte de medición (años)">
+            <NumFmt tipo="dec1" value={corteEfectivo} onChange={(v) => { setCorteTocado(true); setP('corte_anios', v); }} sufijo="años" />
+          </Campo>
+              </div>
+            </details>
             <Nota>
               El capital que la retención amortiza <b>no es un costo</b>: regresa peso por peso en el cheque de venta.
               La renta cuenta íntegra como ingreso y el único costo real del crédito son los intereses netos. Quién pone
