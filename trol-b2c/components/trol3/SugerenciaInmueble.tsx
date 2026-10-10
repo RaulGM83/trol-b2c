@@ -23,7 +23,12 @@ export function SugerenciaInmueble({ sugerencia, proyectoId, onElegir }: {
     <section className="rounded-2xl border border-line bg-white p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Qué inmueble le conviene</h2>
-        {sugerencia && <span className="text-[11px] text-muted">Comparados a {sugerencia.horizonte_ref} meses · orden por ventaja; el semáforo no reordena</span>}
+        {sugerencia && (
+          <span className="text-[11px] text-muted">
+            Comparados a {sugerencia.horizonte_ref} meses · orden por ventaja · empate técnico si la diferencia es ≤ {money(sugerencia.umbral_empate)} (gana el de menor pago) ·
+            crédito mayor a {sugerencia.reglas.apalancamiento_max}× su saldo = para saldos mayores, al final
+          </span>
+        )}
       </div>
 
 
@@ -55,7 +60,7 @@ export function SugerenciaInmueble({ sugerencia, proyectoId, onElegir }: {
                         <b>{f.desarrollo}</b>
                       </div>
                       <div className="text-[10px] text-muted">
-                        {f.zona ?? ''}{f === mejor ? ' · mayor ventaja' : ''}{actual ? ' · seleccionado' : ''}
+                        {f.zona ?? ''}{f === mejor ? ' · recomendado' : ''}{f.empate ? ' · empate técnico' : ''}{f.para_saldos_mayores ? ' · para saldos mayores' : ''}{actual ? ' · seleccionado' : ''} · {f.apalancamiento.toFixed(1)}× su saldo
                         {f.sobreprecio_requerido > 0 ? ` · requiere escriturar +${money(f.sobreprecio_requerido)}` : ''}
                       </div>
                     </td>

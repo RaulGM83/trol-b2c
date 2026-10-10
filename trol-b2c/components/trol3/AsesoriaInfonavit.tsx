@@ -44,6 +44,10 @@ export interface SupuestosGlobales {
   rescate_sin_costo_desde: number;
   rescate_costo_pct: number;
   credito_minimo: number;
+  /** 231 · Reglas de la sugerencia de inmueble (columnas nuevas; opcionales por si la fila vieja no las trae). */
+  apalancamiento_max?: number | null;
+  empate_min?: number | null;
+  empate_pct?: number | null;
 }
 
 const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -272,6 +276,11 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
       return rankearInmuebles({
         proyectos: disponibles, cliente: clienteMotor, supuestos: supMotor, palancas: palEff, factores,
         creditoMin, horizonteElegido, horizonteFallback: r?.veredicto.mejor_horizonte ?? null,
+        reglas: {
+          ...(supuestos.apalancamiento_max != null ? { apalancamiento_max: Number(supuestos.apalancamiento_max) } : {}),
+          ...(supuestos.empate_min != null ? { empate_min: Number(supuestos.empate_min) } : {}),
+          ...(supuestos.empate_pct != null ? { empate_pct: Number(supuestos.empate_pct) } : {}),
+        },
       });
     } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -927,7 +936,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               if (!r || !proyecto || !inmueble || !horizonte) return;
               const res = (await guardarAsesoriaInfonavit({
                 personaId,
-                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada, ficha_url: proyecto.ficha_url ?? null }, sugerencia: sugerencia ? { horizonte_ref: sugerencia.horizonte_ref, factores: sugerencia.factores, sigue_sugerencia: sugerencia.filas[0]?.id === proyecto.id, ranking: sugerencia.filas.map((f) => ({ id: f.id, desarrollo: f.desarrollo, ventaja: Math.round(f.ventaja), credito: Math.round(f.credito), pmt: Math.round(f.pmt), cobertura: Number(f.cobertura.toFixed(2)), pct_salario: Number(f.pct_salario.toFixed(3)), semaforo: f.semaforo, motivos: f.motivos })) } : null },
+                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada, ficha_url: proyecto.ficha_url ?? null }, sugerencia: sugerencia ? { horizonte_ref: sugerencia.horizonte_ref, factores: sugerencia.factores, reglas: sugerencia.reglas, umbral_empate: Math.round(sugerencia.umbral_empate), sigue_sugerencia: sugerencia.filas[0]?.id === proyecto.id, ranking: sugerencia.filas.map((f) => ({ id: f.id, desarrollo: f.desarrollo, ventaja: Math.round(f.ventaja), credito: Math.round(f.credito), pmt: Math.round(f.pmt), cobertura: Number(f.cobertura.toFixed(2)), pct_salario: Number(f.pct_salario.toFixed(3)), apalancamiento: Number(f.apalancamiento.toFixed(2)), para_saldos_mayores: f.para_saldos_mayores, empate: f.empate, semaforo: f.semaforo, motivos: f.motivos })) } : null },
                 resultado: r,
                 proyectoId: proyecto.id,
                 cotitularPersonaId: cotitular?.personaId ?? null,

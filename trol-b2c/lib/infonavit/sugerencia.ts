@@ -11,6 +11,9 @@
 //  · El riesgo de vacancia lo mide lo que falta cada mes entre renta neta y pago, contra lo
 //    que el cliente dijo que puede destinar, y la reserva que necesita para N meses sin renta.
 //  · Retención arriba del 30% del salario: Infonavit rara vez la autoriza (rojo).
+//  · 231 (caso LOMJ, 10-oct-2026): tope de apalancamiento (crédito ≤ apalancamiento_max × saldo
+//    aplicado; arriba = "para saldos mayores", al final) y empate técnico (ventajas a menos de
+//    max(empate_min, empate_pct × recibe al vender) de la mejor se ordenan por menor pago).
 import { calcularAsesoriaInfonavit, sobreprecioMinimo } from '@trol/pension-core';
 import type { ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit, SupuestosInfonavit } from '@trol/pension-core';
 
@@ -50,14 +53,30 @@ export interface FilaSugerencia {
   /** Meses de aportación que NO tendrían dónde caer porque el crédito ya se liquidó. */
   aportaciones_sin_cabida_meses: number;
   horizonte: number; ventaja: number; recibe_dia: number; flujo_neto_acum: number;
+  /** Crédito / saldo aplicado. */
+  apalancamiento: number;
+  /** true = supera apalancamiento_max: se ofrece a saldos mayores, va al final. */
+  para_saldos_mayores: boolean;
+  /** true = quedó en el grupo de empate técnico y su lugar lo decidió el pago mensual. */
+  empate: boolean;
   semaforo: Semaforo; motivos: string[];
 }
 
 export interface Sugerencia {
   horizonte_ref: number;
   factores: FactoresPersonales;
+  reglas: ReglasSugerencia;
+  /** Umbral de empate aplicado (max(empate_min, empate_pct × recibe de la mejor)). */
+  umbral_empate: number;
   filas: FilaSugerencia[];
 }
+
+export interface ReglasSugerencia {
+  apalancamiento_max: number;
+  empate_min: number;
+  empate_pct: number;
+}
+export const REGLAS_DEFAULT: ReglasSugerencia = { apalancamiento_max: 1.5, empate_min: 50000, empate_pct: 0.03 };
 
 const fmt = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const money = (n: number) => fmt.format(n);
@@ -73,8 +92,10 @@ export function rankearInmuebles(args: {
   horizonteElegido: number | null;
   /** Mejor horizonte del inmueble actual, para no comparar en el vacío. */
   horizonteFallback: number | null;
+  reglas?: Partial<ReglasSugerencia>;
 }): Sugerencia {
   const { proyectos, cliente, supuestos, palancas, factores, creditoMin, horizonteElegido, horizonteFallback } = args;
+  const reglas: ReglasSugerencia = { ...REGLAS_DEFAULT, ...(args.reglas ?? {}) };
   const ssv = cliente.titulares.reduce((a, t) => a + (t.ssv || 0), 0);
   const mesesCot = Math.max(0, ...cliente.titulares.map((t) => t.meses_cotizando || 0));
   const horizontes = supuestos.horizontes ?? [];
@@ -138,16 +159,41 @@ export function rankearInmuebles(args: {
       if (sem === 'verde') sem = 'ambar';
       motivos.push(`Necesita el dinero en ${factores.urgencia_meses} meses y el horizonte más corto del motor es ${fila.horizonte}`);
     }
+    const apalancamiento = op.saldo_apl > 0 ? op.credito / op.saldo_apl : Infinity;
+    const paraSaldosMayores = apalancamiento > reglas.apalancamiento_max;
+    if (paraSaldosMayores) {
+      sem = 'rojo';
+      motivos.unshift(`Crédito de ${apalancamiento.toFixed(1)}× su saldo (tope ${reglas.apalancamiento_max}×): es un inmueble para saldos mayores`);
+    }
     filas.push({
       id: p.id, desarrollo: p.desarrollo, zona: p.zona, viable: true, sobreprecio_requerido: min.requerido,
       credito: op.credito, pmt: op.pmt, renta_neta: op.renta_neta, cobertura, faltante, pct_salario: op.pct_salario,
       reserva_sin_renta: op.pmt * factores.meses_sin_renta,
       mes_liquida: r.mes_liquida_credito, meses_cotizando: mesesCot, aport_mensual: aport, aportaciones_sin_cabida_meses: sinCabida,
       horizonte: fila.horizonte, ventaja: fila.ventaja_corte, recibe_dia: fila.recibe_dia, flujo_neto_acum: fila.flujo_neto_acum,
+      apalancamiento, para_saldos_mayores: paraSaldosMayores, empate: false,
       semaforo: sem, motivos,
     });
   }
-  // Orden: ventaja del motor al horizonte de referencia. El semáforo informa, no reordena.
-  filas.sort((a, b) => b.ventaja - a.ventaja);
-  return { horizonte_ref: hRef, factores, filas };
+  // Orden (231): primero los que caben en el apalancamiento, por ventaja; dentro de ellos, los
+  // que están a menos del umbral de la mejor son empate técnico y se ordenan por menor pago.
+  // Al final, por ventaja, los "para saldos mayores". El semáforo de riesgo no reordena.
+  const porVentaja = (a: FilaSugerencia, b: FilaSugerencia) => b.ventaja - a.ventaja;
+  const caben = filas.filter((f) => !f.para_saldos_mayores).sort(porVentaja);
+  const fuera = filas.filter((f) => f.para_saldos_mayores).sort(porVentaja);
+  let umbral = 0;
+  if (caben.length) {
+    const mejor = caben[0];
+    umbral = Math.max(reglas.empate_min, reglas.empate_pct * Math.max(0, mejor.recibe_dia));
+    const empatados = caben.filter((f) => mejor.ventaja - f.ventaja <= umbral);
+    if (empatados.length > 1) {
+      empatados.forEach((f) => { f.empate = true; f.motivos.unshift(`Empate técnico con el de mayor ventaja (diferencia ≤ ${money(umbral)}): se ordena por menor pago`); });
+      empatados.sort((a, b) => a.pmt - b.pmt);
+    }
+    // Con un solo "empatado" (la mejor consigo misma) no hay empate: el orden es el de ventaja.
+    const cabeza = empatados.length > 1 ? empatados : [];
+    const resto = caben.filter((f) => !f.empate);
+    return { horizonte_ref: hRef, factores, reglas, umbral_empate: umbral, filas: [...cabeza, ...resto, ...fuera] };
+  }
+  return { horizonte_ref: hRef, factores, reglas, umbral_empate: umbral, filas: fuera };
 }
