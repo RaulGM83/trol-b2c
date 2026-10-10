@@ -13,6 +13,8 @@ import { useCompartiendo } from '@/lib/trol3/compartir';
 import { calcularAsesoriaInfonavit, sobreprecioMinimo } from '@trol/pension-core';
 import { buscarCotitular, cargarCotitular, guardarAsesoriaInfonavit, archivarAsesoria, declararAsesor } from '@/app/trabajo/actions';
 import { ETIQUETA_FALTANTE, type FaltanteInfonavit, DIAS_MES } from '@/lib/infonavit/prefill';
+import { rankearInmuebles, FACTORES_DEFAULT, type FactoresPersonales } from '@/lib/infonavit/sugerencia';
+import { SugerenciaInmueble } from '@/components/trol3/SugerenciaInmueble';
 import type {
   ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit,
   SupuestosInfonavit, TitularInfonavit,
@@ -196,6 +198,8 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const compartiendo = useCompartiendo(); // asesoría compartiendo pantalla: el PnL del aliado no se pinta
   const [aliadoVende, setAliadoVende] = useState(true);
   const [aliadoRenta, setAliadoRenta] = useState(true);
+  // 228 · Factores personales de la sugerencia de inmueble (sólo asesor; se guardan con la asesoría).
+  const [factores, setFactores] = useState<FactoresPersonales>(() => FACTORES_DEFAULT(base.ingreso_real || base.salario_imss || 0));
 
   const setP = <K extends keyof PalancasInfonavit>(k: K, v: PalancasInfonavit[K]) => setPal((o) => ({ ...o, [k]: v }));
   const set1 = <K extends keyof TitularInfonavit>(k: K, v: TitularInfonavit[K]) => setT1((o) => ({ ...o, [k]: v }));
@@ -267,6 +271,19 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proyectoId, t1, t2, conCotitular, pal, corteEfectivo, supMotor, sobreprecio]);
+
+  // 228 · El motor corrido para todos los inmuebles disponibles, al mismo horizonte, con el
+  // semáforo de riesgo. Orden por ventaja (decisión Raúl 10-oct-2026); el semáforo no reordena.
+  const sugerencia = useMemo(() => {
+    if (!disponibles.length) return null;
+    try {
+      return rankearInmuebles({
+        proyectos: disponibles, cliente: clienteMotor, supuestos: supMotor, palancas: palEff, factores,
+        creditoMin, horizonteElegido, horizonteFallback: r?.veredicto.mejor_horizonte ?? null,
+      });
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disponibles.length, t1, t2, conCotitular, pal, corteEfectivo, supMotor, factores, horizonteElegido, r?.veredicto.mejor_horizonte]);
 
   if (!disponibles.length) {
     return (
@@ -422,6 +439,12 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         </section>
       ) : (
       <>
+      {/* ---------------- 228 · Qué inmueble le conviene ---------------- */}
+      {!compartiendo && (
+        <SugerenciaInmueble sugerencia={sugerencia} factores={factores} onFactores={setFactores} proyectoId={proyectoId}
+          horizonteFijado={horizonteElegido != null}
+          onElegir={(id) => { setProyectoId(id); setSobreprecio(0); const p = disponibles.find((x) => x.id === id); if (p) setP('plusvalia', p.plusvalia); setNombreTocado(false); }} />
+      )}
       {/* ---------------- Selección y palancas ---------------- */}
       <section className={card}>
         <h2 className={h2}>Selección y palancas</h2>
@@ -886,7 +909,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
               if (!r || !proyecto || !inmueble || !horizonte) return;
               const res = (await guardarAsesoriaInfonavit({
                 personaId,
-                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada, ficha_url: proyecto.ficha_url ?? null } },
+                entrada: { titulares: clienteMotor.titulares, inmueble, supuestos: supMotor, palancas: palEff, saldo_sin_confirmar: saldoSinConfirmar, proyecto: { id: proyecto.id, desarrollo: proyecto.desarrollo, zona: proyecto.zona, renta_estimada: proyecto.renta_estimada, plusvalia_validada: proyecto.plusvalia_validada, ficha_url: proyecto.ficha_url ?? null }, sugerencia: sugerencia ? { horizonte_ref: sugerencia.horizonte_ref, factores: sugerencia.factores, sigue_sugerencia: sugerencia.filas[0]?.id === proyecto.id, ranking: sugerencia.filas.map((f) => ({ id: f.id, desarrollo: f.desarrollo, ventaja: Math.round(f.ventaja), credito: Math.round(f.credito), pmt: Math.round(f.pmt), cobertura: Number(f.cobertura.toFixed(2)), pct_salario: Number(f.pct_salario.toFixed(3)), semaforo: f.semaforo, motivos: f.motivos })) } : null },
                 resultado: r,
                 proyectoId: proyecto.id,
                 cotitularPersonaId: cotitular?.personaId ?? null,
