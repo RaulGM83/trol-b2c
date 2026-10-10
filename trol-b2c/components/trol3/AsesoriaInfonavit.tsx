@@ -180,7 +180,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
   const [pal, setPal] = useState<PalancasInfonavit>({
     plusvalia: (enCatalogo.find((p) => p.id === proyectoId) ?? enCatalogo[0])?.plusvalia ?? 0.06,
     alterno: supuestos.alterno,
-    pct_deuda: 0.2, tasa_deuda: 0.2, corte_anios: 5,
+    pct_deuda: 0, tasa_deuda: 0.2, corte_anios: 5,
   });
   // false = el corte sigue el default venta + 3 años con piso de 5; el asesor puede fijarlo.
   const [corteTocado, setCorteTocado] = useState(false);
@@ -439,21 +439,10 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
         </section>
       ) : (
       <>
-      {/* ---------------- 228 · Qué inmueble le conviene ---------------- */}
-      {!compartiendo && (
-        <SugerenciaInmueble sugerencia={sugerencia} factores={factores} onFactores={setFactores} proyectoId={proyectoId}
-          horizonteFijado={horizonteElegido != null}
-          onElegir={(id) => { setProyectoId(id); setSobreprecio(0); const p = disponibles.find((x) => x.id === id); if (p) setP('plusvalia', p.plusvalia); setNombreTocado(false); }} />
-      )}
-      {/* ---------------- Selección y palancas ---------------- */}
+      {/* ---------------- Palancas ---------------- */}
       <section className={card}>
-        <h2 className={h2}>Selección y palancas</h2>
+        <h2 className={h2}>Palancas</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
-            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); setSobreprecio(0); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
-              {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
-            </select>
-          </Campo>
           <Campo label="Plusvalía anual del escenario" sub={proyecto && !proyecto.plusvalia_validada ? 'Sin respaldo de mercado: preséntalo como supuesto' : undefined}>
             <Num value={pal.plusvalia} step={0.005} onChange={(v) => setP('plusvalia', v)} sufijo={pct(pal.plusvalia)} />
           </Campo>
@@ -470,6 +459,39 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             <Num value={corteEfectivo} onChange={(v) => { setCorteTocado(true); setP('corte_anios', v); }} sufijo="años" />
           </Campo>
         </div>
+        <Nota>
+          El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
+          los intereses corren sólo sobre la deuda viva, que baja cada mes. Regla rápida: conviene más crédito cuando la
+          plusvalía supera la tasa Infonavit neta del escudo fiscal (con 10.45% y marginal de 34%, ~6.9%).
+        </Nota>
+      </section>
+
+      {/* ---------------- 228 · Qué inmueble le conviene ---------------- */}
+      {!compartiendo && (
+        <SugerenciaInmueble sugerencia={sugerencia} factores={factores} onFactores={setFactores} proyectoId={proyectoId}
+          horizonteFijado={horizonteElegido != null}
+          onElegir={(id) => { setProyectoId(id); setSobreprecio(0); const p = disponibles.find((x) => x.id === id); if (p) setP('plusvalia', p.plusvalia); setNombreTocado(false); }} />
+      )}
+      {/* ---------------- Inmueble seleccionado ---------------- */}
+      <section className={card}>
+        <h2 className={h2}>Inmueble seleccionado</h2>
+        <div className="mt-3 max-w-md">
+          <Campo label="Inmueble" sub={proyecto?.zona ?? undefined}>
+            <select value={proyectoId} onChange={(e) => { setProyectoId(e.target.value); setSobreprecio(0); const p = disponibles.find((x) => x.id === e.target.value); if (p) setP('plusvalia', p.plusvalia); }} className={inp}>
+              {disponibles.map((p) => <option key={p.id} value={p.id}>{p.desarrollo}</option>)}
+            </select>
+          </Campo>
+        </div>
+        {proyecto && (
+          <p className="mt-3 text-[11px] text-muted">
+            Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
+            {proyecto.renta_estimada ? <span className="text-amber-700"> (estimada, no observada)</span> : ' (observada en la zona)'} ·
+            notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
+            {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
+            {proyecto.notas ? <> · {proyecto.notas}</> : null}
+            {proyecto.ficha_url ? <> · <a href={proyecto.ficha_url} target="_blank" rel="noreferrer" className="font-semibold underline">Ficha del inmueble ↗</a></> : null}
+          </p>
+        )}
         {r && (
           <div className="mt-3 border-t border-line pt-3">
             <span className="text-[11px] font-semibold text-muted">Plazo de venta que vas a presentar</span>
@@ -494,16 +516,6 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             </p>
           </div>
         )}
-        {proyecto && (
-          <p className="mt-3 text-[11px] text-muted">
-            Avalúo {money(proyecto.avaluo)} · escrituración {money(proyecto.escrituracion)} · renta {money(proyecto.renta)}
-            {proyecto.renta_estimada ? <span className="text-amber-700"> (estimada, no observada)</span> : ' (observada en la zona)'} ·
-            notariales del crédito {money(proyecto.notariales_credito)} · adicionales {money(proyecto.notariales_adicionales)}{' '}
-            {proyecto.aliado_cubre_notariales ? '(los cubre el aliado)' : <span className="text-amber-700">(los paga el cliente de contado)</span>}
-            {proyecto.notas ? <> · {proyecto.notas}</> : null}
-            {proyecto.ficha_url ? <> · <a href={proyecto.ficha_url} target="_blank" rel="noreferrer" className="font-semibold underline">Ficha del inmueble ↗</a></> : null}
-          </p>
-        )}
         {proyecto && proyecto.avaluo > proyecto.escrituracion && (
           <div className="mt-3 rounded-xl border border-line bg-cream/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -526,11 +538,6 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
             </p>
           </div>
         )}
-        <Nota>
-          El apalancamiento no es lineal: la plusvalía corre sobre el <b>100% del inmueble</b> todo el tiempo, mientras
-          los intereses corren sólo sobre la deuda viva, que baja cada mes. Regla rápida: conviene más crédito cuando la
-          plusvalía supera la tasa Infonavit neta del escudo fiscal (con 10.45% y marginal de 34%, ~6.9%).
-        </Nota>
       </section>
 
       {/* ---------------- Datos del titular ---------------- */}
