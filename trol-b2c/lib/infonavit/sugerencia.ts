@@ -39,10 +39,11 @@ export interface ProyectoRankeable {
   avaluo: number; escrituracion: number; costo_aliado: number | null; renta: number; plusvalia: number;
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; pct_excedente_constructora?: number | null;
+  ficha_url?: string | null;
 }
 
 export interface FilaSugerencia {
-  id: string; desarrollo: string; zona: string | null;
+  id: string; desarrollo: string; zona: string | null; ficha_url: string | null;
   viable: boolean;
   sobreprecio_requerido: number;
   credito: number; pmt: number; renta_neta: number; cobertura: number; faltante: number; pct_salario: number;
@@ -166,7 +167,7 @@ export function rankearInmuebles(args: {
       motivos.unshift(`Crédito de ${apalancamiento.toFixed(1)}× su saldo (tope ${reglas.apalancamiento_max}×): es un inmueble para saldos mayores`);
     }
     filas.push({
-      id: p.id, desarrollo: p.desarrollo, zona: p.zona, viable: true, sobreprecio_requerido: min.requerido,
+      id: p.id, desarrollo: p.desarrollo, zona: p.zona, ficha_url: p.ficha_url ?? null, viable: true, sobreprecio_requerido: min.requerido,
       credito: op.credito, pmt: op.pmt, renta_neta: op.renta_neta, cobertura, faltante, pct_salario: op.pct_salario,
       reserva_sin_renta: op.pmt * factores.meses_sin_renta,
       mes_liquida: r.mes_liquida_credito, meses_cotizando: mesesCot, aport_mensual: aport, aportaciones_sin_cabida_meses: sinCabida,

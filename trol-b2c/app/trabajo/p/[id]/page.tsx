@@ -229,7 +229,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // presentó una propuesta, tiene que seguir siendo consultable.
   {
     const { data: ases } = await db.from('infonavit_asesorias')
-      .select('id,created_at,persona_id,cotitular_persona_id,proyecto_id,miembro_id,mejor_horizonte,horizonte,ventaja_corte,efectivo,credito,nota,nombre')
+      .select('id,created_at,persona_id,cotitular_persona_id,proyecto_id,miembro_id,mejor_horizonte,horizonte,ventaja_corte,efectivo,credito,nota,nombre,entrada->proyecto->>ficha_url')
       .or(`persona_id.eq.${params.id},cotitular_persona_id.eq.${params.id}`)
       .is('archivada_at', null)
       .order('created_at', { ascending: false }).limit(20);
@@ -238,10 +238,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
       const proyIds = [...new Set(filas.map((a) => a.proyecto_id).filter(Boolean))];
       const persIds = [...new Set(filas.flatMap((a) => [a.persona_id, a.cotitular_persona_id]).filter((x) => x && x !== params.id))];
       const [{ data: proyNom }, { data: persNom }] = await Promise.all([
-        proyIds.length ? db.from('proyectos_inmobiliarios').select('id,desarrollo').in('id', proyIds) : Promise.resolve({ data: [] as Any[] }),
+        proyIds.length ? db.from('proyectos_inmobiliarios').select('id,desarrollo,ficha_url').in('id', proyIds) : Promise.resolve({ data: [] as Any[] }),
         persIds.length ? db.from('personas').select('id,nombre,apellidos').in('id', persIds) : Promise.resolve({ data: [] as Any[] }),
       ]);
       const pmap = new Map(((proyNom ?? []) as Any[]).map((x) => [x.id, x.desarrollo]));
+      const fmap = new Map(((proyNom ?? []) as Any[]).map((x) => [x.id, x.ficha_url ?? null]));
       const nmap = new Map(((persNom ?? []) as Any[]).map((x) => [x.id, [x.nombre, x.apellidos].filter(Boolean).join(' ')]));
       historialInf = filas.map((a) => {
         const esCotitular = a.cotitular_persona_id === params.id;
@@ -255,6 +256,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
           es_cotitular: esCotitular, nota: a.nota ?? null,
           nombre: a.nombre ?? null, horizonte: a.horizonte ?? a.mejor_horizonte ?? null,
           efectivo: a.efectivo ?? null,
+          // 232 · la ficha que vio el cliente (congelada al guardar); si no la hay, la del catálogo.
+          ficha_url: (a.ficha_url as string | null) ?? fmap.get(a.proyecto_id) ?? null,
         };
       });
     }

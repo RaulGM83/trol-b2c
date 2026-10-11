@@ -108,6 +108,8 @@ export interface AsesoriaGuardada {
   credito: number | null; desarrollo: string | null; miembro: string | null;
   cotitular_nombre: string | null; es_cotitular: boolean; nota: string | null;
   nombre: string | null; horizonte: number | null; efectivo: number | null;
+  /** 232 · Ficha PDF del inmueble de esa propuesta (congelada o del catálogo). */
+  ficha_url?: string | null;
 }
 
 type Origen = { salario: string; ssv: string; meses_cotizando: string; conserva_valor: string; ingreso_real: string };
@@ -971,6 +973,7 @@ export function AsesoriaInfonavit({ personaId, cliente, base, origen, saldo, pro
                   <Link href={`/trabajo/infonavit/resumen/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Resumen WhatsApp</Link>
                   <Link href={`/trabajo/infonavit/pdf/${a.id}`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Resumen PDF</Link>
                   <Link href={`/trabajo/infonavit/pdf/${a.id}?doc=extendido`} target="_blank" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Extendido PDF</Link>
+                  {a.ficha_url ? <a href={a.ficha_url} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2 py-0.5 font-semibold hover:bg-cream">Ficha del inmueble</a> : null}
                   <button disabled={archivando} className="rounded-lg border border-line px-2 py-0.5 text-muted hover:bg-cream disabled:opacity-50"
                     onClick={() => archivar(async () => { await archivarAsesoria(a.id, personaId, true); })}>Archivar</button>
                 </span>

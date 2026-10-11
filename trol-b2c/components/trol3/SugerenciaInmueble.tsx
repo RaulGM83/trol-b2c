@@ -58,6 +58,7 @@ export function SugerenciaInmueble({ sugerencia, proyectoId, onElegir }: {
                       <div className="flex items-center gap-1.5">
                         <span className={`inline-block h-2 w-2 rounded-full ${PUNTO[f.semaforo]}`} title={TEXTO[f.semaforo]} />
                         <b>{f.desarrollo}</b>
+                        {f.ficha_url ? <a href={f.ficha_url} target="_blank" rel="noreferrer" className="text-[10px] font-semibold underline text-muted">ficha ↗</a> : null}
                       </div>
                       <div className="text-[10px] text-muted">
                         {f.zona ?? ''}{f === mejor ? ' · recomendado' : ''}{f.empate ? ' · empate técnico' : ''}{f.para_saldos_mayores ? ' · para saldos mayores' : ''}{actual ? ' · seleccionado' : ''} · {f.apalancamiento.toFixed(1)}× su saldo
