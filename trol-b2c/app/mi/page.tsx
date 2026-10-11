@@ -10,6 +10,7 @@ import { Explicaciones } from '@/components/trol3/Explicaciones';
 import { MisCinco } from '@/components/trol3/MisCinco';
 import { MillasCard, type MiMillas } from '@/components/trol3/MillasCard';
 import { MetaRetiro } from '@/components/trol3/MetaRetiro';
+import { EstimacionDeclarada, type MiEstimacion } from '@/components/trol3/EstimacionDeclarada';
 import { rangoAforeTexto, type BaseAsesoria } from '@/lib/trol3/asesoria';
 import { getSemillaV2Cliente, getSesionCliente } from '@/lib/cliente';
 import type { DiagnosticoVM } from '@/lib/diagnostico';
@@ -60,7 +61,9 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }, { data: paradaData }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss'), db.rpc('mi_parada')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
   // 192 · Patrocinio (FIP) y Millas: sólo para quien llegó por un código con aliado.
-  const [{ data: marcaData }, { data: millasData }] = await Promise.all([db.rpc('mi_marca'), db.rpc('mi_millas')]);
+  const [{ data: marcaData }, { data: millasData }, { data: estData }] = await Promise.all([db.rpc('mi_marca'), db.rpc('mi_millas'), db.rpc('mi_estimacion')]);
+  // 235 · Modo declarado: sólo cuando no hay historial y el IMSS tarda (> 3 min), falló o no hay consulta.
+  const estimacion = (estData as MiEstimacion | null) ?? null;
   const marca = (marcaData as { patrocinio?: string; aliado?: string } | null) ?? null;
   const millas = (millasData as MiMillas | null) ?? null;
   if (error || !x) return (
@@ -146,10 +149,17 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                 {brecha && brecha > 0 ? <p className="mt-2 text-sm text-white/80">Te separan <b className="text-lime">{fmtMXN(brecha)} al mes</b> entre lo que te tocaría hoy y lo que podrías lograr.</p> : null}
                 <div className="mt-2 text-[11px] text-white/50">{e.ley} · {semanasTxt}{e.ley_en ? ` · datos del IMSS al ${fmtFecha(e.ley_en)}` : ''}</div>
               </>
+            ) : estimacion?.mostrar ? (
+              <EstimacionDeclarada est={estimacion} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} />
             ) : (
               <p className="mt-2 text-sm">Aquí vas a ver lo que hoy te tocaría de pensión y lo máximo que podrías lograr, en cuanto tengamos tu información del IMSS.</p>
             )}
           </section>
+          {e.pension_base && e.ley_en && (Date.now() - new Date(e.ley_en).getTime()) > 60 * 86400000 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+              Tus números son con información del IMSS del <b>{fmtFecha(e.ley_en)}</b>. En tu sesión la actualizamos contigo.
+            </div>
+          ) : null}
 
           {vmNeg ? (
             vmNeg.razon73 ? (
