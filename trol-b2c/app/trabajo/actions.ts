@@ -1993,6 +1993,25 @@ export async function accionEvento(personaId: string, codigo: string, accion: Ac
   return ok({ texto: `${ACCION_EVENTO[accion]}${detalle}.` });
 }
 
+// ── 234 · Reintentar a todos los atorados del evento de una vez ───────────────────────────
+export async function reintentarAtoradosEvento(codigo: string, proveedor: 'belvo' | 'jordan') {
+  const m = await requireMiembro();
+  const { data, error } = await t3().rpc('evento_reintentar_atorados', { p_codigo: codigo, p_proveedor: proveedor });
+  if (error) return fail(error.message);
+  const r = (data ?? {}) as { pedidas?: number; saltadas?: { persona_id: string; por: string }[] };
+  const pedidas = r.pedidas ?? 0; const saltadas = r.saltadas ?? [];
+  if (pedidas > 0) {
+    await t3().rpc('registrar_interaccion', {
+      p_persona: null, p_canal: 'nota', p_actor: 'asesor', p_actor_id: m.id, p_direccion: 'interna',
+      p_contenido: `Lote ${proveedor} a ${pedidas} atorado${pedidas === 1 ? '' : 's'} (evento ${codigo})`, p_visible_cliente: false, p_meta: { evento_accion: `lote_${proveedor}`, codigo },
+    }).then(() => null, () => null);
+  }
+  revalidatePath('/trabajo/evento/panel');
+  const porQue = saltadas.reduce<Record<string, number>>((a, x) => { a[x.por] = (a[x.por] ?? 0) + 1; return a; }, {});
+  const detalle = Object.entries(porQue).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ');
+  return ok({ texto: `Se pidió ${proveedor === 'belvo' ? 'Belvo' : 'Jordan'} a ${pedidas} persona${pedidas === 1 ? '' : 's'}${detalle ? ` · saltadas: ${detalle}` : ''}.` });
+}
+
 // ── 193 · Cashback a Millas: marcar depositado ────────────────────────────────────────────
 export async function depositarCashback(ids: string[], referencia: string) {
   await requireMiembro();

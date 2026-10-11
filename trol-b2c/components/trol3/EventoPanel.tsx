@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { accionEvento, type AccionEvento } from '@/app/trabajo/actions';
+import { accionEvento, reintentarAtoradosEvento, type AccionEvento } from '@/app/trabajo/actions';
 
 export type FilaEvento = {
   id: string; nombre: string | null; apellidos: string | null; curp: string | null; telefono: string | null; created_at: string;
@@ -69,6 +69,7 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
   const [filtro, setFiltro] = useState(filtroInicial);
   const [q, setQ] = useState('');
   const [msg, setMsg] = useState<Record<string, string>>({});
+  const [msgLote, setMsgLote] = useState<string | null>(null);
   const r = panel.resumen; const meta = r.meta ?? {};
   const filas = useMemo(() => panel.filas.map((f) => ({ f, s: situacion(f) })), [panel.filas]);
   const conteo = useMemo(() => filas.reduce<Record<string, number>>((a, x) => { a[x.s.clave] = (a[x.s.clave] ?? 0) + 1; return a; }, {}), [filas]);
@@ -80,6 +81,13 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
   const hacer = (pid: string, accion: AccionEvento) => start(async () => {
     const res = (await accionEvento(pid, codigo, accion)) as { ok: boolean; texto?: string; error?: string };
     setMsg((m) => ({ ...m, [pid]: res.ok ? (res.texto ?? 'Listo.') : (res.error ?? 'No se pudo.') }));
+    router.refresh();
+  });
+
+  // 234 · a todos los atorados de una vez (la cascada automática Jordan ⇄ Belvo ya corre sola; esto es para cuando se cae un proveedor)
+  const lote = (proveedor: 'belvo' | 'jordan') => start(async () => {
+    const res = (await reintentarAtoradosEvento(codigo, proveedor)) as { ok: boolean; texto?: string; error?: string };
+    setMsgLote(res.ok ? (res.texto ?? 'Listo.') : (res.error ?? 'No se pudo.'));
     router.refresh();
   });
 
@@ -111,7 +119,14 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
             );
           })}
         </ol>
-        <p className="mt-2 text-[11px] text-muted">Atoradas ahora: <b>{r.atoradas}</b> · buscando: <b>{r.buscando}</b> · sin CURP: <b>{r.sin_curp}</b>. La barra es contra los registrados.</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+          <span>Atoradas ahora: <b>{r.atoradas}</b> · buscando: <b>{r.buscando}</b> · sin CURP: <b>{r.sin_curp}</b>. La barra es contra los registrados.</span>
+          {r.atoradas > 0 ? <>
+            <button type="button" disabled={pending} onClick={() => lote('belvo')} className="rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-bold text-ink disabled:opacity-50" title="Pide Belvo a todos los atorados que no lo tengan hoy">Belvo a los {r.atoradas}</button>
+            <button type="button" disabled={pending} onClick={() => lote('jordan')} className="rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-bold text-ink disabled:opacity-50" title="Pide Jordan a todos los atorados que no lo tengan hoy">Jordan a los {r.atoradas}</button>
+          </> : null}
+          {msgLote ? <span className="font-semibold text-ink">{msgLote}</span> : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
