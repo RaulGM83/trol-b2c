@@ -306,7 +306,20 @@ Deno.serve(async (req) => {
       };
       if (!b.persona_id && b.telefono) {
         const { data } = await db.rpc("persona_por_telefono", { p_tel: String(b.telefono) });
-        if (!data) return json({ existe: false });
+        if (!data) {
+          // 239 · Red de seguridad: si escribe por WhatsApp (viene conversacion_id) y no existe, la
+          // persona nace aquí aunque el bot olvide trolAlta. Se sigue respondiendo existe=false para que
+          // el bot llame trolAlta con su `ref:`; alta_por_telefono atribuye el código a una persona
+          // sin origen nacida hace menos de 24 h.
+          if (b.conversacion_id) {
+            try {
+              const { data: alta } = await db.rpc("alta_por_telefono", { p_tel: String(b.telefono), p_canal: "organico", p_actor: "bot" });
+              const pid = (alta as { persona_id?: string } | null)?.persona_id ?? null;
+              if (pid) await anotarConversacion(pid, b, req.headers);
+            } catch { /* el bot sigue su flujo normal */ }
+          }
+          return json({ existe: false });
+        }
         b.persona_id = data;
       }
       await anotarConversacion(b.persona_id ? String(b.persona_id) : null, b, req.headers);

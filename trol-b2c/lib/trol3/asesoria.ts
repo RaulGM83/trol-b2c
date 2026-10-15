@@ -49,6 +49,8 @@ export type Sesion = {
   escenario_recomendado: string | null; notas: Record<string, string>; diagnostico_id: string | null;
   /** 172 · copiloto: lo que ya preparó y lo que ya contestó en esta sesión. */
   preparacion: PreparacionVista | null; copiloto: Record<string, { texto: string; en: string }> | null; iniciada_en: string; cerrada_en: string | null;
+  /** 238 · «preparando»: el asesor revisa solo; no cuenta como sesión ni deja interacción. */
+  modo?: 'preparando' | 'con_cliente'; con_cliente_en?: string | null;
 };
 
 export type Propuesta = { texto?: string; pension_con_plan?: number; costo?: number; enviada_en?: string };

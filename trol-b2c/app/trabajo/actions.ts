@@ -167,12 +167,22 @@ export async function activarLote(items: { opId: string; personaId: string }[]) 
 }
 
 /** 168 · Abre (o retoma) la sesión de asesoría del cliente. */
-export async function abrirAsesoria(personaId: string) {
+export async function abrirAsesoria(personaId: string, modo: 'preparando' | 'con_cliente' = 'preparando') {
   await requireMiembro();
-  const { data, error } = await t3().rpc('asesoria_abrir', { p_persona: personaId });
+  // 238 · «preparando» = el asesor revisa el caso solo: no deja interacción ni cuenta como sesión.
+  const { data, error } = await t3().rpc('asesoria_abrir_modo', { p_persona: personaId, p_modo: modo });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ id: (data as Any)?.id });
+}
+
+/** 238 · Llegó el cliente: la preparación se vuelve sesión (aquí sí queda la interacción). */
+export async function asesoriaConCliente(id: string, personaId: string) {
+  await requireMiembro();
+  const { error } = await t3().rpc('asesoria_con_cliente', { p_id: id });
+  if (error) return fail(error);
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera');
+  return ok();
 }
 
 /** 168 · Avanza de paso, guarda la nota del paso, prende/apaga costos, marca el camino recomendado o cierra. */
@@ -1966,7 +1976,8 @@ export async function accionEvento(personaId: string, codigo: string, accion: Ac
   let detalle = '';
   if (accion === 'reintentar_jordan' || accion === 'reintentar_belvo') {
     const prov = accion === 'reintentar_jordan' ? 'jordan' : 'belvo';
-    const r = await pedirConsulta(personaId, 'imss_historial', false, `evento ${codigo}: reintento manual`, true, prov);
+    // Con aviso: si llega, el cliente recibe su plantilla del evento (antes iba callado y nadie le avisaba).
+    const r = await pedirConsulta(personaId, 'imss_historial', true, `evento ${codigo}: reintento manual`, true, prov);
     if (!r.ok) return r;
     const res = (r as { resultado?: { ok?: boolean; motivo?: string; estado?: string } }).resultado;
     if (res && res.ok === false) return fail(`No se pidió: ${res.motivo ?? 'sin motivo'}`);
@@ -1991,6 +2002,67 @@ export async function accionEvento(personaId: string, codigo: string, accion: Ac
   });
   revalidatePath('/trabajo/evento/panel'); revalidatePath(`/trabajo/p/${personaId}`);
   return ok({ texto: `${ACCION_EVENTO[accion]}${detalle}.` });
+}
+
+// ── 238 · Plantillas desde el panel del evento ─────────────────────────────────────────────
+// Las que el panel sabe mandar. {{1}} (su cuenta) lo pone api-trol; aquí sólo se elige cuál.
+// Mismo camino que todo aviso (/avisar): dentro de su chat si sigue abierto; si no, plantilla
+// (y ahí aplica el candado de una al día).
+export type PlantillaEvento = 'cuenta_lista' | 'retomar' | 'recordatorio' | 'constancia';
+const PLANTILLA_EVENTO: Record<PlantillaEvento, { evento: string; plantilla: string | null; resumen: string; texto: string }> = {
+  cuenta_lista: { evento: 'consulta_lista', plantilla: null, resumen: 'Llegó tu información del IMSS y actualizamos tus números.', texto: 'Tu asesoría está lista' },
+  retomar: { evento: 'retomar', plantilla: 'trol_retomar', resumen: 'Te escribimos para retomar tu caso.', texto: 'Retomar la conversación' },
+  recordatorio: { evento: 'recordatorio_sesion', plantilla: 'trol_recordatorio_sesion', resumen: 'Te recordamos tu sesión con tu experto de Trol.', texto: 'Recordatorio de sesión' },
+  constancia: { evento: 'pedir_constancia', plantilla: 'trol_constancia', resumen: 'El IMSS no nos devolvió tu historial. Mándanos tu Reporte de Semanas Cotizadas (lo bajas en serviciosdigitales.imss.gob.mx) y con eso armamos tu asesoría.', texto: 'Pedir constancia' },
+};
+
+async function plantillaCuentaLista(codigo: string): Promise<string> {
+  const { data } = await t3().from('config').select('valor').eq('clave', 'evento_plantilla_cuenta_lista').maybeSingle();
+  try { return (JSON.parse(String((data as Any)?.valor ?? '{}')) as Record<string, string>)[codigo] ?? 'trol_reabrir'; } catch { return 'trol_reabrir'; }
+}
+
+async function mandarPlantillaEvento(personaId: string, codigo: string, tipo: PlantillaEvento, miembroId: string) {
+  const def = PLANTILLA_EVENTO[tipo];
+  const bloqueo = await bloqueoPlantilla(personaId);
+  if (bloqueo && !bloqueo.startsWith('Ya recibió')) return fail(bloqueo);
+  let payload: Record<string, unknown> = { codigo };
+  if (tipo === 'cuenta_lista') {
+    const { data: e } = await t3().rpc('_expediente_resumen', { p: personaId });
+    const ex = (Array.isArray(e) ? e[0] : e) as Any;
+    payload = { ...payload, ley: ex?.ley ?? undefined, semanas: ex?.semanas ?? undefined };
+  }
+  const plantilla = bloqueo ? undefined : (def.plantilla ?? await plantillaCuentaLista(codigo));
+  const r = await avisar(personaId, def.evento, { payload, resumen: def.resumen, plantilla });
+  if (!r.ok) return fail(bloqueo ? `${bloqueo} Y su chat está cerrado.` : `No salió: ${r.error ?? r.motivo ?? 'sin detalle'}${plantilla ? ` (revisa que ${plantilla} esté aprobada)` : ''}.`);
+  const como = r.via === 'plantilla' ? `salió la plantilla ${plantilla}` : 'le llegó dentro de su chat';
+  await t3().rpc('registrar_interaccion', {
+    p_persona: personaId, p_canal: 'nota', p_actor: 'asesor', p_actor_id: miembroId, p_direccion: 'interna',
+    p_contenido: `${def.texto} · ${como} (evento ${codigo})`, p_visible_cliente: false, p_meta: { evento_accion: `plantilla_${tipo}`, codigo },
+  });
+  return ok({ texto: `${def.texto}: ${como}.` });
+}
+
+export async function plantillaEvento(personaId: string, codigo: string, tipo: PlantillaEvento) {
+  const m = await requireMiembro();
+  if (!PLANTILLA_EVENTO[tipo]) return fail('Plantilla desconocida.');
+  const r = await mandarPlantillaEvento(personaId, codigo, tipo, m.id);
+  revalidatePath('/trabajo/evento/panel'); revalidatePath(`/trabajo/p/${personaId}`);
+  return r;
+}
+
+/** 238 · «Tu asesoría está lista» a los que ya tienen su información y nunca recibieron el aviso. Hasta 30, en serie. */
+export async function avisarSinAvisoEvento(codigo: string, personaIds: string[]) {
+  const m = await requireMiembro();
+  if (!personaIds.length) return fail('No hay a quién avisarle.');
+  if (personaIds.length > 30) return fail('Son más de 30: hazlo por partes.');
+  let salieron = 0; const fallas: string[] = [];
+  for (const pid of personaIds) {
+    const r = await mandarPlantillaEvento(pid, codigo, 'cuenta_lista', m.id) as { ok: boolean; error?: string };
+    if (r.ok) salieron += 1; else fallas.push(r.error ?? 'sin detalle');
+  }
+  revalidatePath('/trabajo/evento/panel');
+  const resumen = fallas.length ? ` ${fallas.length} no salieron: ${[...new Set(fallas)].slice(0, 2).join(' · ')}` : '';
+  return salieron ? ok({ texto: `Salieron ${salieron} de ${personaIds.length}.${resumen}` }) : fail(`No salió ninguno.${resumen}`);
 }
 
 // ── 234 · Reintentar a todos los atorados del evento de una vez ───────────────────────────

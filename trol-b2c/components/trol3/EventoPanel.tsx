@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { accionEvento, reintentarAtoradosEvento, type AccionEvento } from '@/app/trabajo/actions';
+import { accionEvento, avisarSinAvisoEvento, plantillaEvento, reintentarAtoradosEvento, type AccionEvento, type PlantillaEvento } from '@/app/trabajo/actions';
+import { takoUrl } from '@/components/trol3/CarrilFila';
 
 export type FilaEvento = {
   id: string; nombre: string | null; apellidos: string | null; curp: string | null; telefono: string | null; created_at: string;
@@ -14,12 +15,14 @@ export type FilaEvento = {
   tiene_historial: boolean; tiene_constancia: boolean; ley: string | null; semanas: number | null; pension_base: number | null;
   base_listos: number; cita: { inicio: string; estado: string } | null; pagado: number;
   seguimiento: { que: string; en: string; quien: string | null } | null;
+  /** 238 · último «tu información llegó» (plantilla o dentro de su chat). */
+  aviso_lista?: string | null;
 };
 export type PanelEvento = {
   resumen: {
     clics: number; registrados: number; registrados_previos: number; registrados_evento: number; via: { web: number; chat: number; pasillo: number };
     sin_curp: number; con_historial: number; buscando: number; atoradas: number; entraron: number; base_completa: number;
-    con_sesion: number; sesion_hecha: number; pagaron: number; ingresos: number;
+    con_sesion: number; sesion_hecha: number; pagaron: number; ingresos: number; sin_aviso?: number;
     meta: { registrados_previos?: number; registrados_evento?: number; ingresos?: number; fecha?: string };
   };
   filas: FilaEvento[];
@@ -29,7 +32,9 @@ const mxn = (n: unknown) => new Intl.NumberFormat('es-MX', { style: 'currency', 
 const fecha = (s: string) => new Date(s).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const min = (s: string) => Math.round((Date.now() - new Date(s).getTime()) / 60000);
 const VIA: Record<string, string> = { web: 'Web', chat: 'Chat', pasillo: 'Pasillo' };
-const ACCION_TXT: Record<string, string> = { reintentar_jordan: 'reintento Jordan', reintentar_belvo: 'reintento Belvo', ventanilla: 'ventanilla', pedir_constancia: 'se pidió constancia', llamado: 'llamada, contestó', sin_respuesta: 'llamada sin respuesta' };
+const ACCION_TXT: Record<string, string> = { reintentar_jordan: 'reintento Jordan', reintentar_belvo: 'reintento Belvo', ventanilla: 'ventanilla', pedir_constancia: 'se pidió constancia', llamado: 'llamada, contestó', sin_respuesta: 'llamada sin respuesta', plantilla_cuenta_lista: 'plantilla «tu asesoría está lista»', plantilla_retomar: 'plantilla «retomar»', plantilla_recordatorio: 'plantilla recordatorio de sesión', plantilla_constancia: 'plantilla pedir constancia' };
+// 238 · Las plantillas que se pueden mandar desde el panel (el texto exacto vive en tako/plantillas-whatsapp.md).
+const PLANTILLAS: [PlantillaEvento, string][] = [['cuenta_lista', 'Tu asesoría está lista'], ['retomar', 'Retomar conversación'], ['recordatorio', 'Recordatorio de sesión']]; // «Pedir constancia» ya tiene su botón
 
 type Situacion = { clave: string; texto: string; tono: 'ok' | 'aviso' | 'alerta' | 'neutro' };
 function situacion(f: FilaEvento): Situacion {
@@ -84,6 +89,20 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
     router.refresh();
   });
 
+  // 238 · plantilla elegida por renglón
+  const [plSel, setPlSel] = useState<Record<string, PlantillaEvento>>({});
+  const mandarPlantilla = (pid: string, tipo: PlantillaEvento) => start(async () => {
+    const res = (await plantillaEvento(pid, codigo, tipo)) as { ok: boolean; texto?: string; error?: string };
+    setMsg((m) => ({ ...m, [pid]: res.ok ? (res.texto ?? 'Listo.') : (res.error ?? 'No se pudo.') }));
+    router.refresh();
+  });
+  const sinAviso = panel.filas.filter((f) => (f.tiene_historial || f.tiene_constancia) && !f.aviso_lista);
+  const avisarLote = () => start(async () => {
+    const res = (await avisarSinAvisoEvento(codigo, sinAviso.map((f) => f.id))) as { ok: boolean; texto?: string; error?: string };
+    setMsgLote(res.ok ? (res.texto ?? 'Listo.') : (res.error ?? 'No se pudo.'));
+    router.refresh();
+  });
+
   // 234 · a todos los atorados de una vez (la cascada automática Jordan ⇄ Belvo ya corre sola; esto es para cuando se cae un proveedor)
   const lote = (proveedor: 'belvo' | 'jordan') => start(async () => {
     const res = (await reintentarAtoradosEvento(codigo, proveedor)) as { ok: boolean; texto?: string; error?: string };
@@ -125,6 +144,7 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
             <button type="button" disabled={pending} onClick={() => lote('belvo')} className="rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-bold text-ink disabled:opacity-50" title="Pide Belvo a todos los atorados que no lo tengan hoy">Belvo a los {r.atoradas}</button>
             <button type="button" disabled={pending} onClick={() => lote('jordan')} className="rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-bold text-ink disabled:opacity-50" title="Pide Jordan a todos los atorados que no lo tengan hoy">Jordan a los {r.atoradas}</button>
           </> : null}
+          {sinAviso.length ? <button type="button" disabled={pending} onClick={() => { if (window.confirm(`Mandar «Tu asesoría está lista» a ${sinAviso.length} persona${sinAviso.length === 1 ? '' : 's'} que tienen su información y nunca recibieron el aviso?`)) avisarLote(); }} className="rounded-lg bg-ink px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50" title="Dentro de su chat si sigue abierto; si no, con la plantilla del evento (una al día)">Avisar a {sinAviso.length} sin aviso</button> : null}
           {msgLote ? <span className="font-semibold text-ink">{msgLote}</span> : null}
         </div>
       </div>
@@ -155,6 +175,7 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
                   <div className="mt-1.5"><span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${TONO[s.tono]}`}>{s.texto}</span></div>
                   {f.tiene_historial || f.tiene_constancia ? <div className="mt-1 text-sm">{[f.ley === 'Ley73' ? 'Ley 73' : f.ley === 'Ley97' ? 'Ley 97' : null, f.semanas ? `${Math.round(Number(f.semanas)).toLocaleString('es-MX')} semanas` : null, f.pension_base ? `hoy le tocaría ${mxn(f.pension_base)}` : null, `base ${f.base_listos}/5`].filter(Boolean).join(' · ')}</div> : null}
                   {atorada && f.consulta?.error ? <div className="mt-1 text-xs text-red-700">{f.consulta.error}</div> : null}
+                  {f.tiene_historial || f.tiene_constancia ? <div className="mt-1 text-[11px] text-muted">{f.aviso_lista ? `Aviso «tu información llegó»: ${fecha(f.aviso_lista)}` : <span className="font-semibold text-amber-800">Nunca le llegó el aviso de que su información está lista</span>}</div> : null}
                   {f.seguimiento ? <div className="mt-1 text-[11px] text-muted">Último: {ACCION_TXT[f.seguimiento.que] ?? f.seguimiento.que} · {fecha(f.seguimiento.en)}{f.seguimiento.quien ? ` · ${f.seguimiento.quien.split(' ')[0]}` : ''}</div> : null}
                   {msg[f.id] ? <div className="mt-1 text-xs font-semibold">{msg[f.id]}</div> : null}
                 </div>
@@ -167,7 +188,14 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
                   </> : null}
                   <button type="button" disabled={pending} onClick={() => hacer(f.id, 'llamado')} className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold disabled:opacity-50">Llamé · contestó</button>
                   <button type="button" disabled={pending} onClick={() => hacer(f.id, 'sin_respuesta')} className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold text-muted disabled:opacity-50">Sin respuesta</button>
-                  {f.telefono ? <a href={`https://wa.me/${f.telefono.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold">WhatsApp</a> : null}
+                  {f.telefono ? <a href={takoUrl(f.telefono) ?? '#'} target="_blank" rel="noreferrer" className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold" title="Abre su conversación en Tako (línea Asesoría)">WhatsApp</a> : null}
+                  {f.telefono ? <span className="inline-flex overflow-hidden rounded-lg border border-line">
+                    <select value={plSel[f.id] ?? ''} onChange={(e) => setPlSel((m) => ({ ...m, [f.id]: e.target.value as PlantillaEvento }))} className="bg-white px-1.5 py-1.5 text-xs" aria-label="Plantilla">
+                      <option value="">Plantilla…</option>
+                      {PLANTILLAS.filter(([k]) => (k !== 'cuenta_lista' || f.tiene_historial || f.tiene_constancia) && (k !== 'recordatorio' || !!f.cita)).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+                    </select>
+                    <button type="button" disabled={pending || !plSel[f.id]} onClick={() => { const k = plSel[f.id]; if (k) mandarPlantilla(f.id, k); }} className="border-l border-line px-2.5 py-1.5 text-xs font-bold disabled:opacity-40">Mandar</button>
+                  </span> : null}
                   <Link href={`/trabajo/p/${f.id}`} className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold">Expediente</Link>
                 </div>
               </div>

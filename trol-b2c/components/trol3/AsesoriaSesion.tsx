@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { abrirAsesoria, armarDiagnosticoAsesoria, guardarDiagnostico, ligarDiagnosticoAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
+import { abrirAsesoria, asesoriaConCliente, armarDiagnosticoAsesoria, guardarDiagnostico, ligarDiagnosticoAsesoria, marcarAsesoria } from '@/app/trabajo/actions';
 import { PropuestaForm } from '@/components/trol3/RelacionPanel';
 import { PASOS_TODOS, PASO_CLIENTE, tituloPaso, caminos, guion, mxn, type VistaAsesoria } from '@/lib/trol3/asesoria';
 import { PasoCero } from '@/components/trol3/PasoCero';
@@ -46,7 +46,12 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
   useEffect(() => { try { if (window.sessionStorage.getItem(llave) === '1') setCompartiendo(true); } catch { /* sin storage: arranca apagado */ } }, [llave]);
   // 189 · Al compartir, el menú de /trabajo, el buscador y el encabezado del expediente desaparecen (globals.css).
   useEffect(() => { document.documentElement.toggleAttribute('data-compartiendo', compartiendo); return () => { document.documentElement.removeAttribute('data-compartiendo'); }; }, [compartiendo]);
-  const alternar = () => setCompartiendo((v) => { setFichaCod(null); try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ } return !v; });
+  const alternar = () => setCompartiendo((v) => {
+    setFichaCod(null); try { window.sessionStorage.setItem(llave, v ? '0' : '1'); } catch { /* da igual */ }
+    // 238 · Compartir pantalla es estar con el cliente: si venía preparando, ya es sesión.
+    if (!v && ses?.modo === 'preparando') start(async () => { await asesoriaConCliente(ses.id, personaId); router.refresh(); });
+    return !v;
+  });
 
   if (!ses) {
     const previa = vista.sesion;
@@ -55,7 +60,11 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         <h2 className="text-lg font-extrabold">Asesoría</h2>
         <p className="mt-1 max-w-2xl text-sm text-muted">Empieza por lo que ya sabemos y las cinco cosas que hay que afinar (paso 0); luego su situación, lo que encontramos, escenarios, nuestra recomendación y acuerdos. Puedes saltar entre ellos; queda registro de la sesión y, al final, su diagnóstico armado.</p>{vista.base ? <p className="mt-2 text-xs"><b>Listo para asesorar: {vista.base.listos} de {vista.base.total}.</b>{vista.base.listos < vista.base.total ? ' La sesión arranca en el paso 0.' : ''}</p> : null}
         {previa ? <p className="mt-2 text-xs text-muted">Última asesoría cerrada el {fechaLarga(previa.cerrada_en) ?? '—'}.</p> : null}
-        <button disabled={pending} className={`${dark} mt-4`} onClick={() => start(async () => { const r = await abrirAsesoria(personaId); if (!r.ok) setMsg((r as { error?: string }).error ?? 'No se pudo abrir.'); else router.refresh(); })}>{previa ? 'Empezar una asesoría nueva' : 'Empezar asesoría'}</button>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button disabled={pending} className={dark} onClick={() => start(async () => { const r = await abrirAsesoria(personaId, 'preparando'); if (!r.ok) setMsg((r as { error?: string }).error ?? 'No se pudo abrir.'); else router.refresh(); })}>Preparar su caso</button>
+          <button disabled={pending} className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-bold disabled:opacity-50" onClick={() => start(async () => { const r = await abrirAsesoria(personaId, 'con_cliente'); if (!r.ok) setMsg((r as { error?: string }).error ?? 'No se pudo abrir.'); else router.refresh(); })}>{previa ? 'Nueva asesoría con el cliente' : 'Empezar con el cliente'}</button>
+        </div>
+        <p className="mt-2 text-xs text-muted">«Preparar» es para revisar su caso tú solo: no cuenta como sesión ni aparece como contacto con el cliente. Cuando esté contigo, aprieta «Ya está el cliente».</p>
         {msg ? <p className="mt-2 text-xs text-red-600">{msg}</p> : null}
       </section>
     );
@@ -109,10 +118,11 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="text-xl font-extrabold">{paso} · {tituloPaso(paso, compartiendo)}</h2>{compartiendo ? null : <p className="text-xs text-muted">Asesoría iniciada el {fechaLarga(ses.iniciada_en)}</p>}</div>
+          <div><h2 className="text-xl font-extrabold">{paso} · {tituloPaso(paso, compartiendo)}</h2>{compartiendo ? null : <p className="text-xs text-muted">{ses.modo === 'preparando' ? `Preparando su caso desde el ${fechaLarga(ses.iniciada_en)} · no cuenta como sesión` : `Asesoría con el cliente desde el ${fechaLarga(ses.con_cliente_en ?? ses.iniciada_en)}`}</p>}</div>
           <div className="flex flex-wrap items-center gap-2">
+          {ses.modo === 'preparando' && !compartiendo ? <button type="button" disabled={pending} onClick={() => start(async () => { const r = await asesoriaConCliente(ses.id, personaId); if (!r.ok) setMsg((r as { error?: string }).error ?? 'No se pudo.'); router.refresh(); })} className="rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50" title="A partir de aquí cuenta como sesión y queda en su historia">Ya está el cliente</button> : null}
           <button type="button" onClick={alternar} aria-pressed={compartiendo} title="Esconde guion, notas y valores internos mientras compartes tu pantalla" className={compartiendo ? 'flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white' : 'flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold'}><span className={compartiendo ? 'h-2 w-2 rounded-full bg-lime' : 'h-2 w-2 rounded-full bg-line'} />{compartiendo ? 'Compartiendo · salir' : 'Compartir pantalla'}</button>
-          <a href={`/presentar/${personaId}?paso=${paso}`} target="_blank" rel="noreferrer" className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Presentar al cliente ↗</a>
+          <a href={`/presentar/${personaId}?paso=${paso}`} target="_blank" rel="noreferrer" onClick={() => { if (ses.modo === 'preparando') start(async () => { await asesoriaConCliente(ses.id, personaId); router.refresh(); }); }} className="rounded-lg bg-lime px-3 py-2 text-xs font-bold text-ink">Presentar al cliente ↗</a>
           </div>
         </div>
 
@@ -305,7 +315,7 @@ export function AsesoriaSesion({ personaId, vista, hrefTab, diagSlot, herramient
         <div className="flex flex-wrap items-center justify-between gap-2">
           {paso > 0 ? <button type="button" className={line} onClick={() => ir(paso - 1)}>← {tituloPaso(paso - 1, compartiendo)}</button> : <span />}
           {paso < 5 ? <button type="button" className={dark} onClick={() => ir(paso + 1)}>Siguiente: {tituloPaso(paso + 1, compartiendo)} →</button>
-            : compartiendo ? <span /> : <button type="button" disabled={pending} className={dark} onClick={() => { if (window.confirm('¿Cerramos la asesoría? Queda registrada en su historia.')) start(async () => { await marcarAsesoria(ses.id, personaId, { cerrar: true }); router.refresh(); }); }}>Cerrar asesoría</button>}
+            : compartiendo ? <span /> : ses.modo === 'preparando' ? <span className="text-xs text-muted">La preparación se queda abierta: cuando llegue el cliente, «Ya está el cliente» la vuelve sesión con todo lo que avanzaste.</span> : <button type="button" disabled={pending} className={dark} onClick={() => { if (window.confirm('¿Cerramos la asesoría? Queda registrada en su historia.')) start(async () => { await marcarAsesoria(ses.id, personaId, { cerrar: true }); router.refresh(); }); }}>Cerrar asesoría</button>}
         </div>
       </div>
     </div>
