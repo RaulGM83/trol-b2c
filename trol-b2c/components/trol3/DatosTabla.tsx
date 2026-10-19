@@ -22,7 +22,7 @@ function show(r: DatoRow) {
   return <>{String(v)}</>;
 }
 
-const CONSULTA_POR_GRUPO: Record<string, [string, string]> = { imss: ['imss_historial', 'Actualizar del IMSS'], afore: ['cda', 'Consultar AFORE (CDA)'], infonavit: ['infonavit', 'Consultar Infonavit'], issste: ['issste', 'Consultar ISSSTE'] };
+const CONSULTA_POR_GRUPO: Record<string, [string, string]> = { imss: ['imss_historial', 'Actualizar del IMSS'], afore: ['cda', 'Consultar AFORE (CDA)'], infonavit: ['infonavit', 'Precalificación Infonavit ($5)'], issste: ['issste', 'Consultar ISSSTE'] };
 const GRUPO_LABEL: Record<string, string> = { identidad: 'Identidad', imss: 'IMSS', afore: 'AFORE', infonavit: 'Infonavit', ahorro_privado: 'Ahorro fuera del IMSS', issste: 'ISSSTE', contexto: 'Contexto personal', calculo: 'Cálculos Trol' };
 
 export function DatosTabla({ personaId, rows, grupos, compacto = false, fechas = {} }: { personaId: string; rows: DatoRow[]; grupos: string[]; compacto?: boolean; fechas?: Record<string, string | null | undefined> }) {
@@ -48,8 +48,8 @@ function Grupo({ g, rows, personaId, fecha }: { g: string; rows: DatoRow[]; pers
         {cq && (
           <button disabled={pending} className="rounded-lg border border-line bg-white px-2 py-0.5 text-[11px] font-semibold hover:bg-cream disabled:opacity-50" onClick={() => start(async () => {
             const r = (await pedirConsulta(personaId, cq[0], false, 'desde expediente', false)) as R;
-            const res = r.resultado as { ok?: boolean; motivo?: string; proveedor?: string; estado?: string; error?: string } | undefined;
-            setMsg(!r.ok ? r.error ?? 'error' : !res?.ok ? (res?.motivo === 'validado_vigente' ? 'Ya está actualizado (<90 días). Usa "forzar" en Pedir información.' : res?.motivo === 'consulta_en_curso' ? 'Ya hay una consulta en curso.' : `No enviada: ${res?.motivo}`) : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : `Solicitada (${res.proveedor})`);
+            const res = r.resultado as { ok?: boolean; motivo?: string; detalle?: string; proveedor?: string; estado?: string; error?: string } | undefined;
+            setMsg(!r.ok ? r.error ?? 'error' : !res?.ok ? (res?.detalle ?? (res?.motivo === 'validado_vigente' ? 'Ya está actualizado (<90 días). Usa "forzar" en Pedir información.' : res?.motivo === 'consulta_en_curso' ? 'Ya hay una consulta en curso.' : `No enviada: ${res?.motivo}`)) : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : res.proveedor === 'broker_infonavit' ? 'En cola del broker (L-V 9:00–18:30 CDMX). En horario hábil llega en minutos.' : `Solicitada (${res.proveedor})`);
           })}>{pending ? '…' : cq[1]}</button>
         )}
       </div>

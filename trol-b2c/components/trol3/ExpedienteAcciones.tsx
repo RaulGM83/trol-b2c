@@ -26,7 +26,7 @@ export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa }: { p
 // OportunidadAcciones se reemplazó por components/trol3/OportunidadEtapa.tsx (ciclo unificado, 25-ago).
 
 const TIPOS = [
-  ['imss_historial', 'Historial IMSS (Belvo → Jordan)'], ['cda', 'CDA / AFORE (gratis)'], ['calculo_base', 'Recalcular con SISEC'], ['issste', 'ISSSTE (Nubarium)'], ['infonavit', 'Saldo Infonavit (Jordan)'], ['pdf_semanas', 'Subir PDF de semanas'],
+  ['imss_historial', 'Historial IMSS (Belvo → Jordan)'], ['cda', 'CDA / AFORE (gratis)'], ['calculo_base', 'Recalcular con SISEC'], ['issste', 'ISSSTE (Nubarium)'], ['infonavit', 'Precalificación Infonavit (broker, $5)'], ['pdf_semanas', 'Subir PDF de semanas'],
 ];
 export function ConsultaForm({ personaId }: { personaId: string }) {
   const [tipo, setTipo] = useState('imss_historial');
@@ -49,8 +49,8 @@ export function ConsultaForm({ personaId }: { personaId: string }) {
       <label className="flex items-center gap-2"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Forzar aunque haya dato vigente</label>
       <button disabled={pending} className={btnDark + ' w-full py-2'} onClick={() => start(async () => {
         const r = await pedirConsulta(personaId, tipo, notificar, motivo, forzar, prov || undefined);
-        const res = (r as R).resultado as { ok?: boolean; motivo?: string; proveedor?: string; costo?: number; estado?: string; error?: string } | undefined;
-        setMsg(!r.ok ? (r as R).error ?? 'error' : !res?.ok ? `No enviada: ${res?.motivo === 'validado_vigente' ? 'ya hay dato oficial de menos de 90 días (marca "forzar")' : res?.motivo === 'consulta_en_curso' ? 'ya hay una consulta en curso' : res?.motivo}` : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : `Solicitada vía ${res.proveedor} (${res.costo ?? 0} MXN)`);
+        const res = (r as R).resultado as { ok?: boolean; motivo?: string; detalle?: string; proveedor?: string; costo?: number; estado?: string; error?: string } | undefined;
+        setMsg(!r.ok ? (r as R).error ?? 'error' : !res?.ok ? `No enviada: ${res?.detalle ?? (res?.motivo === 'validado_vigente' ? 'ya hay dato oficial de menos de 90 días (marca "forzar")' : res?.motivo === 'consulta_en_curso' ? 'ya hay una consulta en curso' : res?.motivo)}` : res.estado === 'error' ? `No se pudo: ${res.error}` : res.error ? `Registrada, pendiente: ${res.error}` : `Solicitada vía ${res.proveedor} (${res.costo ?? 0} MXN)`);
       })}>{pending ? 'Enviando…' : 'Solicitar'}</button>
       {msg && <p className="text-muted">{msg}</p>}
     </div>

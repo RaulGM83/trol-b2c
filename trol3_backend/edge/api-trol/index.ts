@@ -144,8 +144,12 @@ async function subirDocumentosBase64(consultaId: string, docs: DocEntrada[]): Pr
       const bin = Uint8Array.from(atob(limpio), (ch) => ch.charCodeAt(0));
       const tipo = d.tipo ?? "otro";
       const nombreArchivo = (d.nombre ?? tipo).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 60);
-      const path = `${pid}/${tipo}/${Date.now()}-${nombreArchivo}.pdf`;
-      const up = await db.storage.from("expediente").upload(path, bin, { contentType: "application/pdf", upsert: false });
+      // 246: el broker Infonavit entrega PNG; el tipo se toma de la firma del archivo, no se asume PDF.
+      const esPng = bin[0] === 0x89 && bin[1] === 0x50 && bin[2] === 0x4e && bin[3] === 0x47;
+      const esJpg = bin[0] === 0xff && bin[1] === 0xd8;
+      const [ext, mime] = esPng ? ["png", "image/png"] : esJpg ? ["jpg", "image/jpeg"] : ["pdf", "application/pdf"];
+      const path = `${pid}/${tipo}/${Date.now()}-${nombreArchivo}.${ext}`;
+      const up = await db.storage.from("expediente").upload(path, bin, { contentType: mime, upsert: false });
       const { base64: _b, contenido: _c, ...resto } = d;
       out.push(up.error ? resto : { ...resto, storage_path: path });
     } catch {
