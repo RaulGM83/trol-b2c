@@ -107,7 +107,7 @@ begin
   values (p_persona, p_tipo, prov, p_actor, p_actor_id,
           coalesce(p_pagador, case when p_actor='cliente' then 'cliente' when p_actor='aliado' then 'aliado:'||coalesce(p_actor_id::text,'') else 'trol' end),
           coalesce(costo,0), coalesce(p_notificar,false), p_motivo,
-          case when prov = 'broker_infonavit' then jsonb_build_object('nss', v_nss) end)
+          case when prov = 'broker_infonavit' then jsonb_build_object('nss', v_nss) else '{}'::jsonb end)  -- 246c: payload_in es NOT NULL
   returning id into cid;
   return jsonb_build_object('ok', true, 'consulta_id', cid, 'proveedor', prov, 'costo', costo);
 end $function$;
