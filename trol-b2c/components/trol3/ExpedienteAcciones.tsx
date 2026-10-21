@@ -31,7 +31,10 @@ const TIPOS = [
 export function ConsultaForm({ personaId }: { personaId: string }) {
   const [tipo, setTipo] = useState('imss_historial');
   const [prov, setProv] = useState('');
-  const [notificar, setNotificar] = useState(false);
+  // 233 · Marcada por default (caso Mariana Martínez, 21-oct-2026): el historial es lo que el cliente
+  // está esperando; si el asesor no quiere avisar, la desmarca. El trigger tg_avisar_consulta_lista
+  // sólo manda el aviso cuando llega imss_historial o issste.
+  const [notificar, setNotificar] = useState(true);
   const [forzar, setForzar] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
