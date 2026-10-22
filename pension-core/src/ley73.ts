@@ -21,6 +21,7 @@ import type {
   ResultadoLey73,
 } from './types';
 import { lineasCapturaMod40 } from './mod40-lineas';
+import { regimenMod40 } from './mod40-ventana';
 import {
   factorIncrementosFebrero,
   fechaDelDerecho,
@@ -87,24 +88,93 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   /** Días de cotización futura: del arranque al retiro, nunca negativos. */
   const diasFuturos = Math.max(0, diasEntre(fechaTramite, fechaRetiro));
 
-  // H6: última cotización (si está empleado, la fecha de arranque)
+  // H6: última cotización real (la baja). Para el empleado, ver abajo.
   const ultimaCotValida = parseISO(perfil.fechas.ultima_cotizacion_valida);
   const ultimaCotMod40 = perfil.fechas.ultima_cotizacion_mod40
     ? parseISO(perfil.fechas.ultima_cotizacion_mod40)
     : null;
-  const ultimaCot =
-    perfil.status_empleo === 'empleado'
-      ? fechaTramite
-      : ultimaCotMod40 && ultimaCotMod40 > ultimaCotValida
-        ? ultimaCotMod40
-        : ultimaCotValida;
+  const empleado = perfil.status_empleo === 'empleado';
+  const ultimaCotReal =
+    ultimaCotMod40 && ultimaCotMod40 > ultimaCotValida ? ultimaCotMod40 : ultimaCotValida;
 
-  // C30/D31: Mod40 retroactivo a la fecha de arranque
-  const aplicaRetroHoy = perfil.aplica_mod40 && diasEntre(fechaTramite, ultimaCot) < 0;
+  // ---- Régimen de Mod 40 (claude/106) ----------------------------------
+  // Antes del corte (22-oct-2026) corre el mundo viejo completo. Después:
+  // sin retro, salario futuro topado, una sola modalidad, y el empleado puede
+  // dejar un hueco entre su baja y el arranque del plan.
+  const ultimaModalidad =
+    entrada.ultimaModalidad ??
+    (ultimaCotMod40 && ultimaCotMod40 >= ultimaCotValida ? 'mod40' : 'obligatorio');
+  // Baja del empleado: antes del corte era la fecha de arranque (y el tramo
+  // entre hoy y el arranque lo cubría el retro). Después del corte es una
+  // palanca: sigue empleado hasta `fechaBaja` (default: hasta el arranque),
+  // recortada a [hoy, fechaTramite].
+  const fechaBajaPedida = entrada.fechaBaja ?? fechaTramite;
+  const fechaBajaNueva =
+    diasEntre(hoy, fechaBajaPedida) < 0
+      ? hoy
+      : diasEntre(fechaBajaPedida, fechaTramite) < 0
+        ? fechaTramite
+        : fechaBajaPedida;
+  // Ventana del art. 218/220 a la fecha de trámite: 5 años desde la baja (12
+  // meses si la última fue Mod 40). Para el desempleado manda el expediente.
+  const limiteMod40Local = addMeses(
+    empleado ? fechaBajaNueva : ultimaCotReal,
+    ultimaModalidad === 'mod40' && !empleado ? 12 : 60,
+  );
+  const reg = regimenMod40(null, fechaTramite, {
+    corte: entrada.corteRegimen,
+    hoy,
+    ultimoSbc: entrada.ultimoSbc ?? perfil.salario_diario_registrado,
+    ultimaModalidad,
+    sinBaja: empleado,
+    limiteExpediente: empleado
+      ? limiteMod40Local
+      : (perfil.fechas.limite_inscripcion_mod40 ?? limiteMod40Local),
+  });
+  const antesDelCorte = reg.antesDelCorte;
+  const fechaBaja = antesDelCorte ? fechaTramite : fechaBajaNueva;
+  const ultimaCot = empleado ? fechaBaja : ultimaCotReal;
+  /** Días que sigue empleado entre hoy y su baja (sólo después del corte). */
+  const diasEmpleo = empleado && !antesDelCorte ? Math.max(0, diasEntre(hoy, fechaBaja)) : 0;
+  const huecoMeses = antesDelCorte ? 0 : Math.max(0, diasEntre(ultimaCot, fechaTramite)) / DIAS_MES;
+
+  // C30/D31: Mod40 retroactivo a la fecha de arranque. Después del corte, nunca.
+  const aplicaRetroHoy =
+    antesDelCorte && perfil.aplica_mod40 && diasEntre(fechaTramite, ultimaCot) < 0;
   const semanasRecuperablesRetro = aplicaRetroHoy
     ? diasEntre(ultimaCot, fechaTramite) / 7
     : 0; // D31
   const recuperaRetro = aplicaRetroHoy && palancas.recuperarSemanasMod40Retro; // C33
+
+  // Modalidad y salario futuros. Después del corte el salario se topa según la
+  // modalidad y se avisa; antes del corte el salario es el de la palanca y la
+  // modalidad la decide mes a mes la columna AA (ver abajo).
+  const avisosRegimen = [...reg.avisos];
+  let modalidadFutura: 'mod40' | 'mod10' | null = null;
+  let sbcTope: number | null = null;
+  let salarioFuturo = salarioMod40;
+  if (!antesDelCorte && pct > 0) {
+    const pedida = palancas.modalidadFutura ?? (reg.mod40Permitida ? 'mod40' : 'mod10');
+    if (pedida === 'mod40' && !reg.mod40Permitida) {
+      modalidadFutura = 'mod10';
+      avisosRegimen.push(
+        reg.motivoNoPermitida === 'mod10_previa'
+          ? 'Como vienes de Modalidad 10 no puedes contratar Modalidad 40: el escenario corre en Modalidad 10.'
+          : 'La ventana para inscribirte a Modalidad 40 ya venció a esta fecha: el escenario corre en Modalidad 10.',
+      );
+    } else {
+      modalidadFutura = pedida;
+    }
+    sbcTope = modalidadFutura === 'mod40' ? (reg.sbcTopeMod40 ?? reg.sbcTopeMod10) : reg.sbcTopeMod10;
+    salarioFuturo = Math.min(sbcTope, Math.max(reg.sbcPiso, salarioMod40));
+    if (salarioFuturo < salarioMod40 - 0.005) {
+      avisosRegimen.push(
+        modalidadFutura === 'mod40'
+          ? `El salario del escenario se recortó al tope de la Modalidad 40 ($${Math.round(sbcTope).toLocaleString('es-MX')} diarios). Para cotizar más alto, la vía es la Modalidad 10.`
+          : `El salario del escenario se recortó al tope de 25 UMA ($${Math.round(sbcTope).toLocaleString('es-MX')} diarios).`,
+      );
+    }
+  }
 
   // D16: semanas vigentes hoy
   const sem = perfil.semanas;
@@ -112,15 +182,20 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
 
   // D36: semanas al retiro. El tramo futuro arranca en `fechaTramite`, no en
   // `hoy`: si no, el hueco entre hoy y la inscripción contaría DOS veces —una
-  // como retroactivo pagado y otra como cotización futura.
+  // como retroactivo pagado y otra como cotización futura. Después del corte
+  // el empleado suma además lo que cotiza con su patrón hasta su baja.
   const semanasRetiro =
     (diasFuturos * pct) / 7 +
+    diasEmpleo / 7 +
     semanasVigentes +
     (recuperaRetro ? semanasRecuperablesRetro : 0) +
     (palancas.recuperarSemanasDescontadas ? sem.descontadas - sem.recuperadas : 0) +
     (palancas.ajusteSemanas ?? 0);
 
   // ---- Promedios salariales ponderados (K3..K13) ----
+  // Tres tramos, del más reciente al más viejo: futuro (Mod 40/10), medio
+  // (antes del corte: el retro pagado; después: lo que sigue cotizando con su
+  // patrón hasta la baja) y pasado (los 60 meses de la semilla).
   const mesesFuturos = Math.min(
     Math.round((diasFuturos / DIAS_MES) * pct),
     MESES_BASE_250,
@@ -129,7 +204,9 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     recuperaRetro ? Math.trunc((semanasRecuperablesRetro * 7) / DIAS_MES) : 0,
     MESES_BASE_250 - mesesFuturos,
   ); // K5
-  const mesesPasados = Math.max(MESES_BASE_250 - mesesFuturos - mesesRetroSal, 0); // K3
+  const mesesEmpleo = Math.min(Math.round(diasEmpleo / DIAS_MES), MESES_BASE_250 - mesesFuturos);
+  const mesesMedio = antesDelCorte ? mesesRetroSal : mesesEmpleo;
+  const mesesPasados = Math.max(MESES_BASE_250 - mesesFuturos - mesesMedio, 0); // K3
 
   const prom = (vals: number[], n: number) => {
     const v = vals.slice(0, Math.max(n, 0));
@@ -150,22 +227,41 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     serieRetro.length,
   ); // K11
   const smFuturo = porAnio(SALARIO_MINIMO, anioHoy - 1); // K10 (AJ38: SM del año previo)
+  // Tramo medio: retro (antes del corte) o empleo hasta la baja (después).
+  const scMedio = antesDelCorte ? scRetro : perfil.salario_diario_registrado;
+  const smMedio = antesDelCorte ? smRetro : smFuturo;
 
   const salarioCot250 =
-    (mesesPasados * scPasado + mesesFuturos * salarioMod40 + mesesRetroSal * scRetro) /
+    (mesesPasados * scPasado + mesesFuturos * salarioFuturo + mesesMedio * scMedio) /
     MESES_BASE_250; // K8
   const salarioMin250 =
-    (mesesPasados * smPasado + mesesFuturos * smFuturo + mesesRetroSal * smRetro) / 60; // K12 (÷60 en el Excel)
+    (mesesPasados * smPasado + mesesFuturos * smFuturo + mesesMedio * smMedio) / 60; // K12 (÷60 en el Excel)
   const factorSalarial = Math.max(1, salarioCot250 / salarioMin250); // K13
 
   // ---- Conservación de derechos (Art. 150/151 LSS) ----
   // Segundo requisito, independiente de las semanas: quien dejó de cotizar
   // conserva sus derechos por 1/4 del tiempo cubierto; vencido ese plazo no
   // puede pensionarse por Ley 73 hasta REACTIVAR con nuevas cotizaciones.
-  const gapMeses = Math.max(0, perfil.gap_meses);
+  //
+  // Después del corte, con hueco, la conservación se mide al ARRANQUE del plan
+  // (claude/106 §3b): el empleado que deja de cotizar y espera puede perderla
+  // en el hueco; el desempleado la pierde en `fin_conservacion_derechos`.
+  const finConservacion = perfil.fechas.fin_conservacion_derechos
+    ? parseISO(perfil.fechas.fin_conservacion_derechos)
+    : null;
+  const conservaAlInicio = antesDelCorte
+    ? perfil.conserva_derechos
+    : empleado
+      ? huecoMeses * DIAS_MES <= (semanasVigentes * 7) / 4
+      : perfil.conserva_derechos && (!finConservacion || diasEntre(fechaTramite, finConservacion) >= 0);
+  const gapMeses = antesDelCorte
+    ? Math.max(0, perfil.gap_meses)
+    : empleado
+      ? huecoMeses
+      : Math.max(perfil.gap_meses, huecoMeses);
   // Art. 151: I ≤3 años → reconocimiento inmediato al reingresar; II >3 y ≤6
   // años → 26 semanas; III >6 años → 52 semanas.
-  const semanasParaReactivar = perfil.conserva_derechos
+  const semanasParaReactivar = conservaAlInicio
     ? 0
     : gapMeses <= 36
       ? 0
@@ -175,9 +271,12 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   // Reactivar exige REINGRESAR al régimen: incluso en la fracc. I (0 semanas
   // extra) el reconocimiento ocurre "al momento de la reinscripción". Con
   // pct=0 no vuelve a cotizar, así que no reactiva aunque el gap sea corto.
+  // Con pct=0 la conservación que cuenta es la de HOY (`conserva_derechos`).
   const semanasFuturas = (diasFuturos * pct) / 7;
   const reactiva =
-    perfil.conserva_derechos || (pct > 0 && semanasFuturas >= semanasParaReactivar);
+    pct === 0
+      ? perfil.conserva_derechos
+      : conservaAlInicio || semanasFuturas >= semanasParaReactivar;
   const pierdeConservacion = !reactiva;
 
   // ---- Pensión (D38..D43) ----
@@ -322,10 +421,25 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   let modalidadPrimerMes: 10 | 40 | null = null;
   mesesActivos.forEach((v, i) => {
     const x = total - i; // X: meses restantes al retiro
-    const y = x > 60 ? porAnio(SALARIO_MINIMO, anioHoy) : salarioMod40; // Y
+    // Antes del corte (hoja): salario mínimo en Mod 10 mientras falten más de
+    // 60 meses y el salario de la palanca en los últimos 60 (Mod 40). Después
+    // del corte no se combinan modalidades: toda la serie va en la elegida y
+    // al salario ya topado.
+    const y = antesDelCorte
+      ? x > 60
+        ? porAnio(SALARIO_MINIMO, anioHoy)
+        : salarioMod40
+      : salarioFuturo; // Y
     const z = y * diasDelMes(v); // Z
-    const modalidad: 10 | 40 =
-      diasEntre(ultimaCot, v) / 365 > 5 ? 10 : x > 60 ? 10 : 40; // AA
+    const modalidad: 10 | 40 = antesDelCorte
+      ? diasEntre(ultimaCot, v) / 365 > 5
+        ? 10
+        : x > 60
+          ? 10
+          : 40 // AA
+      : modalidadFutura === 'mod10'
+        ? 10
+        : 40;
     const anio = v.getUTCFullYear();
     let costo: number; // AB
     if (modalidad === 10) {
@@ -395,6 +509,21 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       pensionMaxima,
       advertenciaConservacion,
       fechaTramite,
+      regimenMod40: reg.regimen,
+      antesDelCorte,
+      modalidadFutura: antesDelCorte
+        ? modalidadPrimerMes === 10
+          ? 'mod10'
+          : modalidadPrimerMes === 40
+            ? 'mod40'
+            : null
+        : modalidadFutura,
+      mod40Permitida: reg.mod40Permitida,
+      sbcTope,
+      salarioFuturo,
+      fechaBaja: ultimaCot,
+      huecoMeses,
+      avisosRegimen,
     },
     retro,
     aplicaRetroHoy,

@@ -59,8 +59,19 @@ export interface Palancas {
   edadRetiro: number;
   /** % del tiempo hasta el retiro que va a cotizar. */
   pctTiempoCotizando: 0 | 0.25 | 0.5 | 0.75 | 1;
-  /** Salario diario de cotización Mod40 / futuro (315.04 – 2933.75 = 25 UMA). */
+  /**
+   * Salario diario de cotización futuro (315.04 – 2933.75 = 25 UMA). Después
+   * del corte del 22-oct-2026 el motor lo TOPA según `modalidadFutura`: Mod 40
+   * al último SBC + 1 UMA, Mod 10 a 25 UMA; y avisa en `detalle` si lo recortó.
+   */
   salarioMod40: number;
+  /**
+   * Con qué modalidad cotiza hacia adelante (`claude/106`). Desde el corte ya
+   * no se combinan: la serie futura es toda Mod 40 o toda Mod 10. Default:
+   * `mod40` si está permitida (ventana viva y no viene de Mod 10), si no
+   * `mod10`. Antes del corte se ignora (regla vieja de la hoja: columna AA).
+   */
+  modalidadFutura?: 'mod40' | 'mod10';
   /** Recuperar semanas descontadas al pensionarse. */
   recuperarSemanasDescontadas: boolean;
   /** Recuperar semanas vía Mod40 retroactivo (solo si aplica hoy). */
@@ -167,6 +178,31 @@ export interface EntradaCalculo {
    */
   fechaTramite?: Date;
   /**
+   * Cuándo DEJA de cotizar quien hoy está empleado (`claude/106` §3b). Default:
+   * `fechaTramite` (sigue empleado hasta que arranca el plan: sin hueco). Si
+   * es anterior a `fechaTramite` hay hueco: cero semanas entre una y otra y
+   * la conservación de derechos se mide a la fecha de arranque. Para quien ya
+   * tiene baja se ignora: su baja es la real. Sólo aplica después del corte.
+   */
+  fechaBaja?: Date;
+  /**
+   * Corte del régimen de Mod 40 (default `MOD40_CORTE_REGIMEN`, 22-oct-2026).
+   * Sólo para los goldens del mundo anterior, que calculan con fechas de
+   * trámite posteriores al corte real. Nunca se pasa desde la app.
+   */
+  corteRegimen?: string | Date;
+  /**
+   * Último SBC para el tope de Mod 40 cuando se conoce mejor que
+   * `perfil.salario_diario_registrado` (p. ej. del historial con fechas).
+   */
+  ultimoSbc?: number | null;
+  /**
+   * Clasificación de la última cotización (expediente `ultima_modalidad`).
+   * Decide si la Mod 40 está permitida después del corte (una Mod 10 previa la
+   * cierra). Sin ella se asume `obligatorio`.
+   */
+  ultimaModalidad?: 'obligatorio' | 'mod40' | 'independiente' | 'otra_voluntaria' | null;
+  /**
    * Regla de la fecha del derecho (motor v5.7, claude/90). Default true. Sólo
    * se apaga para reproducir el Excel CALCULADORA en los tests de paridad.
    */
@@ -250,6 +286,25 @@ export interface ResultadoLey73 {
      * con la que eligió el asesor para avisar si se movió.
      */
     fechaTramite: Date;
+    /**
+     * Régimen de Mod 40 con el que corrió (`claude/106`). `antesDelCorte`
+     * reproduce el mundo viejo completo (retro, mezcla Mod 10 → Mod 40).
+     */
+    regimenMod40: 'anterior' | 'nuevo';
+    antesDelCorte: boolean;
+    /** Modalidad con la que se costeó la serie futura (null si no cotiza). */
+    modalidadFutura: 'mod40' | 'mod10' | null;
+    mod40Permitida: boolean;
+    /** Tope de salario de la modalidad elegida; null antes del corte. */
+    sbcTope: number | null;
+    /** Salario futuro con el que DE VERDAD corrió (ya topado). */
+    salarioFuturo: number;
+    /** Fecha en que deja de cotizar (empleados); igual a `fechaTramite` sin hueco. */
+    fechaBaja: Date;
+    /** Meses sin cotizar entre la baja y el arranque del plan. */
+    huecoMeses: number;
+    /** Avisos del régimen en lenguaje llano (tope, Mod 10 previa, recortes). */
+    avisosRegimen: string[];
   };
   /** Mod40 retroactivo (si aplica y se activó la palanca). */
   retro: DesgloseRetro | null;

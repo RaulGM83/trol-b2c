@@ -20,7 +20,24 @@ export { computeLey73 } from './ley73';
 export { computeLey97, conservaValorSSV } from './ley97';
 export { computeTransicion } from './transicion';
 export type { ResultadoTransicion } from './transicion';
-export { computeProyectoMod40 } from './mod40-proyecto';
+export { computeProyectoMod40, proyectoMod40Disponible } from './mod40-proyecto';
+export {
+  caminosLey73,
+  sugerirInicio,
+  UMBRAL_RECUPERACION_MESES,
+  MESES_CAMINO_DEFAULT,
+  MESES_MINIMOS_COTIZAR,
+} from './caminos-ley73';
+export type {
+  CaminosLey73,
+  CaminoCotizar,
+  OpcionCotizar,
+  OpcionesCaminos,
+  SugerenciaInicio,
+  SugerenciaModalidad,
+  PuntoInicio,
+  OpcionesSugerirInicio,
+} from './caminos-ley73';
 export {
   lineasCapturaMod40,
   mesesDelTramo,
@@ -42,7 +59,14 @@ export {
 } from './inpc';
 export type { SerieINPC, PuntoINPC, LecturaINPC } from './inpc';
 export type { EntradaProyecto } from './mod40-proyecto';
-export { ventanaMod40, modalidadDeRegistro } from './mod40-ventana';
+export {
+  ventanaMod40,
+  modalidadDeRegistro,
+  regimenMod40,
+  MOD40_CORTE_REGIMEN,
+  MOD40_UMA_EXTRA,
+  MOD40_UMAS_TOPE,
+} from './mod40-ventana';
 export type {
   VentanaMod40,
   OpcionesVentanaMod40,
@@ -50,6 +74,9 @@ export type {
   ModalidadUltimaCotizacion,
   PlazoVentanaMod40,
   EstadoVentanaMod40,
+  RegimenMod40,
+  RegimenMod40Info,
+  OpcionesRegimenMod40,
 } from './mod40-ventana';
 export * from './contrafactual';
 export * from './tablas-contrafactual';

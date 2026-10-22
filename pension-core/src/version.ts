@@ -73,7 +73,17 @@
 // baja) y derecho futuro (D = los 60). Esperar para pensionarse ya no sube el
 // factor de edad; el retroactivo dice además cuántas mensualidades se pierden
 // más allá de 12. Caso: Fernando Beltrán (BEMF660421), Raul 30-sep.
-export const ENGINE_VERSION = '2026.09.30.3';
+// 2026.10.22.1 — acuerdo del Consejo Técnico del IMSS (DOF 21-oct-2026,
+// claude/106). Con fecha de trámite desde el 22-oct-2026: la Mod 40 no se paga
+// hacia atrás (`aplicaRetroHoy` false, `computeProyectoMod40` null); el salario
+// futuro se topa al último SBC + 1 UMA en Mod 40 y a 25 UMA en Mod 10; la
+// serie futura ya no combina Mod 10 → Mod 40 (`palancas.modalidadFutura`);
+// quien viene de Mod 10 no puede contratar Mod 40; el empleado puede dejar
+// hueco entre su baja (`fechaBaja`) y el arranque, y la conservación se mide
+// al arranque. Nuevo: `caminosLey73` (pensión hoy · Mod 40 · Mod 10) y
+// `sugerirInicio` (cuándo arrancar). Antes del corte todo corre como antes:
+// los goldens del mundo viejo no se mueven.
+export const ENGINE_VERSION = '2026.10.22.1';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.

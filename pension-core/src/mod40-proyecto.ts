@@ -19,7 +19,12 @@ import {
   MESES_MAX_ART219,
   type LineasCapturaMod40,
 } from './mod40-lineas';
-import { ventanaMod40, type RegistroHistorialMod40, type VentanaMod40 } from './mod40-ventana';
+import {
+  MOD40_CORTE_REGIMEN,
+  ventanaMod40,
+  type RegistroHistorialMod40,
+  type VentanaMod40,
+} from './mod40-ventana';
 import type { EntradaCalculo, ProyectoMod40 } from './types';
 import {
   addMeses,
@@ -91,6 +96,21 @@ export interface EntradaProyecto extends EntradaCalculo {
   permitirMenorDe60?: boolean;
 }
 
+/**
+ * ¿Existe el proyecto Mod 40 retroactivo a esa fecha de trámite? Falso desde
+ * el corte del 22-oct-2026. La UI lo usa para esconder la pestaña en vez de
+ * interpretar un `null` que antes significaba "no aplica por historial".
+ */
+export function proyectoMod40Disponible(
+  fechaTramite: Date,
+  corte: string | Date | null | undefined = MOD40_CORTE_REGIMEN,
+  hoy?: Date | null,
+): boolean {
+  const c = corte instanceof Date ? corte : parseISO(String(corte ?? MOD40_CORTE_REGIMEN));
+  // `hoy` anterior al corte = goldens del mundo viejo (ver `regimenMod40`).
+  return diasEntre(fechaTramite, c) > 0 || (!!hoy && diasEntre(hoy, c) > 0);
+}
+
 export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | null {
   const { perfil, saldos, salario_60m, palancas } = entrada;
 
@@ -104,6 +124,13 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     !entrada.permitirMenorDe60 && diasEntre(fechaPedida, fechaMinimaTramite) > 0;
   const fechaTramite = recorridaA60 ? fechaMinimaTramite : fechaPedida;
   const anioTramite = fechaTramite.getUTCFullYear();
+
+  // Acuerdo del Consejo Técnico (DOF 21-oct-2026, claude/106): desde el
+  // 22-oct-2026 la Mod 40 no se paga hacia atrás, y este proyecto ES el retro.
+  // Con fecha de trámite en o después del corte no existe. Se conserva para
+  // «Ver» caminos cerrados antes del corte y para los goldens del mundo viejo
+  // (que pasan `corteRegimen`).
+  if (!proyectoMod40Disponible(fechaTramite, entrada.corteRegimen, entrada.hoy)) return null;
 
   const edadActual = diasEntre(fnac, fechaTramite) / DIAS_ANIO; // C12 (a la fecha de trámite)
   // F16. `palancas.edadRetiro` ya NO mueve el retiro: la edad del proyecto es

@@ -19,9 +19,196 @@
 // ⚠ La detección de modalidad es ESPEJO de `trol3.derivar_ultima_modalidad`
 // (Supabase, migración `ultima_modalidad_mod40_ventana_12m`). Si cambia una,
 // cambia la otra: el expediente y la calculadora no pueden contradecirse.
+//
+// ----------------------------------------------------------------------------
+// RÉGIMEN (acuerdo ACDO.AS2.HCT.101026/302.P.DG, DOF 21-oct-2026, vigente
+// desde el 22-oct-2026; `claude/106`). Desde el corte:
+//   · Nadie paga hacia atrás. La inscripción corre desde la solicitud.
+//   · Salario de Mod 40 = último SBC al causar baja (sin actualizar por
+//     inflación, decisión de Raúl) + 1 UMA del año de la solicitud; piso 1 SM.
+//   · Quien viene de Mod 10 (independiente) no puede contratar Mod 40.
+//   · Quien ya estaba en Mod 40 y sigue pagando conserva sus condiciones
+//     (`anterior`): su salario de Mod 40, sin la UMA extra mientras el IMSS no
+//     implemente la actualización (pendiente, 22-oct).
+//   · Art. 218 (5 años) y 220 (12 meses) siguen vivos.
+// Lo de arriba (ventana, retro) se conserva para calcular ANTES del corte:
+// los caminos cerrados en modo «Ver» y los goldens del mundo anterior.
+// ⚠ `regimenMod40` es ESPEJO de `trol3.regimen_mod40` y del nodo n8n v5.8.
 // ============================================================================
 
-import { diasEntre, parseISO } from './util';
+import { SALARIO_MINIMO, UMA } from './tablas';
+import { diasEntre, parseISO, porAnio } from './util';
+
+/** Día hábil siguiente a la publicación en el DOF (21-oct-2026). */
+export const MOD40_CORTE_REGIMEN = '2026-10-22';
+/** UMAs que se pueden sumar al último SBC en el régimen nuevo. */
+export const MOD40_UMA_EXTRA = 1;
+/** Tope absoluto de cotización (art. 28 LSS). */
+export const MOD40_UMAS_TOPE = 25;
+
+export type RegimenMod40 = 'anterior' | 'nuevo';
+
+export interface OpcionesRegimenMod40 {
+  /** Sólo para goldens del mundo anterior: mueve el corte. */
+  corte?: string | Date | null;
+  /**
+   * Fecha de cálculo. Si es anterior al corte se reproduce el mundo viejo
+   * completo aunque la fecha de trámite caiga después: así los goldens
+   * fechados en 2026-06 (MOJA, CAFE, MALG) siguen midiendo lo que medían.
+   * En producción `hoy` ya es posterior al corte y no cambia nada.
+   */
+  hoy?: Date | null;
+  /**
+   * Último SBC conocido cuando el historial no trae salario (p. ej. la semilla
+   * sólo trae `salario_diario_registrado`). El historial manda si lo trae.
+   */
+  ultimoSbc?: number | null;
+  /** Clasificación de la última cotización si ya se tiene (expediente). */
+  ultimaModalidad?: ModalidadUltimaCotizacion | null;
+  /** `limite_inscripcion_mod40` del expediente (art. 218/220). */
+  limiteExpediente?: string | Date | null;
+  /**
+   * La última cotización sigue abierta (empleado / Mod 40 vigente). Sólo se
+   * usa cuando no hay historial; con historial se lee de `fecha_fin`.
+   */
+  sinBaja?: boolean;
+}
+
+export interface RegimenMod40Info {
+  regimen: RegimenMod40;
+  /** true cuando la fecha de trámite es anterior al corte: mundo viejo completo. */
+  antesDelCorte: boolean;
+  corte: Date;
+  ultimaModalidad: ModalidadUltimaCotizacion | null;
+  /** Alta de la Mod 40 vigente (sólo `anterior` después del corte). */
+  altaMod40: Date | null;
+  /** Último SBC con el que se calcula el tope. */
+  ultimoSbc: number | null;
+  /** Piso: 1 salario mínimo del año de trámite. */
+  sbcPiso: number;
+  /** Tope de salario para Mod 40 a la fecha de trámite (null = sin dato de SBC). */
+  sbcTopeMod40: number | null;
+  /** Tope de salario para Mod 10 (25 UMA del año de trámite). */
+  sbcTopeMod10: number;
+  /** ¿Puede contratar Mod 40 a esa fecha? */
+  mod40Permitida: boolean;
+  motivoNoPermitida: 'mod10_previa' | 'ventana_vencida' | null;
+  /** ¿Hay periodo que pagar hacia atrás? Después del corte, nunca. */
+  retroAplica: boolean;
+  avisos: string[];
+}
+
+/**
+ * Régimen de Mod 40 a una fecha de trámite. Nunca lanza, nunca bloquea.
+ *
+ * `historial` puede venir vacío: entonces se usa `opts.ultimaModalidad` y
+ * `opts.ultimoSbc` (lo que trae la semilla) y se avisa que es estimado.
+ */
+export function regimenMod40(
+  historial: RegistroHistorialMod40[] | null | undefined,
+  fechaTramite: Date,
+  opts: OpcionesRegimenMod40 = {},
+): RegimenMod40Info {
+  const corte = fecha(opts.corte ?? MOD40_CORTE_REGIMEN) ?? parseISO(MOD40_CORTE_REGIMEN);
+  const anio = fechaTramite.getUTCFullYear();
+  const sbcPiso = porAnio(SALARIO_MINIMO, anio);
+  const sbcTopeMod10 = porAnio(UMA, anio) * MOD40_UMAS_TOPE;
+  const avisos: string[] = [];
+
+  const registros = Array.isArray(historial) ? historial : [];
+  const u = ultimoRegistro(registros);
+  const ultimaModalidad: ModalidadUltimaCotizacion | null = u
+    ? modalidadDeRegistro(u)
+    : (opts.ultimaModalidad ?? null);
+  const ultimoSbc = (u ? numero(u.salario_base) : null) ?? numero(opts.ultimoSbc);
+  const sinBaja = u ? fecha(u.fecha_fin) === null : !!opts.sinBaja;
+  const altaMod40 = u && ultimaModalidad === 'mod40' ? fecha(u.fecha_inicio) : null;
+
+  const antesDelCorte =
+    diasEntre(fechaTramite, corte) > 0 || (!!opts.hoy && diasEntre(opts.hoy, corte) > 0);
+  if (antesDelCorte) {
+    return {
+      regimen: 'anterior',
+      antesDelCorte: true,
+      corte,
+      ultimaModalidad,
+      altaMod40,
+      ultimoSbc,
+      sbcPiso,
+      sbcTopeMod40: sbcTopeMod10,
+      sbcTopeMod10,
+      mod40Permitida: true,
+      motivoNoPermitida: null,
+      retroAplica: true,
+      avisos,
+    };
+  }
+
+  // Después del corte. `anterior` sólo para quien sigue en Mod 40 desde antes.
+  const sigueEnMod40 =
+    ultimaModalidad === 'mod40' && sinBaja && (!altaMod40 || diasEntre(altaMod40, corte) > 0);
+  const regimen: RegimenMod40 = sigueEnMod40 ? 'anterior' : 'nuevo';
+
+  const umaExtra = regimen === 'anterior' ? 0 : MOD40_UMA_EXTRA;
+  const sbcTopeMod40 =
+    ultimoSbc == null
+      ? null
+      : Math.min(sbcTopeMod10, Math.max(sbcPiso, ultimoSbc + umaExtra * porAnio(UMA, anio)));
+
+  // Ventana del art. 218 (5 años) / 220 (12 meses): el expediente manda.
+  const limiteExp = fecha(opts.limiteExpediente);
+  // Quien hoy no tiene baja también puede tenerla a la fecha de trámite (hueco
+  // del empleado, claude/106 §3b): el que llama pasa el límite ya calculado
+  // desde esa baja, así que aquí no se condiciona a `sinBaja`.
+  const ventanaVencida = !!limiteExp && diasEntre(fechaTramite, limiteExp) < 0;
+  const mod10Previa = ultimaModalidad === 'independiente';
+  const mod40Permitida = !mod10Previa && !ventanaVencida;
+  const motivoNoPermitida = mod10Previa ? 'mod10_previa' : ventanaVencida ? 'ventana_vencida' : null;
+
+  if (regimen === 'anterior') {
+    avisos.push(
+      'Sigues inscrito en Modalidad 40 desde antes del 22 de octubre de 2026: conservas tus condiciones mientras sigas pagando. Si dejas de pagar 12 meses las pierdes.',
+    );
+    avisos.push(
+      'Pendiente del IMSS: aún no está claro si quien ya estaba inscrito puede subir su salario; el cálculo usa el que tienes hoy.',
+    );
+  } else {
+    avisos.push(
+      'Desde el 22 de octubre de 2026 la Modalidad 40 ya no se paga hacia atrás: la cotización corre desde que la solicitas.',
+    );
+    if (sbcTopeMod40 != null) {
+      avisos.push(
+        `En Modalidad 40 puedes cotizar hasta ${fmtMXN(sbcTopeMod40)} (tu último salario más una UMA). Para cotizar con más, la vía es la Modalidad 10, que cuesta más.`,
+      );
+    } else {
+      avisos.push('No tenemos tu último salario de cotización: el tope de la Modalidad 40 es estimado.');
+    }
+    if (mod10Previa) {
+      avisos.push(
+        'Tu última cotización fue como persona trabajadora independiente (Modalidad 10): desde ahí no se puede pasar a Modalidad 40.',
+      );
+    }
+    if (!u && !opts.ultimaModalidad) {
+      avisos.push('No podemos confirmar la modalidad de tu última cotización: el historial no trae el detalle del patrón.');
+    }
+  }
+
+  return {
+    regimen,
+    antesDelCorte: false,
+    corte,
+    ultimaModalidad,
+    altaMod40,
+    ultimoSbc,
+    sbcPiso,
+    sbcTopeMod40,
+    sbcTopeMod10,
+    mod40Permitida,
+    motivoNoPermitida,
+    retroAplica: false,
+    avisos,
+  };
+}
 
 export type ModalidadUltimaCotizacion =
   | 'obligatorio'
