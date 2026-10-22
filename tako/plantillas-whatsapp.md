@@ -86,10 +86,22 @@ en una línea.
 > Tu experto revisó tu caso y encontró algo que te conviene. Te lo dejamos aquí:
 > {{1}} — o si prefieres, te lo explicamos por este chat.
 
-### `trol_op_mod40` — Modalidad 40
-> Por tu edad y tus semanas, tu caso es de los que más suben la pensión con Modalidad
-> 40. Tu experto ya lo revisó y los números están aquí: {{1}} — cualquier duda, me
-> dices.
+### `trol_op_mod40` — Modalidad 40 (RETIRADA 22-oct-2026)
+> ~~Por tu edad y tus semanas, tu caso es de los que más suben la pensión con Modalidad 40…~~
+>
+> **No se usa desde el 22-oct-2026** (acuerdo DOF 21-oct-2026, claude/106): `mod40_retro`
+> está apagada y ya no hay retroactivo que prometer. Si Meta ya la aprobó, no se manda.
+> `pension_hoy` sigue en `trol_op_gestion`; los tres caminos los enseña el experto.
+
+### `trol_mod40_cambio` — aviso del cambio de Modalidad 40 (campaña `m40`, oct-2026)
+> El IMSS cambió las reglas de la Modalidad 40 en octubre: ya no se paga hacia atrás
+> y el salario tiene tope. En Trol ya recalculamos tu caso con las reglas nuevas y
+> lo tienes aquí: {{1}} — si quieres que un experto te lo explique, responde a este
+> mensaje.
+
+Utility, botón `[Quiero saber más]`, pie de BAJA. Va en «usted» si el segmento lo pide
+(regla dura 10). Lukas la atiende con §14.7 (v20.9). Orden de envío y segmentos en
+`claude/106` §8 (C → B → A → H con Infonavit → D → G → F → resto). Sin montos.
 
 ### `trol_op_semanas` — semanas no reconocidas
 > Encontramos semanas cotizadas que el IMSS no te está reconociendo. Lo puedes ver
@@ -117,7 +129,8 @@ desde el código. Recuperar Ley 73 va en **gestión**, no en reactivación.
 
 | Plantilla | Códigos |
 |---|---|
-| `trol_op_mod40` | `mod40_prospectiva`, `mod40_retro` |
+| `trol_op_mod40` | *(retirada)* `mod40_prospectiva`, `mod40_retro` — las dos apagadas |
+| `trol_mod40_cambio` | campaña `m40` (no va por catálogo: la manda el lote de cartera) |
 | `trol_op_semanas` | `reconocimiento_semanas`, `inconsistencia_imss` |
 | `trol_op_infonavit` | `mejoravit_activo`, `credito_infonavit_activo`, `compra_inmueble`, `retiro_infonavit_pension` |
 | `trol_op_gestion` | `pension_hoy`, `unificacion_nss`, `recuperar_ley73` |

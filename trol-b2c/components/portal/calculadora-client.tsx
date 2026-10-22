@@ -16,8 +16,9 @@ import { computeLey73 } from "@trol/pension-core/ley73"
 import { MOTOR_VERSION } from "@trol/pension-core/version"
 import { computeLey97, RESCATE_SIN_COSTO_DESDE } from "@trol/pension-core/ley97"
 import type { SerieINPC } from "@trol/pension-core/inpc"
-import { computeProyectoMod40 } from "@trol/pension-core/mod40-proyecto"
-import type { RegistroHistorialMod40 } from "@trol/pension-core/mod40-ventana"
+import { computeProyectoMod40, proyectoMod40Disponible } from "@trol/pension-core/mod40-proyecto"
+import { regimenMod40, type RegistroHistorialMod40 } from "@trol/pension-core/mod40-ventana"
+import { caminosLey73, sugerirInicio, type SugerenciaInicio, type PuntoInicio } from "@trol/pension-core/caminos-ley73"
 import { AvisosMod40, FechaTramiteInput } from "@/components/trol3/FechaTramite"
 import { isoFecha, parseFechaTramite } from "@/lib/viraal/prefill"
 import { addDias, addMeses, DIAS_ANIO } from "@trol/pension-core/util"
@@ -495,6 +496,10 @@ export function CalculadoraClient({
   const { perfil } = semilla
   const tabDefault = perfil.ley === "Ley97" ? "c97" : "c73"
   const back = backHref ?? `/consultas/${consultaId}`
+  // claude/106 · Desde el 22-oct-2026 la Mod 40 no se paga hacia atrás: la pestaña
+  // del proyecto retroactivo desaparece. Los escenarios cerrados antes siguen en
+  // la lista (PDF); la Calculadora 73 trae ahora los tres caminos y la modalidad.
+  const mod40RetroDisponible = mod40Aplica && proyectoMod40Disponible(new Date())
 
   // Los datos a utilizar viven aquí arriba: lo que el asesor corrige en la
   // pestaña de Mod 40 tiene que verse igual en la de Ley 97, y guardarse una
@@ -711,7 +716,7 @@ export function CalculadoraClient({
           <TabsTrigger value="c97" className="!px-3 !py-1 text-sm">
             Calculadora 97{perfil.ley === "Ley97" ? " ★" : ""}
           </TabsTrigger>
-          {mod40Aplica && (
+          {mod40RetroDisponible && (
             <TabsTrigger value="m40" className="!px-3 !py-1 text-sm">
               Mod40 Retroactivo
             </TabsTrigger>
@@ -731,6 +736,8 @@ export function CalculadoraClient({
             pdfCtx={pdfCtx}
             cerrar={cerrarEscenario}
             onCerrado={() => setEscenariosCerrados((n) => n + 1)}
+            historialLaboral={historialLaboral}
+            limiteInscripcionMod40={limiteInscripcionMod40}
           />
         </TabsContent>
         <TabsContent value="c97" className="mt-3 w-full">
@@ -751,7 +758,7 @@ export function CalculadoraClient({
             pdfCtx={pdfCtx}
           />
         </TabsContent>
-        {mod40Aplica && (
+        {mod40RetroDisponible && (
           <TabsContent value="m40" className="mt-3 w-full">
             <Mod40Panel
               semilla={semilla}
@@ -797,8 +804,13 @@ function Calc73Panel({
   pdfCtx,
   cerrar,
   onCerrado,
+  historialLaboral = null,
+  limiteInscripcionMod40 = null,
 }: {
   semilla: SemillaV2
+  /** claude/106 · Historia laboral: clasifica la última cotización (Mod 10 previa cierra la Mod 40). */
+  historialLaboral?: RegistroHistorialMod40[] | null
+  limiteInscripcionMod40?: string | null
   /** 209 · La semilla de hoy, para avisar si cambió desde que se cerró el camino. */
   semillaHoy?: SemillaV2 | null
   /** 209 · Camino cargado: "ver" (sólo lectura, sin recalcular) o "partir" (palancas sobre la semilla de hoy). */
@@ -843,10 +855,31 @@ function Calc73Panel({
     () => parseFechaTramite(fechaTramiteIso) ?? parseFechaTramite(hoyIso) ?? new Date(),
     [fechaTramiteIso, hoyIso],
   )
+  // claude/106 · Régimen de Mod 40 (acuerdo DOF 21-oct-2026). La última
+  // modalidad sale del historial (una Mod 10 previa cierra la Mod 40) y el tope
+  // del último salario registrado + 1 UMA. El motor lo recalcula adentro; aquí
+  // sólo se le pasa lo que la semilla no trae.
+  const empleado = perfil.status_empleo === "empleado"
+  const regHistorial = useMemo(
+    () => regimenMod40(historialLaboral, fechaTramite, { ultimoSbc: perfil.salario_diario_registrado, sinBaja: empleado, limiteExpediente: limiteInscripcionMod40 }),
+    [historialLaboral, fechaTramite, perfil.salario_diario_registrado, empleado, limiteInscripcionMod40],
+  )
+  // Cuándo deja de cotizar el empleado (§3b). null = sigue empleado hasta que
+  // arranca el plan (sin hueco). Sólo se fija si el cliente dice que podría salir.
+  const [fechaBajaIso, setFechaBajaIso] = useState<string | null>(camino?.c.fechaBajaIso ?? null)
+  const fechaBaja = useMemo(() => (fechaBajaIso ? parseFechaTramite(fechaBajaIso) ?? undefined : undefined), [fechaBajaIso])
 
   const entrada = useMemo(
-    () => ({ perfil, saldos, salario_60m, palancas, fechaTramite }),
-    [perfil, saldos, salario_60m, palancas, fechaTramite],
+    () => ({
+      perfil,
+      saldos,
+      salario_60m,
+      palancas,
+      fechaTramite,
+      ...(empleado && fechaBaja ? { fechaBaja } : {}),
+      ultimaModalidad: regHistorial.ultimaModalidad,
+    }),
+    [perfil, saldos, salario_60m, palancas, fechaTramite, empleado, fechaBaja, regHistorial.ultimaModalidad],
   )
   const rCalc = useMemo(() => computeLey73(entrada), [entrada])
   // 209 · "Ver" no recalcula: pinta el resultado que se guardó al cerrar.
@@ -903,6 +936,27 @@ function Calc73Panel({
       ? r.pensionMensual - sinEstrategia.pensionMensual
       : null
 
+  // claude/106 · Régimen nuevo: sin retro, una modalidad, salario topado. Un
+  // camino cerrado antes del corte no trae `regimenMod40` en su resultado y se
+  // pinta como mundo viejo.
+  const nuevo = d.antesDelCorte === false
+  const modalidad: "mod40" | "mod10" = d.modalidadFutura ?? (regHistorial.mod40Permitida ? "mod40" : "mod10")
+  const topeMod40 = regHistorial.sbcTopeMod40 ?? regHistorial.sbcTopeMod10
+  const topeSlider = nuevo ? (modalidad === "mod40" ? topeMod40 : regHistorial.sbcTopeMod10) : SAL_TOPE
+  const avisosRegimen = nuevo ? (d.avisosRegimen ?? []) : []
+  // Los tres caminos (D2): sólo en vivo, Ley 73 y régimen nuevo.
+  const caminos = useMemo(
+    () => (!ver && nuevo && perfil.ley === "Ley73" ? caminosLey73(entrada) : null),
+    [ver, nuevo, perfil.ley, entrada],
+  )
+  // Sugerencia de inicio (§3b): se calcula a petición (barre ~100 corridas).
+  const [sugerencia, setSugerencia] = useState<SugerenciaInicio | null>(null)
+  const sugerir = () => setSugerencia(sugerirInicio(entrada))
+  const usarPunto = (m: "mod40" | "mod10", p: PuntoInicio) => {
+    setPalancas((x) => ({ ...x, modalidadFutura: m, pctTiempoCotizando: 1 }))
+    setFechaTramiteIso(isoFecha(p.fechaInicio))
+  }
+
   const buildPdf = (): PdfEscenarioData => ({
     calculadora: "Calculadora Ley 73",
     clienteNombre: pdfCtx.clienteNombre,
@@ -919,13 +973,21 @@ function Calc73Panel({
         label: "Cotización futura",
         value: `${palancas.pctTiempoCotizando * 100}% del tiempo`,
       },
+      ...(nuevo && empleado && d.huecoMeses > 0.5
+        ? [{ label: "Deja de cotizar", value: `${isoFecha(d.fechaBaja)} (${Math.round(d.huecoMeses)} meses sin cotizar)` }]
+        : []),
       ...(palancas.pctTiempoCotizando > 0
-        ? [
-            {
-              label: "Salario de cotización Mod40",
-              value: `${fmt(palancas.salarioMod40)} diarios`,
-            },
-          ]
+        ? nuevo
+          ? [
+              { label: "Modalidad hacia adelante", value: modalidad === "mod40" ? "Modalidad 40" : "Modalidad 10 (independiente)" },
+              { label: "Salario de cotización", value: `${fmt(d.salarioFuturo)} diarios` },
+            ]
+          : [
+              {
+                label: "Salario de cotización Mod40",
+                value: `${fmt(palancas.salarioMod40)} diarios`,
+              },
+            ]
         : []),
       ...(semanasRecuperables(perfil) > 0
         ? [
@@ -1101,12 +1163,17 @@ function Calc73Panel({
             value={fechaTramiteIso}
             min={hoyIso}
             max={isoFecha(d.fechaRetiro)}
-            onChange={setFechaTramiteIso}
-            etiqueta="Fecha de inicio del plan"
+            onChange={(v) => {
+              setFechaTramiteIso(v)
+              if (fechaBajaIso && fechaBajaIso > v) setFechaBajaIso(v)
+            }}
+            etiqueta={nuevo ? "Empieza a pagar (Mod 40 / Mod 10)" : "Fecha de inicio del plan"}
             hint={
-              r.aplicaRetroHoy
-                ? "El día que se inscribe a Modalidad 40/10. La línea de captura cubre de la baja hasta aquí; de ahí al retiro se cotiza mes a mes. Moverla no cambia las semanas al retiro, cambia de qué lado se pagan."
-                : "El día que arranca la cotización. De ahí al retiro se paga mes a mes."
+              nuevo
+                ? "El día que se inscribe y empieza a pagar. Ya no hay retroactivo: de aquí al retiro se paga mes a mes. Con muchas semanas conviene empezar tarde: ~5 años de cotización llenan el promedio de 250 semanas."
+                : r.aplicaRetroHoy
+                  ? "El día que se inscribe a Modalidad 40/10. La línea de captura cubre de la baja hasta aquí; de ahí al retiro se cotiza mes a mes. Moverla no cambia las semanas al retiro, cambia de qué lado se pagan."
+                  : "El día que arranca la cotización. De ahí al retiro se paga mes a mes."
             }
           />
           {fechaTramiteIso !== hoyIso && (
@@ -1118,6 +1185,66 @@ function Calc73Panel({
               Volver a hoy
             </button>
           )}
+          {nuevo && empleado && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="l73-fecha-baja">Deja de cotizar con su patrón</Label>
+                {fechaBajaIso && (
+                  <button type="button" className="text-xs font-semibold underline" onClick={() => setFechaBajaIso(null)}>
+                    Sigue hasta que empiece
+                  </button>
+                )}
+              </div>
+              <input
+                id="l73-fecha-baja"
+                type="date"
+                value={fechaBajaIso ?? fechaTramiteIso}
+                min={hoyIso}
+                max={fechaTramiteIso}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (!v) return
+                  setFechaBajaIso(v > fechaTramiteIso ? fechaTramiteIso : v < hoyIso ? hoyIso : v)
+                }}
+                className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm tabular-nums"
+              />
+              <p className="text-xs text-muted">
+                {fechaBajaIso && d.huecoMeses > 0.5
+                  ? `Hueco de ${Math.round(d.huecoMeses)} meses sin cotizar. La Mod 40 se puede contratar hasta 5 años después de la baja.`
+                  : "Mientras pueda seguir empleado, mejor: sólo se mueve si el cliente dice que podría salir pronto."}
+              </p>
+            </div>
+          )}
+          {nuevo && palancas.pctTiempoCotizando > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Cotiza hacia adelante en</Label>
+              <div className="grid grid-cols-2 gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={modalidad === "mod40" ? "default" : "outline"}
+                  disabled={!regHistorial.mod40Permitida}
+                  title={!regHistorial.mod40Permitida ? (regHistorial.motivoNoPermitida === "mod10_previa" ? "Viene de Modalidad 10: no puede contratar Mod 40" : "Ventana de inscripción vencida") : undefined}
+                  onClick={() => set("modalidadFutura", "mod40")}
+                >
+                  Mod 40 · hasta {fmt(topeMod40)}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={modalidad === "mod10" ? "default" : "outline"}
+                  onClick={() => set("modalidadFutura", "mod10")}
+                >
+                  Mod 10 · hasta {fmt(regHistorial.sbcTopeMod10)}
+                </Button>
+              </div>
+              <p className="text-xs text-muted">
+                {modalidad === "mod40"
+                  ? "Modalidad 40: último salario + 1 UMA como máximo. Más barata."
+                  : "Modalidad 10 (independiente): hasta 25 UMA, cuesta más y después no se puede pasar a Mod 40."}
+              </p>
+            </div>
+          )}
           <SelectorEdad
             edades={edades}
             value={palancas.edadRetiro}
@@ -1128,8 +1255,9 @@ function Calc73Panel({
             onChange={(v) => set("pctTiempoCotizando", v)}
           />
           <SliderSalario
-            label="Salario de cotización Mod40 (diario)"
-            value={palancas.salarioMod40}
+            label={nuevo ? "Salario de cotización (diario)" : "Salario de cotización Mod40 (diario)"}
+            value={Math.min(palancas.salarioMod40, topeSlider)}
+            max={topeSlider}
             onChange={(v) => set("salarioMod40", v)}
           />
           <AjusteSemanas
@@ -1184,9 +1312,11 @@ function Calc73Panel({
                   etiqueta,
                   pension_mensual: aCentenas(r.pensionMensual),
                   edad_retiro: palancas.edadRetiro,
+                  ...(nuevo ? { modalidad_futura: modalidad, regimen_mod40: d.regimenMod40 } : {}),
                 },
                 semilla,
                 palancas,
+                ...(fechaBajaIso ? { fecha_baja: fechaBajaIso } : {}),
                 // La tabla por edad se GUARDA, no se recalcula después. Es lo
                 // que el asesor le enseñó en pantalla; si el motor cambia, el
                 // documento tiene que seguir diciendo lo que se presentó ese
@@ -1205,6 +1335,19 @@ function Calc73Panel({
       }
     >
       <AvisosCamino avisos={avisos} />
+      {nuevo && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex flex-col gap-1">
+          <p className="text-sm font-semibold text-amber-900">
+            Régimen nuevo desde el 22-oct-2026 (acuerdo del Consejo Técnico del IMSS)
+            {d.regimenMod40 === "anterior" ? " · este cliente sigue inscrito en Mod 40 desde antes del corte" : ""}
+          </p>
+          {avisosRegimen.map((a, i) => (
+            <p key={i} className="text-xs text-amber-900 leading-snug">
+              {a}
+            </p>
+          ))}
+        </div>
+      )}
       {perfil.ley === "Ley97" && (
         <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-start gap-3">
           <span
@@ -1338,6 +1481,33 @@ function Calc73Panel({
         </Card>
       )}
 
+      {caminos && !ocultarCostos && (
+        <CaminosCard caminos={caminos} />
+      )}
+
+      {!ver && nuevo && !ocultarCostos && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">¿Cuándo le conviene empezar a pagar?</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            {!sugerencia ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Barre mes a mes la fecha de inicio hasta el retiro elegido ({palancas.edadRetiro} años) en las dos modalidades y
+                  encuentra el inicio que recupera su costo más rápido y el que da más pensión. La fecha de baja no se mueve.
+                </p>
+                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={sugerir}>
+                  Sugerir cuándo empezar
+                </Button>
+              </div>
+            ) : (
+              <SugerenciaInicioView s={sugerencia} onUsar={usarPunto} onRecalcular={sugerir} />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {!r.negativa && (
         <Card>
           <CardHeader className="pb-2">
@@ -1375,8 +1545,8 @@ function Calc73Panel({
               <Stat label="Cotización futura" value={fmt(r.costoEstrategiaFutura)} />
               <Stat label="Costo mensual inicial" value={fmt(r.costoMensualPrimerMes)} />
               <Stat
-                label="Modalidad inicial"
-                value={r.modalidadPrimerMes ? `Mod ${r.modalidadPrimerMes}` : "—"}
+                label={nuevo ? "Modalidad" : "Modalidad inicial"}
+                value={r.modalidadPrimerMes ? `Mod ${r.modalidadPrimerMes}${nuevo ? ` · ${fmt(d.salarioFuturo)}/día` : ""}` : "—"}
               />
               <Stat label="Costo total" value={fmt(r.costoTotal)} destacado />
             </div>
@@ -2770,11 +2940,15 @@ function SliderSalario({
   label,
   value,
   onChange,
+  max = SAL_TOPE,
 }: {
   label: string
   value: number
   onChange: (v: number) => void
+  /** claude/106 · Tope de la modalidad elegida (Mod 40: SBC + 1 UMA; Mod 10: 25 UMA). */
+  max?: number
 }) {
+  const tope = Math.max(SAL_MIN, Math.round(max))
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
@@ -2784,9 +2958,9 @@ function SliderSalario({
       <input
         type="range"
         min={SAL_MIN}
-        max={SAL_TOPE}
+        max={tope}
         step={1}
-        value={value}
+        value={Math.min(value, tope)}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-ink"
       />
@@ -2794,8 +2968,8 @@ function SliderSalario({
         <button type="button" className="hover:underline" onClick={() => onChange(SAL_MIN)}>
           Mínimo ({fmt(SAL_MIN)})
         </button>
-        <button type="button" className="hover:underline" onClick={() => onChange(SAL_TOPE)}>
-          Tope 25 UMA ({fmt(SAL_TOPE)})
+        <button type="button" className="hover:underline" onClick={() => onChange(tope)}>
+          {tope >= SAL_TOPE - 1 ? `Tope 25 UMA (${fmt(SAL_TOPE)})` : `Tope (${fmt(tope)})`}
         </button>
       </div>
     </div>
@@ -2906,6 +3080,133 @@ function TablaFuentes({
         </p>
       </CardContent>
     </Card>
+  )
+}
+
+/** claude/106 · Los tres caminos: pensión hoy · Mod 40 · Mod 10 (D2). */
+function CaminosCard({ caminos }: { caminos: ReturnType<typeof caminosLey73> }) {
+  const etiqueta = { pension_hoy: "Tramitar ya", mod40: "Cotizar en Mod 40", mod10: "Cotizar en Mod 10", ninguno: "Sin recomendación" } as const
+  const fila = (nombre: string, o: ReturnType<typeof caminosLey73>["mod40"]["opciones"][number]) => (
+    <tr key={`${nombre}-${o.meses}`} className="border-t">
+      <td className="py-1 pr-2">{nombre} · {o.meses} m</td>
+      <td className="py-1 pr-2 tabular-nums">{fmt(o.salario)}/día</td>
+      <td className="py-1 pr-2 tabular-nums font-medium">{o.status === "viable" ? fmt(o.pension) : "Negativa"}</td>
+      <td className="py-1 pr-2 tabular-nums">{fmt(o.costoCuotas)}</td>
+      <td className="py-1 pr-2 tabular-nums">{o.pensionNoCobrada > 0 ? fmt(o.pensionNoCobrada) : "—"}</td>
+      <td className="py-1 pr-2 tabular-nums">{o.aumento !== null ? `${o.aumento >= 0 ? "+" : ""}${fmt(o.aumento)}` : "—"}</td>
+      <td className="py-1 tabular-nums">{o.mesesRecuperacion !== null ? `${Math.round(o.mesesRecuperacion)} m` : "—"}</td>
+    </tr>
+  )
+  return (
+    <Card className="border-2 border-[var(--brand-accent)]/60">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Los tres caminos desde el {isoFecha(caminos.fechaInicio)}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Stat
+            label={caminos.pensionHoy.tramitable ? "Pensión hoy (tramitable)" : "Pensión sin cotizar más (a los 60)"}
+            value={caminos.pensionHoy.pension !== null ? fmt(caminos.pensionHoy.pension) : "Negativa"}
+            destacado={caminos.recomendacion === "pension_hoy"}
+          />
+          <Stat label="Recomendación" value={etiqueta[caminos.recomendacion]} destacado />
+          <Stat label="Umbral" value={`recupera en ≤ ${caminos.umbralMeses} meses`} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-muted-foreground">
+              <tr>
+                <th className="text-left font-normal pb-1">Camino</th>
+                <th className="text-left font-normal pb-1">Salario</th>
+                <th className="text-left font-normal pb-1">Pensión</th>
+                <th className="text-left font-normal pb-1">Cuotas</th>
+                <th className="text-left font-normal pb-1">Deja de cobrar</th>
+                <th className="text-left font-normal pb-1">Aumento</th>
+                <th className="text-left font-normal pb-1">Recupera en</th>
+              </tr>
+            </thead>
+            <tbody>
+              {caminos.mod40.aplica ? caminos.mod40.opciones.map((o) => fila("Mod 40", o)) : (
+                <tr className="border-t"><td colSpan={7} className="py-1 text-muted-foreground">Mod 40 no aplica: {caminos.mod40.motivo}</td></tr>
+              )}
+              {caminos.mod10.opciones.map((o) => fila("Mod 10", o))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted-foreground leading-snug">
+          Cada camino cotiza al tope de su modalidad desde la fecha de inicio. «Deja de cobrar» son las mensualidades que no cobra por seguir
+          cotizando cuando ya podía pensionarse; entra en la recuperación. Mod 10 cuesta más pero admite hasta 25 UMA; después de una Mod 10
+          no se puede contratar Mod 40.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+/** claude/106 §3b · Barrido de la fecha de inicio en las dos modalidades (D4). */
+function SugerenciaInicioView({
+  s,
+  onUsar,
+  onRecalcular,
+}: {
+  s: SugerenciaInicio
+  onUsar: (m: "mod40" | "mod10", p: PuntoInicio) => void
+  onRecalcular: () => void
+}) {
+  const punto = (m: "mod40" | "mod10", titulo: string, p: PuntoInicio | null) =>
+    p ? (
+      <div className="rounded-md border p-3 flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <b className="text-sm">{titulo}</b>
+          <Button type="button" size="sm" variant="outline" onClick={() => onUsar(m, p)}>
+            Usar
+          </Button>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Empieza el {isoFecha(p.fechaInicio)} ({p.edadInicio.toFixed(1)} años) · cotiza {p.mesesCotizando} m
+          {p.huecoMeses > 0.5 ? ` · hueco ${Math.round(p.huecoMeses)} m` : ""}
+        </span>
+        <span className="text-xs tabular-nums">
+          Pensión {fmt(p.pension)} · cuotas {fmt(p.costoCuotas)} · recupera en {p.mesesRecuperacion !== null ? `${Math.round(p.mesesRecuperacion)} m` : "—"}
+        </span>
+      </div>
+    ) : null
+  const bloque = (m: "mod40" | "mod10", titulo: string, sm: SugerenciaInicio["mod40"]) =>
+    sm ? (
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-semibold">{titulo}</p>
+        {sm.recomendado && sm.maxPension && sm.recomendado.fechaInicio.getTime() === sm.maxPension.fechaInicio.getTime()
+          ? punto(m, "Recomendado (también la mayor pensión)", sm.recomendado)
+          : (
+            <>
+              {punto(m, "Recomendado · recupera más rápido", sm.recomendado)}
+              {punto(m, "Mayor pensión", sm.maxPension)}
+            </>
+          )}
+        {sm.avisos.map((a, i) => (
+          <p key={i} className="text-xs text-muted-foreground">{a}</p>
+        ))}
+      </div>
+    ) : null
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Sin cotizar más: {fmt(s.pensionBase)} · baja {isoFecha(s.fechaBaja)} · retiro {isoFecha(s.fechaRetiro)}
+          {s.mejor ? ` · mejor: ${s.mejor.modalidad === "mod40" ? "Mod 40" : "Mod 10"} desde el ${isoFecha(s.mejor.punto.fechaInicio)}` : ""}
+        </p>
+        <button type="button" className="text-xs font-semibold underline" onClick={onRecalcular}>
+          Recalcular con las palancas de hoy
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {bloque("mod40", "Modalidad 40 (topada)", s.mod40)}
+        {bloque("mod10", "Modalidad 10 (hasta 25 UMA)", s.mod10)}
+      </div>
+      {s.avisos.map((a, i) => (
+        <p key={i} className="text-xs text-amber-800">{a}</p>
+      ))}
+    </div>
   )
 }
 

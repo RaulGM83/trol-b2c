@@ -183,6 +183,18 @@ export default async function Expediente({ params, searchParams }: { params: { i
     const v = datosMap.get('limite_inscripcion_mod40')?.valor;
     return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
   })();
+  // claude/106 · Régimen de Mod 40 (acuerdo DOF 21-oct-2026): lo escribe el
+  // motor n8n v5.8 en `datos` (mod40_regimen, mod40_sbc_tope, mod40_permitida).
+  const regMod40 = (datosMap.get('mod40_regimen')?.valor as string | undefined) ?? null;
+  const topeMod40 = Number(datosMap.get('mod40_sbc_tope')?.valor);
+  const mod40Permitida = datosMap.get('mod40_permitida')?.valor as boolean | undefined;
+  const mod40Mini = regMod40 == null
+    ? (e.mod40_retro_aplica == null ? '—' : 'pendiente de recalcular')
+    : regMod40 === 'anterior'
+      ? `Inscrito desde antes del 22-oct · ${Number.isFinite(topeMod40) ? fmtMXN(topeMod40) + '/día' : ''}`
+      : mod40Permitida === false
+        ? 'No puede (Mod 10 previa o ventana vencida)'
+        : `Hacia adelante · tope ${Number.isFinite(topeMod40) ? fmtMXN(topeMod40) + '/día' : '—'}`;
   // Saldos corregidos por el asesor (portal) viven en public.clientes.saldos_corregidos
   let saldosCorregidos: SaldosCorregidos | null = null;
   let mod40AplicaLegacy: boolean | null = null;
@@ -687,7 +699,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
               <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
                 <Mini label="Cotiza" v={e.status_empleo ?? '—'} />
                 <Mini label="Derechos Ley 73" v={e.ley === 'Ley97' ? 'n/a' : e.conserva_derechos == null ? '—' : e.conserva_derechos ? 'Vigentes' : 'No vigentes'} />
-                <Mini label="Mod 40 retro hoy" v={e.mod40_retro_aplica == null ? '—' : e.mod40_retro_aplica ? `Sí · ${e.pension_mod40_retro ? fmtMXN(e.pension_mod40_retro) : ''}` : 'No'} />
+                <Mini label="Mod 40 (sin retro desde 22-oct-2026)" v={mod40Mini} sub={regMod40 == null ? undefined : 'régimen ' + regMod40} />
                 <Mini label="Saldo Infonavit" v={e.saldo_infonavit_origen === 'credito_vigente' ? 'Crédito vigente' : e.saldo_infonavit ? fmtMXN(e.saldo_infonavit) : '—'} sub={e.saldo_infonavit_origen === 'credito_vigente' ? 'saldo aplicado al crédito' : e.saldo_infonavit == null ? undefined : e.saldo_infonavit_vigente === false ? 'reportado, vencido' : e.saldo_infonavit_capa === 'validado' ? 'validado' : e.saldo_infonavit_capa === 'declarado' ? 'reportado' : 'estimado'} />
               </div>
               <SaldoInfonavitAccion personaId={e.persona_id} saldo={e.saldo_infonavit == null ? null : Number(e.saldo_infonavit)} estimado={e.saldo_infonavit_estimado == null ? null : Number(e.saldo_infonavit_estimado)} capa={e.saldo_infonavit_capa ?? null} origen={e.saldo_infonavit_origen ?? null} en={e.saldo_infonavit_en ?? null} vigente={e.saldo_infonavit_vigente ?? null} credito={e.credito_infonavit ?? null} />

@@ -70,18 +70,7 @@ Restricciones (avisan, no bloquean):
 - Conservación de derechos (¼ del tiempo cotizado) se evalúa a `fechaInicio`; si vence en el hueco, el camino lo dice (y aplica `reactivacion_mod10`).
 - Promedio de 250 semanas: sólo cuenta lo cotizado, así que ~4.8 años de Mod 40/10 topada llenan el promedio completo; lo que sobra sólo compra semanas (caro).
 
-**Sugerencia de inicio** (`sugerirInicio`): barrido mensual de `fechaInicio` entre `fechaBaja` y `fechaRetiro − 12 m` **en las dos modalidades** (Mod 40 sólo si está permitida); por cada una devuelve el inicio que **minimiza meses de recuperación** (`costo / (pensión − pensión base)`) y el de **mayor pensión** (D4), y `mejor` entre las dos. La edad de retiro no se optimiza (la elige el cliente); la baja tampoco (D5).
-
-Hallazgo del golden 8 (53 años, 1,400 semanas, SBC $1,500, retiro 60.5), motor `2026.10.22.1`:
-
-| Inicio | Modalidad | Cotiza | Pensión | Cuotas | Recupera en |
-|---|---|---|---|---|---|
-| hoy (53.5) | Mod 40 a $1,617 | 84 m | $36,700 | $716k | 60 m |
-| 55.5 | Mod 40 | 60 m | $34,200 | $528k | 56 m |
-| 58.5 (límite 5 años) | Mod 40 | 24 m | $29,400 | $204k | 43 m |
-| **59.0** | **Mod 10 a 25 UMA** | **18 m** | **$36,100** | **$374k** | **33 m** |
-
-Pensión base sin cotizar: $24,700. Con el tope de +1 UMA la Mod 40 pierde contra una **Mod 10 corta y tardía al máximo** para quien tiene muchas semanas y salario medio: la pensión depende más del promedio de los últimos 5 años que de las semanas extra. Es el argumento comercial nuevo.
+**Sugerencia de inicio** (`sugerirInicio`): barrido mensual de `fechaInicio` entre `fechaBaja` y `fechaRetiro − 12 m`, respetando las restricciones; para cada punto se calcula pensión y costo total; se devuelve el que **minimiza meses de recuperación** (`costo / (pensión − pensión base)`) y, como alternativa, el de **mayor pensión**. Se muestra como recomendación en la calculadora, el asesor mueve la palanca si quiere. La edad de retiro no se optimiza (la elige el cliente).
 
 ## 4. Motor `pension-core`
 
@@ -101,7 +90,7 @@ Pensión base sin cotizar: $24,700. Con el tope de +1 UMA la Mod 40 pierde contr
 - `aplicaRetroHoy = regimen === 'anterior' && …` (lo de hoy).
 - Serie futura: `modalidad = palancas.modalidadFutura` para todos los meses (sin AA). Costo según modalidad.
 - **Tres caminos** (D2): `caminos` = { pensionHoy, mod40: {aplica, sbc, pension12m, pension24m, costo12m, costo24m, mesesRecuperacion}, mod10: {sbc, …igual} }, calculados al tope de cada modalidad y a la `fechaInicio` sugerida. `evaluar_persona` lee esto para `pension_hoy` y sus dos alternativas.
-- **`sugerirInicio(entrada)`** (módulo `caminos-ley73.ts`, junto con `caminosLey73`): barrido de §3b; devuelve `{ mod40, mod10, mejor }`, cada modalidad con `{ recomendado, maxPension, tabla[] }` para graficar costo vs pensión por mes de inicio. Son funciones aparte de `computeLey73` (lo llaman varias veces), no campos del resultado.
+- **`sugerirInicio(entrada)`**: barrido de §3b; devuelve `{ inicioRecomendado, inicioMaxPension, tabla[] }` para graficar costo vs pensión por mes de inicio.
 
 **`mod40-proyecto.ts`** (hoja «Mod40 Retroactivo»): devuelve `null` si `fechaTramite ≥ corte`, con `motivo = 'regimen_nuevo'`. No se borra: lo usan los caminos cerrados en modo «Ver».
 
@@ -191,7 +180,7 @@ Regla de ejecución: **primero motor + base + recálculo**, después mensajes. N
 ## 10. Orden de trabajo
 
 1. ✅ Lectura legal + decisiones (este doc).
-2. ✅ Motor (22-oct 09:20): `regimenMod40`, palancas `modalidadFutura` / `fechaBaja`, serie sin mezcla, `caminosLey73`, `sugerirInicio`, `mod40-proyecto` nulo tras el corte, 25 tests nuevos; **325/325 en verde, `tsc` limpio**. `ENGINE_VERSION 2026.10.22.1`. Regla de compatibilidad: `hoy` anterior al corte reproduce el mundo viejo (los goldens de 2026-06 no se mueven). Bump `2026.10.22.1`. Tests en verde.
+2. Motor: `regimenMod40`, palancas `modalidadFutura` / `fechaBaja` / `fechaInicio`, serie sin mezcla, `caminos`, `sugerirInicio`, `mod40-proyecto` nulo tras el corte, 9 goldens. Bump `2026.10.22.1`. Tests en verde.
 3. Base 250–252 + `trol3.regimen_mod40` (espejo). Probar con rollback sobre 5 personas reales (una por segmento A/B/C/D/H).
 4. n8n v5.8 + `mass_refresh` nocturno sin avisos. Verificar 20 personas al azar contra el motor TS.
 5. App: calculadora y expediente primero (lo que ve el asesor), después `/mi`, fichas, PDFs, sitio/blog.

@@ -5,6 +5,7 @@ import { autorizarViraal, autorizarViraalAliado } from '@/app/trabajo/actions';
 import { AvisosMod40, FechaTramiteInput } from '@/components/trol3/FechaTramite';
 import type { SerieINPC } from '@trol/pension-core/inpc';
 import type { RegistroHistorialMod40 } from '@trol/pension-core/mod40-ventana';
+import { proyectoMod40Disponible } from '@trol/pension-core/mod40-proyecto';
 import type { SemillaV2 } from '@trol/pension-core/semilla';
 import { fechaMinimaTramite, isoFecha, mesaViraalDesdeSemilla, parseFechaTramite } from '@/lib/viraal/prefill';
 
@@ -191,6 +192,43 @@ export function MesaViraal({
   }
 
   const c = datos?.cliente;
+  // claude/106 · Desde el 22-oct-2026 la Mod 40 no se paga hacia atrás y Viraal
+  // ya no recibe proyectos de Mod 40 (decisión de Raúl): la mesa se apaga y
+  // sólo quedan las autorizaciones registradas. Viraal sigue con la Mod 10 de
+  // reactivación (`reactivacion_mod10`, claude/63).
+  const mesaAbierta = proyectoMod40Disponible(parseFechaTramite(hoyIso) ?? new Date());
+  if (!mesaAbierta) {
+    return (
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+          <h2 className="text-sm font-bold text-amber-900">Mesa Viraal cerrada para Modalidad 40</h2>
+          <p className="mt-1 text-xs text-amber-900 leading-snug">
+            Desde el 22 de octubre de 2026 (acuerdo del Consejo Técnico del IMSS, DOF 21-oct-2026) la Modalidad 40 ya no se paga hacia
+            atrás, así que no hay proyecto retroactivo que financiar. Viraal sólo ejecuta la Modalidad 10 para reactivar derechos
+            (oportunidad «Reactivar vigencia»). Para la pensión de este cliente, la Calculadora 73 trae los tres caminos: tramitar ya,
+            Mod 40 hacia adelante o Mod 10.
+          </p>
+        </section>
+        {historial.length > 0 && (
+          <section className="rounded-2xl border border-line bg-white p-5">
+            <h2 className="mb-3 text-sm font-bold">Autorizaciones registradas <span className="ml-1 text-xs font-normal text-muted">{historial.length}</span></h2>
+            <ul className="divide-y divide-line text-xs">
+              {historial.map((h) => (
+                <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>{new Date(h.created_at).toLocaleDateString('es-MX')} · {h.escenario ?? '—'} · {h.miembro ?? ''}</span>
+                  <span className="flex items-center gap-2">
+                    {h.banda && <span className={`rounded-full px-2 py-0.5 ${BANDA[h.banda]?.cls ?? ''}`}>{BANDA[h.banda]?.label ?? h.banda}</span>}
+                    <span>precio {mx(h.precio)} · margen {pc(h.margen)}</span>
+                    <a className="underline" href={`/trabajo/viraal/pdf/${h.id}`} target="_blank" rel="noreferrer">PDF</a>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       {c && (

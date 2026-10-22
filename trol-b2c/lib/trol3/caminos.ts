@@ -36,6 +36,8 @@ export type CaminoHidratado = {
   palancas: Palancas;
   /** Ley 73: la fecha de inicio del plan con la que se cerró (ISO yyyy-mm-dd), si se guardó. */
   fechaTramiteIso: string | null;
+  /** Ley 73 (claude/106): la baja del empleado con hueco, si se fijó al cerrar. */
+  fechaBajaIso: string | null;
   /** Sólo Ley 97. */
   incluir: Incluir;
   destinoInfonavit: DestinoInfonavit;
@@ -84,6 +86,7 @@ export function hidratarCamino(row: CaminoRow): CaminoHidratado | null {
     barrido: Array.isArray(inp.barrido) && inp.barrido.length ? inp.barrido : null,
     semilla, semillaGeneradaEn: semilla?.meta?.generado_en ?? null, resultado,
     fechaTramiteIso: fechaTramite instanceof Date && !Number.isNaN(fechaTramite.getTime()) ? fechaTramite.toISOString().slice(0, 10) : null,
+    fechaBajaIso: typeof inp.fecha_baja === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(inp.fecha_baja) ? inp.fecha_baja : null,
   } as const;
   if (ley === 'Ley73') {
     return { ...base, palancas: pal, incluir: {}, destinoInfonavit: 'pension', datos: {} };

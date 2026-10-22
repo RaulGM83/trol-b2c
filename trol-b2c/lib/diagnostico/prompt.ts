@@ -87,18 +87,17 @@ Los tres factores deben trabajarse en conjunto; mejorar solo uno sin atender los
    - 63.5 años: 95%
    - 64.5 años o más: 100% (sin penalización)
 
-### Estrategias por situación laboral:
-- EMPLEADO: Usar Modalidad 10 (segundo empleo) para sumar salarios de ambos empleos y subir el promedio de las últimas 250 semanas.
-- DESEMPLEADO CON MOD40 VIGENTE: Modalidad 40 es la forma más económica de cotizar con un salario alto. Si hay gap con el último salario, permite recuperar la cotización de esas semanas sin cotizar.
-- DESEMPLEADO SIN MOD40: Cotizar mínimo 12 meses con Modalidad 10 independiente o empleo formal; después de eso podrá acceder a Modalidad 40.
+### Régimen de Modalidad 40 desde el 22 de octubre de 2026 (acuerdo del Consejo Técnico del IMSS, DOF 21-oct-2026):
+- La Modalidad 40 YA NO se paga hacia atrás: la cotización corre desde la solicitud. No existe «Modalidad 40 retroactiva» ni préstamo para pagarla; no la menciones.
+- El salario de Modalidad 40 se topa al último salario base de cotización más 1 UMA (piso 1 salario mínimo). Para cotizar con más, la vía es la Modalidad 10 (independiente), que cuesta más y admite hasta 25 UMA.
+- Quien viene de Modalidad 10 (trabajador independiente) no puede contratar Modalidad 40. No se combinan: el plan va entero en una modalidad.
+- Siguen vigentes los 5 años desde la baja para inscribirse (art. 218) y los 12 meses tras una baja de Modalidad 40 (art. 220).
+- Quien ya estaba inscrito en Modalidad 40 antes del 22-oct-2026 conserva sus condiciones mientras siga pagando.
 
-### Préstamo para Modalidad 40 Retroactiva:
-Aplica SOLO si se cumplen TODOS estos requisitos:
-- Le aplica Modalidad 40 vigente
-- Más de 950 semanas cotizadas
-- Más de 40 semanas de gap de cotización
-- Más de 59.5 años de edad
-El préstamo se garantiza con saldo AFORE + Infonavit y, si es necesario, con la pensión futura.
+### Estrategias por situación laboral (Ley 73):
+- EMPLEADO: seguir empleado mientras pueda; al salir, Modalidad 40 topada o Modalidad 10 a 25 UMA. Con muchas semanas conviene empezar a pagar tarde: ~5 años de cotización al salario alto llenan el promedio de 250 semanas.
+- DESEMPLEADO: comparar siempre tres caminos: tramitar la pensión ya, cotizar 12-24 meses en Modalidad 40 (topada) o en Modalidad 10 (hasta 25 UMA). Si el costo de 12 meses no se recupera en 36 meses de aumento, conviene tramitar ya.
+- DERECHOS VENCIDOS: Modalidad 10 para reactivar (12 meses); después de la Modalidad 10 no hay Modalidad 40.
 
 ## PASO 3: IMSS LEY 97
 
@@ -243,7 +242,7 @@ Gestorías que le aplican, y NADA MÁS.
 Primero lo que casi siempre es el punto: si NO hay semanas descontadas ni indicios de que le falten semanas, dilo así de corto —que su historial no muestra semanas perdidas ni periodos que haya que recuperar— y ahí termina la sección. No inventes trabajo que no hay.
 Si hay semanas descontadas o huecos que sí pesan, explica qué se puede recuperar y cómo.
 Modalidad 40 y Modalidad 10 SÓLO en clientes Ley 73. En Ley 97 no las menciones ni para decir que no aplican.
-En Ley 73 y sólo entonces: si es empleado, la oportunidad de Mod 10 para subir salario; si es desempleado con Mod 40 vigente, que es la forma más económica de cotizar alto; si es desempleado sin Mod 40, la ruta de 12 meses de Mod 10 antes de acceder; y si Mod 40 Retroactiva aplica (>950 sem, >40 sem de gap, >59.5 años), su beneficio, costo y financiamiento. Si no le aplica ninguna, no las expliques para descartarlas.
+En Ley 73 y sólo entonces: los tres caminos (tramitar ya · Modalidad 40 topada al último salario + 1 UMA · Modalidad 10 hasta 25 UMA) con su costo mensual y en cuántos meses se recupera; si viene de Modalidad 10, la Modalidad 40 no está disponible. Nunca hables de Modalidad 40 retroactiva ni de financiarla: desde el 22-oct-2026 no existe. Si no le aplica ninguna, no las expliques para descartarlas.
 
 ## 5. oportunidades_issste (80-120 palabras, 1-2 párrafos)
 Estrategia ISSSTE. Usa los campos issste_status, issste_regimen, issste_anios, issste_fecha_alta e issste_fecha_baja para el análisis. Si tiene régimen Cuentas Individuales (incluyendo "SIN REGIMEN" que se trata igual): analiza portabilidad de semanas no coincidentes con IMSS vs cumplir requisitos en ambos institutos (25 años, 60 años, PMG ~$6,900); menciona el periodo cotizado (fecha alta a fecha baja) y los años acumulados. Si tiene Décimo Transitorio: identifica cuál de los 3 tipos de pensión aplica (Cesantía 65+/10 años, Retiro 60+/15 años con tabla 50-100%, o Jubilación 30/28 años con edad según periodo) y recomienda estrategia independiente. Si no hay cotizaciones ISSSTE, deja esta sección con una sola línea diciendo que no identificamos cotizaciones en el ISSSTE. No expliques los regímenes ni los tipos de pensión para después descartarlos.
@@ -278,7 +277,7 @@ Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código, sin backtic
  * usuario, para que el prompt de sistema se pueda cachear entre clientes.
  */
 export const USER_PROMPT = `Genera todas las secciones narrativas del Diagnóstico Avanzado para este cliente, a partir de los datos que siguen. Identifica primero qué leyes le aplican (Ley 73, Ley 97, ISSSTE CI, ISSSTE DT). Aplica estrictamente lo que corresponda A SU LEY, y nada más:
-- Si es Ley 73: la conservación de derechos (25% del tiempo cotizado), la tabla de recuperación según gap, los 3 factores de optimización y los criterios de Modalidad 40 retroactiva.
+- Si es Ley 73: la conservación de derechos (25% del tiempo cotizado), la tabla de recuperación según gap, los 3 factores de optimización y el régimen de Modalidad 40 vigente desde el 22-oct-2026 (sin retroactivo, salario topado, Modalidad 10 como alternativa).
 - Si es Ley 97: el modelo de fuentes con el destino que YA se eligió para la subcuenta de vivienda. NO menciones conservación de derechos ni Modalidad 40; en Ley 97 no aplican.
 - Siempre: las estrategias por situación laboral y la regla de ahorro según edad.
 No expliques una regla para luego decir que no le toca. Si algo no aplica, simplemente no aparece.

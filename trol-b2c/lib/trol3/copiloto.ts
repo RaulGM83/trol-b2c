@@ -72,7 +72,7 @@ function contexto(v: VistaAsesoria): string {
     `Nombre: ${txt(c.nombre)} · edad ${txt(c.edad)} · ${txt(c.ley)} · semanas ${txt(c.semanas)} (${txt(c.semanas_capa)}) · empleo: ${txt(c.status_empleo)}`,
     `Conserva derechos: ${txt(c.conserva_derechos)} · fin de conservación: ${txt(c.fin_conservacion)} · datos del IMSS al ${txt(c.datos_al)}`,
     `AFORE: ${txt(c.afore_actual)} · saldo RCV 97: ${txt(c.saldo_rcv97)} · saldo Infonavit: ${txt(c.saldo_infonavit)} (${txt(c.saldo_infonavit_capa)})`,
-    `Pensión hoy: ${txt(n.pension_base)} · pensión máxima estimada: ${txt(n.pension_maxima)} · con Mod 40 retroactiva: ${txt(n.pension_mod40_retro)} (costo ${txt(n.costo_retro)}) · límite inscripción Mod 40: ${txt(n.limite_mod40)}`,
+    `Pensión hoy: ${txt(n.pension_base)} · pensión máxima estimada: ${txt(n.pension_maxima)} · Mod 40 (desde el 22-oct-2026 sin retroactivo, tope último SBC + 1 UMA): con Mod 40 12 m: ${txt(n.pension_mod40_futuro)} · con Mod 10 12 m: ${txt(n.pension_mod10_futuro)} · régimen: ${txt(n.mod40_regimen)} · límite inscripción Mod 40: ${txt(n.limite_mod40)}`,
     `Lo que le preocupa (sus palabras): ${txt(c.dolor_principal)} · espera recibir: ${txt(c.expectativa_pension)}`,
     `Hallazgos:\n${v.hallazgos.map((h) => `  · [${h.severidad}] ${h.titulo}: ${h.detalle}`).join('\n') || '  (ninguno)'}`,
     `Oportunidades abiertas:\n${v.oportunidades.map((o) => `  · ${o.nombre} (${o.codigo}, ${o.estado}) · ficha ${o.ficha ?? 'SIN FICHA'}${o.motivo ? ` · detectada por: ${o.motivo}` : ''}${o.urgencia ? ` · fecha límite ${o.urgencia}` : ''}`).join('\n') || '  (ninguna)'}`,
