@@ -24,6 +24,8 @@ export const UMBRAL_RECUPERACION_MESES = 36;
 export const MESES_CAMINO_DEFAULT = [12, 24];
 /** Lo mínimo que vale la pena cotizar en el barrido de inicio. */
 export const MESES_MINIMOS_COTIZAR = 12;
+/** Mod 10 escalonada: meses al tope antes del retiro (~250 semanas; claude/107 decisión 9). */
+export const MOD10_ESCALON_MESES = 58;
 
 export interface OpcionCotizar {
   meses: number;

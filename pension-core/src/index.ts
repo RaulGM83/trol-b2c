@@ -27,6 +27,7 @@ export {
   UMBRAL_RECUPERACION_MESES,
   MESES_CAMINO_DEFAULT,
   MESES_MINIMOS_COTIZAR,
+  MOD10_ESCALON_MESES,
 } from './caminos-ley73';
 export type {
   CaminosLey73,

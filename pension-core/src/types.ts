@@ -72,6 +72,15 @@ export interface Palancas {
    * `mod10`. Antes del corte se ignora (regla vieja de la hoja: columna AA).
    */
   modalidadFutura?: 'mod40' | 'mod10';
+  /**
+   * Mod 10 escalonada (claude/107 decisión 9, Raúl 24-oct): con
+   * `modalidadFutura = 'mod10'` cotiza al salario mínimo para sumar semanas y
+   * sube al salario de la palanca (topado a 25 UMA) sólo los últimos N meses
+   * antes del retiro, que son los que cuentan para el promedio de 250 semanas.
+   * Default sin escalón (todo al salario de la palanca). Valor típico:
+   * `MOD10_ESCALON_MESES` (58 ≈ 250 semanas). Sólo después del corte.
+   */
+  mod10EscalonMeses?: number;
   /** Recuperar semanas descontadas al pensionarse. */
   recuperarSemanasDescontadas: boolean;
   /** Recuperar semanas vía Mod40 retroactivo (solo si aplica hoy). */
@@ -295,6 +304,8 @@ export interface ResultadoLey73 {
     /** Modalidad con la que se costeó la serie futura (null si no cotiza). */
     modalidadFutura: 'mod40' | 'mod10' | null;
     mod40Permitida: boolean;
+    /** Meses topados de la Mod 10 escalonada con los que corrió (null = sin escalón). */
+    mod10EscalonMeses: number | null;
     /** Por qué no (null si está permitida o antes del corte). */
     motivoNoPermitida: 'mod10_previa' | 'derechos_perdidos' | 'ventana_vencida' | null;
     /** Tope de salario de la modalidad elegida; null antes del corte. */

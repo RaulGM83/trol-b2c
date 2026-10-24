@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { computeLey73 } from '../ley73';
 import { computeProyectoMod40, proyectoMod40Disponible } from '../mod40-proyecto';
 import { regimenMod40, MOD40_CORTE_REGIMEN } from '../mod40-ventana';
-import { caminosLey73, sugerirInicio } from '../caminos-ley73';
+import { caminosLey73, sugerirInicio, MOD10_ESCALON_MESES } from '../caminos-ley73';
 import { SALARIO_MINIMO, UMA } from '../tablas';
 import type { EntradaCalculo, Palancas, PerfilSemilla, SaldosSemilla, SalarioMes } from '../types';
 
@@ -255,6 +255,35 @@ describe('computeLey73 — régimen nuevo', () => {
 // ---------------------------------------------------------------------------
 // caminosLey73 — pensión hoy · Mod 40 · Mod 10
 // ---------------------------------------------------------------------------
+
+describe('Mod 10 escalonada', () => {
+  // 50 años, 1,100 semanas, SBC $450, desempleado: retiro a los 60 = ~10 años de Mod 10.
+  const g = perfil({ nacimiento: '1976-05-10', sd: 450, semanas: 1100, ultima: '2026-06-30' });
+  const pal = { ...palancas, edadRetiro: 60, modalidadFutura: 'mod10' as const };
+  const plano = computeLey73(entrada(g, { palancas: pal }));
+  const esc = computeLey73(entrada(g, { palancas: { ...pal, mod10EscalonMeses: MOD10_ESCALON_MESES } }));
+
+  it('misma pensión que la Mod 10 al tope todo el tiempo: el promedio sólo ve los últimos meses', () => {
+    expect(esc.detalle.mod10EscalonMeses).toBe(MOD10_ESCALON_MESES);
+    expect(plano.detalle.mod10EscalonMeses).toBe(null);
+    expect(esc.pensionMensual!).toBeCloseTo(plano.pensionMensual!, 0);
+  });
+
+  it('cuesta mucho menos: los años de más se pagan al salario mínimo', () => {
+    expect(esc.costoEstrategiaFutura).toBeLessThan(plano.costoEstrategiaFutura * 0.7);
+    expect(esc.costoMensualPrimerMes).toBeLessThan(plano.costoMensualPrimerMes);
+  });
+
+  it('con un escalón más corto que el promedio la pensión baja', () => {
+    const corto = computeLey73(entrada(g, { palancas: { ...pal, mod10EscalonMeses: 24 } }));
+    expect(corto.pensionMensual!).toBeLessThan(esc.pensionMensual!);
+  });
+
+  it('en Mod 40 se ignora', () => {
+    const m40 = computeLey73(entrada(g, { palancas: { ...pal, modalidadFutura: 'mod40', mod10EscalonMeses: 58 } }));
+    expect(m40.detalle.mod10EscalonMeses).toBe(null);
+  });
+});
 
 describe('caminosLey73', () => {
   it('61 años con derecho: tres caminos, Mod 10 sube más que Mod 40 y cuesta más', () => {

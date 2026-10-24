@@ -234,8 +234,20 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const scMedio = antesDelCorte ? scRetro : perfil.salario_diario_registrado;
   const smMedio = antesDelCorte ? smRetro : smFuturo;
 
+  // Mod 10 escalonada (claude/107 decisión 9): sólo después del corte y en Mod 10.
+  const escalon =
+    !antesDelCorte && modalidadFutura === 'mod10' && palancas.mod10EscalonMeses != null
+      ? Math.max(0, Math.round(palancas.mod10EscalonMeses))
+      : null;
+  const smEscalon = porAnio(SALARIO_MINIMO, anioHoy);
+  const salarioFuturoProm =
+    escalon == null || mesesFuturos === 0
+      ? salarioFuturo
+      : (Math.min(escalon, mesesFuturos) * salarioFuturo +
+          Math.max(mesesFuturos - escalon, 0) * Math.min(salarioFuturo, smEscalon)) /
+        mesesFuturos;
   const salarioCot250 =
-    (mesesPasados * scPasado + mesesFuturos * salarioFuturo + mesesMedio * scMedio) /
+    (mesesPasados * scPasado + mesesFuturos * salarioFuturoProm + mesesMedio * scMedio) /
     MESES_BASE_250; // K8
   const salarioMin250 =
     (mesesPasados * smPasado + mesesFuturos * smFuturo + mesesMedio * smMedio) / 60; // K12 (÷60 en el Excel)
@@ -432,7 +444,9 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       ? x > 60
         ? porAnio(SALARIO_MINIMO, anioHoy)
         : salarioMod40
-      : salarioFuturo; // Y
+      : escalon != null && x > escalon
+        ? Math.min(salarioFuturo, smEscalon) // Mod 10 escalonada: mínimo para sumar semanas
+        : salarioFuturo; // Y
     const z = y * diasDelMes(v); // Z
     const modalidad: 10 | 40 = antesDelCorte
       ? diasEntre(ultimaCot, v) / 365 > 5
@@ -522,6 +536,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
             : null
         : modalidadFutura,
       mod40Permitida: reg.mod40Permitida,
+      mod10EscalonMeses: escalon,
       motivoNoPermitida: reg.motivoNoPermitida,
       sbcTope,
       salarioFuturo,
