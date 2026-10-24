@@ -21,13 +21,13 @@ import type { EntradaCalculo, Palancas, PerfilSemilla, SaldosSemilla, SalarioMes
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const HOY = d('2026-10-22'); // el día del corte
-const UMA26 = UMA[2026]; // 117.35
+const UMA26 = UMA[2026]; // 117.31
 const SM26 = SALARIO_MINIMO[2026]; // 315.04
 
 const palancas: Palancas = {
   edadRetiro: 60,
   pctTiempoCotizando: 1,
-  salarioMod40: 2933.75, // 25 UMA: el asesor pide el máximo
+  salarioMod40: 25 * UMA[2026], // 25 UMA: el asesor pide el máximo
   recuperarSemanasDescontadas: false,
   recuperarSemanasMod40Retro: true, // ya no debe surtir efecto
   salarioCotizacionRetro: 'MAXIMO',
@@ -103,6 +103,26 @@ describe('regimenMod40', () => {
     const r = regimenMod40(null, HOY, { ultimoSbc: 600, ultimaModalidad: 'independiente' });
     expect(r.mod40Permitida).toBe(false);
     expect(r.motivoNoPermitida).toBe('mod10_previa');
+  });
+
+  it('derechos perdidos cierran la Mod 40 (la vía es Mod 10); con derechos no cambia nada', () => {
+    const sin = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'obligatorio', conservaDerechos: false });
+    expect(sin.mod40Permitida).toBe(false);
+    expect(sin.motivoNoPermitida).toBe('derechos_perdidos');
+    expect(sin.avisos.join(' ')).toMatch(/conservación de derechos/);
+    const con = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'obligatorio', conservaDerechos: true });
+    expect(con.mod40Permitida).toBe(true);
+    expect(con.motivoNoPermitida).toBe(null);
+    // Mod 10 previa manda sobre derechos perdidos en el motivo.
+    const ambos = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'independiente', conservaDerechos: false });
+    expect(ambos.motivoNoPermitida).toBe('mod10_previa');
+  });
+
+  it('UMA 2026 = 117.31: tope 25 UMA = 2,932.75', () => {
+    expect(UMA26).toBe(117.31);
+    const r = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'obligatorio' });
+    expect(r.sbcTopeMod10).toBeCloseTo(2932.75, 2);
+    expect(r.sbcTopeMod40).toBeCloseTo(517.31, 2);
   });
 
   it('ventana vencida (expediente) cierra la Mod 40', () => {
@@ -198,7 +218,7 @@ describe('computeLey73 — régimen nuevo', () => {
     expect(r.detalle.avisosRegimen.join(' ')).toMatch(/independiente \(Modalidad 10\)/);
   });
 
-  it('golden 6: empleado, SBC $400, sin hueco: baja = arranque, Mod 40 a $517.35', () => {
+  it('golden 6: empleado, SBC $400, sin hueco: baja = arranque, Mod 40 a $517.31', () => {
     const g6 = perfil({ nacimiento: '1968-01-10', sd: 400, semanas: 1300, ultima: '2026-10-20', empleado: true });
     const r = computeLey73(entrada(g6));
     expect(r.detalle.fechaBaja.getTime()).toBe(r.detalle.fechaTramite.getTime());
@@ -260,6 +280,21 @@ describe('caminosLey73', () => {
     expect(c.mod40.aplica).toBe(false);
     expect(c.mod40.motivo).toMatch(/Modalidad 10/);
     expect(c.mod10.opciones.length).toBe(2);
+  });
+
+  it('derechos perdidos con ventana abierta: el camino Mod 40 no aplica, la Mod 10 sí', () => {
+    // 61 años, 547 semanas, baja en 2022: perdió la conservación pero el art. 218 (5 años) sigue abierto.
+    const g = perfil({ nacimiento: '1965-03-15', sd: 400, semanas: 547, ultima: '2022-06-30', conserva_derechos: false });
+    const c = caminosLey73(entrada(g));
+    expect(c.mod40.aplica).toBe(false);
+    expect(c.mod40.motivo).toMatch(/conservación de derechos/);
+    expect(c.mod40.opciones.length).toBe(0);
+    expect(c.mod10.aplica).toBe(true);
+    expect(c.mod10.opciones.length).toBe(2);
+    const r = computeLey73(entrada(g));
+    expect(r.detalle.mod40Permitida).toBe(false);
+    expect(r.detalle.motivoNoPermitida).toBe('derechos_perdidos');
+    expect(r.detalle.modalidadFutura).toBe('mod10');
   });
 
   it('57 años: pensión hoy es la de los 60 sin cotizar, y no es tramitable', () => {

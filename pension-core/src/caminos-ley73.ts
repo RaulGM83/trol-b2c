@@ -139,6 +139,20 @@ function opcion(
   };
 }
 
+/** Texto del motivo por el que no se ofrece Mod 40 (espejo del motor n8n v5.8.1). */
+function motivoMod40NoPermitida(motivo: 'mod10_previa' | 'derechos_perdidos' | 'ventana_vencida' | null): string {
+  switch (motivo) {
+    case 'mod10_previa':
+      return 'Viene de Modalidad 10 (independiente): no puede contratar Modalidad 40.';
+    case 'derechos_perdidos':
+      return 'Sin conservación de derechos: la vía es Modalidad 10 para recuperarlos; después no hay Modalidad 40.';
+    case 'ventana_vencida':
+      return 'La ventana para inscribirse a Modalidad 40 ya venció.';
+    default:
+      return 'No puede contratar Modalidad 40 a esta fecha.';
+  }
+}
+
 /**
  * Los tres caminos a una fecha de inicio. Nunca lanza: un camino que no aplica
  * sale con `aplica: false` y su motivo.
@@ -180,7 +194,7 @@ export function caminosLey73(entrada: EntradaCalculo, opts: OpcionesCaminos = {}
       ? null
       : sonda.detalle.antesDelCorte
         ? 'Antes del corte del 22-oct-2026 aplica el régimen anterior (retro).'
-        : (sonda.detalle.avisosRegimen.find((a) => /Modalidad 10/.test(a)) ?? 'No puede contratar Modalidad 40 a esta fecha.'),
+        : motivoMod40NoPermitida(sonda.detalle.motivoNoPermitida),
     sbcTope: mod40Aplica ? sonda.detalle.sbcTope : null,
     opciones: mod40Aplica
       ? meses.map((m) => opcion(entrada, 'mod40', fechaInicio, m, base.pensionMensual, tramitable))
@@ -378,7 +392,7 @@ export function sugerirInicio(entrada: EntradaCalculo, opts: OpcionesSugerirInic
     ? barrido(entrada, 'mod10', fechaBaja, fechaRetiro, base.pensionMensual, pasoMeses, mesesMinimos)
     : null;
   if (quiere('mod40') && !sonda.detalle.mod40Permitida) {
-    avisos.push(sonda.detalle.avisosRegimen.find((a) => /Modalidad 10/.test(a)) ?? 'La Modalidad 40 no está permitida.');
+    avisos.push(motivoMod40NoPermitida(sonda.detalle.motivoNoPermitida));
   }
 
   let mejor: SugerenciaInicio['mejor'] = null;

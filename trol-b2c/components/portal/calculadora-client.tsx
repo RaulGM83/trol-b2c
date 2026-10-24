@@ -861,8 +861,8 @@ function Calc73Panel({
   // sólo se le pasa lo que la semilla no trae.
   const empleado = perfil.status_empleo === "empleado"
   const regHistorial = useMemo(
-    () => regimenMod40(historialLaboral, fechaTramite, { ultimoSbc: perfil.salario_diario_registrado, sinBaja: empleado, limiteExpediente: limiteInscripcionMod40 }),
-    [historialLaboral, fechaTramite, perfil.salario_diario_registrado, empleado, limiteInscripcionMod40],
+    () => regimenMod40(historialLaboral, fechaTramite, { ultimoSbc: perfil.salario_diario_registrado, sinBaja: empleado, limiteExpediente: limiteInscripcionMod40, conservaDerechos: perfil.conserva_derechos }),
+    [historialLaboral, fechaTramite, perfil.salario_diario_registrado, empleado, limiteInscripcionMod40, perfil.conserva_derechos],
   )
   // Cuándo deja de cotizar el empleado (§3b). null = sigue empleado hasta que
   // arranca el plan (sin hueco). Sólo se fija si el cliente dice que podría salir.
@@ -1224,7 +1224,7 @@ function Calc73Panel({
                   size="sm"
                   variant={modalidad === "mod40" ? "default" : "outline"}
                   disabled={!regHistorial.mod40Permitida}
-                  title={!regHistorial.mod40Permitida ? (regHistorial.motivoNoPermitida === "mod10_previa" ? "Viene de Modalidad 10: no puede contratar Mod 40" : "Ventana de inscripción vencida") : undefined}
+                  title={!regHistorial.mod40Permitida ? (regHistorial.motivoNoPermitida === "mod10_previa" ? "Viene de Modalidad 10: no puede contratar Mod 40" : regHistorial.motivoNoPermitida === "derechos_perdidos" ? "Sin conservación de derechos: la vía es Mod 10" : "Ventana de inscripción vencida") : undefined}
                   onClick={() => set("modalidadFutura", "mod40")}
                 >
                   Mod 40 · hasta {fmt(topeMod40)}

@@ -127,6 +127,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     ultimoSbc: entrada.ultimoSbc ?? perfil.salario_diario_registrado,
     ultimaModalidad,
     sinBaja: empleado,
+    conservaDerechos: perfil.conserva_derechos,
     limiteExpediente: empleado
       ? limiteMod40Local
       : (perfil.fechas.limite_inscripcion_mod40 ?? limiteMod40Local),
@@ -160,7 +161,9 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
       avisosRegimen.push(
         reg.motivoNoPermitida === 'mod10_previa'
           ? 'Como vienes de Modalidad 10 no puedes contratar Modalidad 40: el escenario corre en Modalidad 10.'
-          : 'La ventana para inscribirte a Modalidad 40 ya venció a esta fecha: el escenario corre en Modalidad 10.',
+          : reg.motivoNoPermitida === 'derechos_perdidos'
+            ? 'Sin conservación de derechos no se contrata Modalidad 40: el escenario corre en Modalidad 10, que es la vía para recuperarlos.'
+            : 'La ventana para inscribirte a Modalidad 40 ya venció a esta fecha: el escenario corre en Modalidad 10.',
       );
     } else {
       modalidadFutura = pedida;
@@ -519,6 +522,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
             : null
         : modalidadFutura,
       mod40Permitida: reg.mod40Permitida,
+      motivoNoPermitida: reg.motivoNoPermitida,
       sbcTope,
       salarioFuturo,
       fechaBaja: ultimaCot,

@@ -295,6 +295,8 @@ export interface ResultadoLey73 {
     /** Modalidad con la que se costeó la serie futura (null si no cotiza). */
     modalidadFutura: 'mod40' | 'mod10' | null;
     mod40Permitida: boolean;
+    /** Por qué no (null si está permitida o antes del corte). */
+    motivoNoPermitida: 'mod10_previa' | 'derechos_perdidos' | 'ventana_vencida' | null;
     /** Tope de salario de la modalidad elegida; null antes del corte. */
     sbcTope: number | null;
     /** Salario futuro con el que DE VERDAD corrió (ya topado). */

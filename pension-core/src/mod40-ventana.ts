@@ -72,6 +72,14 @@ export interface OpcionesRegimenMod40 {
    * usa cuando no hay historial; con historial se lee de `fecha_fin`.
    */
   sinBaja?: boolean;
+  /**
+   * `conserva_derechos` del expediente (hoy). Con `false` no se ofrece Mod 40:
+   * la vía para recuperar derechos es la Mod 10, y después de una Mod 10 ya no
+   * hay Mod 40 (claude/107 decisión 10; espejo de trol3 migración 258). Si la
+   * persona se reactiva con patrón y recupera la conservación, la regla general
+   * vuelve a abrirla.
+   */
+  conservaDerechos?: boolean | null;
 }
 
 export interface RegimenMod40Info {
@@ -92,7 +100,7 @@ export interface RegimenMod40Info {
   sbcTopeMod10: number;
   /** ¿Puede contratar Mod 40 a esa fecha? */
   mod40Permitida: boolean;
-  motivoNoPermitida: 'mod10_previa' | 'ventana_vencida' | null;
+  motivoNoPermitida: 'mod10_previa' | 'derechos_perdidos' | 'ventana_vencida' | null;
   /** ¿Hay periodo que pagar hacia atrás? Después del corte, nunca. */
   retroAplica: boolean;
   avisos: string[];
@@ -162,8 +170,16 @@ export function regimenMod40(
   // desde esa baja, así que aquí no se condiciona a `sinBaja`.
   const ventanaVencida = !!limiteExp && diasEntre(fechaTramite, limiteExp) < 0;
   const mod10Previa = ultimaModalidad === 'independiente';
-  const mod40Permitida = !mod10Previa && !ventanaVencida;
-  const motivoNoPermitida = mod10Previa ? 'mod10_previa' : ventanaVencida ? 'ventana_vencida' : null;
+  // 2026.10.24.1: sin conservación de derechos no se ofrece Mod 40 (la vía es Mod 10).
+  const sinDerechos = opts.conservaDerechos === false;
+  const mod40Permitida = !mod10Previa && !sinDerechos && !ventanaVencida;
+  const motivoNoPermitida = mod10Previa
+    ? 'mod10_previa'
+    : sinDerechos
+      ? 'derechos_perdidos'
+      : ventanaVencida
+        ? 'ventana_vencida'
+        : null;
 
   if (regimen === 'anterior') {
     avisos.push(
@@ -186,6 +202,10 @@ export function regimenMod40(
     if (mod10Previa) {
       avisos.push(
         'Tu última cotización fue como persona trabajadora independiente (Modalidad 10): desde ahí no se puede pasar a Modalidad 40.',
+      );
+    } else if (sinDerechos) {
+      avisos.push(
+        'Perdiste la conservación de derechos: la vía para recuperarlos es la Modalidad 10, y después de una Modalidad 10 ya no hay Modalidad 40.',
       );
     }
     if (!u && !opts.ultimaModalidad) {

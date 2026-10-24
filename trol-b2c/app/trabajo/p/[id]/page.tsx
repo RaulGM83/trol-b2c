@@ -193,7 +193,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
     : regMod40 === 'anterior'
       ? `Inscrito desde antes del 22-oct · ${Number.isFinite(topeMod40) ? fmtMXN(topeMod40) + '/día' : ''}`
       : mod40Permitida === false
-        ? 'No puede (Mod 10 previa o ventana vencida)'
+        ? 'No puede (Mod 10 previa, derechos perdidos o ventana vencida)'
         : `Hacia adelante · tope ${Number.isFinite(topeMod40) ? fmtMXN(topeMod40) + '/día' : '—'}`;
   // Saldos corregidos por el asesor (portal) viven en public.clientes.saldos_corregidos
   let saldosCorregidos: SaldosCorregidos | null = null;

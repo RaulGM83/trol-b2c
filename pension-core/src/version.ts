@@ -83,7 +83,13 @@
 // al arranque. Nuevo: `caminosLey73` (pensión hoy · Mod 40 · Mod 10) y
 // `sugerirInicio` (cuándo arrancar). Antes del corte todo corre como antes:
 // los goldens del mundo viejo no se mueven.
-export const ENGINE_VERSION = '2026.10.22.1';
+// 2026.10.24.1 — UMA 2026 = 117.31 (INEGI; decía 117.35): tope 25 UMA =
+// 2,932.75 y tope de Mod 40 = último SBC + 117.31. Y sin conservación de
+// derechos no se ofrece Mod 40 (`motivoNoPermitida: 'derechos_perdidos'`): la
+// vía para recuperarlos es la Mod 10 y después de una Mod 10 no hay Mod 40; si
+// la persona se reactiva con patrón y recupera la conservación, vuelve a
+// abrirse. Espejo de trol3 migración 258 y del motor n8n v5.8.1 (claude/107 §10).
+export const ENGINE_VERSION = '2026.10.24.1';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.
