@@ -184,6 +184,16 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
 
           {millas ? <MillasCard m={millas} /> : null}
 
+          {e.ley === 'Ley73' ? (
+            // claude/109: Informe Trol #1 (cierre de la Mod 40). Sólo Ley 73: es a quien le cambió la regla.
+            <Link href="/blog/informe-trol-1-cierre-modalidad-40" className="block rounded-2xl border-2 border-amber-400 bg-amber-50 p-5 text-ink transition hover:border-ink">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Informe Trol #1 · Modalidad 40</div>
+              <h2 className="mt-1 text-sm font-bold">El día que el IMSS cerró la Modalidad 40</h2>
+              <p className="mt-1 text-xs text-muted">Qué cambió el 22 de octubre, a quién le pega y qué caminos quedan, con datos de 8,815 personas como tú.</p>
+              <span className="mt-2 inline-block text-xs font-semibold underline">Leer el informe</span>
+            </Link>
+          ) : null}
+
           {pa && ((pa.hallazgos ?? []).length > 0 || Number(pa.en_orden) > 0) && Number(pa.parada) > 1 ? (
             <section className="rounded-2xl border border-line bg-white p-5">
               <h2 className="text-sm font-bold">Lo que encontramos en tu caso</h2>
