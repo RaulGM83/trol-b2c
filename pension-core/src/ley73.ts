@@ -5,13 +5,13 @@
 
 import {
   AJUSTE_EDAD,
-  COSTO_MOD10,
   COSTO_MOD40_FUTURO,
   CUANTIAS_LEY73,
   PMG_LEY73,
   REDONDEO_INCREMENTO,
   SALARIO_MINIMO,
   UMA,
+  tasaMod10,
 } from './tablas';
 import type {
   DesgloseRetro,
@@ -437,8 +437,12 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     mesesFuturosSerie.push(v);
   }
   // El countdown X del Excel deja fuera el último mes de la serie (el "+X6"
-  // sobre el texto " " produce error→0), así que se costean total-1 meses.
-  const mesesActivos = mesesFuturosSerie.slice(0, Math.max(mesesFuturosSerie.length - 1, 0));
+  // sobre el texto " " produce error→0), así que la hoja costea total-1 meses.
+  // Se respeta antes del corte (paridad con la hoja); después del corte se
+  // costean todos los meses, igual que la calculadora n8n (v5.8.4).
+  const mesesActivos = antesDelCorte
+    ? mesesFuturosSerie.slice(0, Math.max(mesesFuturosSerie.length - 1, 0))
+    : mesesFuturosSerie;
   const total = mesesActivos.length;
   let costoEstrategiaFutura = 0;
   let costoMensualPrimerMes = 0;
@@ -469,8 +473,7 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     const anio = v.getUTCFullYear();
     let costo: number; // AB
     if (modalidad === 10) {
-      const [, tasa, inc] = lookupAprox(y, COSTO_MOD10 as Array<[number, number, number]>);
-      costo = (tasa + inc * (anio - 2024)) * z;
+      costo = tasaMod10(y, anio) * z;
     } else {
       costo =
         (COSTO_MOD40_FUTURO.tasa2024 +

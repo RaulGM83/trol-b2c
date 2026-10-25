@@ -16,7 +16,7 @@ import { computeLey73 } from '../ley73';
 import { computeProyectoMod40, proyectoMod40Disponible } from '../mod40-proyecto';
 import { regimenMod40, MOD40_CORTE_REGIMEN } from '../mod40-ventana';
 import { caminosLey73, sugerirInicio, MOD10_ESCALON_MESES } from '../caminos-ley73';
-import { SALARIO_MINIMO, UMA } from '../tablas';
+import { SALARIO_MINIMO, UMA, tasaMod10 } from '../tablas';
 import type { EntradaCalculo, Palancas, PerfilSemilla, SaldosSemilla, SalarioMes } from '../types';
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -396,5 +396,23 @@ describe('sugerirInicio', () => {
     expect(s.mod40).toBeNull();
     expect(s.mod10!.tabla.length).toBeGreaterThan(12);
     expect(s.avisos.join(' ')).toMatch(/Modalidad 10/);
+  });
+});
+
+describe('tasaMod10 interpolada (2026.10.25.3)', () => {
+  it('en un escalón exacto da la tasa de la tabla', () => {
+    expect(tasaMod10(249, 2024)).toBeCloseTo(0.2266, 6);
+    expect(tasaMod10(2925, 2026)).toBeCloseTo(0.1689 + 0.0109 * 2, 6);
+  });
+  it('entre escalones interpola', () => {
+    const t = tasaMod10(298.5, 2024); // mitad entre 271 y 326
+    expect(t).toBeCloseTo((0.2193 + 0.2081) / 2, 6);
+  });
+  it('el salario mínimo cuesta más en % que el tope', () => {
+    expect(tasaMod10(315.04, 2026)).toBeGreaterThan(tasaMod10(2932.75, 2026) + 0.02);
+  });
+  it('deja de subir en 2030', () => {
+    expect(tasaMod10(2932.75, 2035)).toBeCloseTo(tasaMod10(2932.75, 2030), 9);
+    expect(tasaMod10(2932.75, 2030)).toBeCloseTo(0.1689 + 0.0109 * 6, 6);
   });
 });

@@ -95,7 +95,11 @@
 // `derechos_perdidos` y `computeLey73` usa conservación vigente para el
 // empleado. Espejo de trol3 migración 260 y n8n v5.8.2 (claude/110).
 // 2026.10.25.2 — 500 semanas alcanzan para la pensión Ley 73 (antes > 500).
-export const ENGINE_VERSION = '2026.10.25.2';
+// 2026.10.25.3 — costo de Mod 10 exacto: `tasaMod10` interpola entre los
+// escalones de salario (antes tomaba el de abajo) y deja de subir en 2030
+// (fin de la transición de cesantía). Después del corte se costean todos los
+// meses de la serie (la hoja dejaba fuera el último). Espejo de n8n v5.8.4.
+export const ENGINE_VERSION = '2026.10.25.3';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.
