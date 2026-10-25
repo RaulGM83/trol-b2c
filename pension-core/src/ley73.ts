@@ -264,8 +264,11 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const finConservacion = perfil.fechas.fin_conservacion_derechos
     ? parseISO(perfil.fechas.fin_conservacion_derechos)
     : null;
+  // 2026.10.25.1: el empleado cotiza hoy, así que hoy conserva (la semilla de
+  // n8n ≤ v5.8.1 marca sin conservación a quien cotiza en un registro abierto).
+  const conservaHoy = empleado || perfil.conserva_derechos;
   const conservaAlInicio = antesDelCorte
-    ? perfil.conserva_derechos
+    ? conservaHoy
     : empleado
       ? huecoMeses * DIAS_MES <= (semanasVigentes * 7) / 4
       : perfil.conserva_derechos && (!finConservacion || diasEntre(fechaTramite, finConservacion) >= 0);
@@ -290,7 +293,9 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const semanasFuturas = (diasFuturos * pct) / 7;
   const reactiva =
     pct === 0
-      ? perfil.conserva_derechos
+      ? empleado && !antesDelCorte
+        ? conservaAlInicio
+        : conservaHoy
       : conservaAlInicio || semanasFuturas >= semanasParaReactivar;
   const pierdeConservacion = !reactiva;
 

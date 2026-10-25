@@ -171,7 +171,9 @@ export function regimenMod40(
   const ventanaVencida = !!limiteExp && diasEntre(fechaTramite, limiteExp) < 0;
   const mod10Previa = ultimaModalidad === 'independiente';
   // 2026.10.24.1: sin conservación de derechos no se ofrece Mod 40 (la vía es Mod 10).
-  const sinDerechos = opts.conservaDerechos === false;
+  // 2026.10.25.1: quien cotiza hoy (registro abierto, incluida la Mod 40 en curso)
+  // no tiene derechos perdidos aunque la semilla diga lo contrario.
+  const sinDerechos = opts.conservaDerechos === false && !sinBaja;
   const mod40Permitida = !mod10Previa && !sinDerechos && !ventanaVencida;
   const motivoNoPermitida = mod10Previa
     ? 'mod10_previa'

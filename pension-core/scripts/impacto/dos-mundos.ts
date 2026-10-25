@@ -217,9 +217,11 @@ export function evaluarDosMundos(f: FilaEntrada, opts: OpcionesDosMundos = {}): 
       const r = computeLey73({ ...eN, palancas: { ...pal, pctTiempoCotizando: 1, salarioMod40: tope, ...extra } });
       return { pension: pensionDe(r), costo: Math.round(r.costoEstrategiaFutura), status: r.status };
     };
-    const mod40 = reg.mod40Permitida ? corre({ modalidadFutura: 'mod40' }) : null;
-    const mod10 = corre({ modalidadFutura: 'mod10' });
-    const mod10Esc = corre({ modalidadFutura: 'mod10', mod10EscalonMeses: MOD10_ESCALON_MESES });
+    // Retiro hoy (60+, primer horizonte): no hay meses que cotizar; sólo pensionarse.
+    const cotiza = h.fechaN.getTime() - hoyN.getTime() > 30 * DIA;
+    const mod40 = cotiza && reg.mod40Permitida ? corre({ modalidadFutura: 'mod40' }) : null;
+    const mod10 = cotiza ? corre({ modalidadFutura: 'mod10' }) : null;
+    const mod10Esc = cotiza ? corre({ modalidadFutura: 'mod10', mod10EscalonMeses: MOD10_ESCALON_MESES }) : null;
 
     let sug40: Camino | null = null;
     let sug10: Camino | null = null;

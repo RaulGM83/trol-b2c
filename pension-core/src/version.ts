@@ -89,7 +89,12 @@
 // vía para recuperarlos es la Mod 10 y después de una Mod 10 no hay Mod 40; si
 // la persona se reactiva con patrón y recupera la conservación, vuelve a
 // abrirse. Espejo de trol3 migración 258 y del motor n8n v5.8.1 (claude/107 §10).
-export const ENGINE_VERSION = '2026.10.24.1';
+// 2026.10.25.1 — quien cotiza hoy conserva derechos: la semilla (n8n ≤ v5.8.1)
+// no cuenta la Mod 40 ni el registro abierto y marcaba «sin conservación» a
+// empleados e inscritos en Mod 40. `regimenMod40` ya no los cierra por
+// `derechos_perdidos` y `computeLey73` usa conservación vigente para el
+// empleado. Espejo de trol3 migración 260 y n8n v5.8.2 (claude/110).
+export const ENGINE_VERSION = '2026.10.25.1';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.

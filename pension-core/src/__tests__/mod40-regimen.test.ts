@@ -113,6 +113,9 @@ describe('regimenMod40', () => {
     const con = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'obligatorio', conservaDerechos: true });
     expect(con.mod40Permitida).toBe(true);
     expect(con.motivoNoPermitida).toBe(null);
+    // Quien cotiza hoy no tiene derechos perdidos aunque la semilla lo diga (inscritos en Mod 40, empleados).
+    const cotiza = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'mod40', sinBaja: true, conservaDerechos: false });
+    expect(cotiza.mod40Permitida).toBe(true);
     // Mod 10 previa manda sobre derechos perdidos en el motivo.
     const ambos = regimenMod40(null, HOY, { ultimoSbc: 400, ultimaModalidad: 'independiente', conservaDerechos: false });
     expect(ambos.motivoNoPermitida).toBe('mod10_previa');
