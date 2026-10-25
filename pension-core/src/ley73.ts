@@ -168,7 +168,10 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
     } else {
       modalidadFutura = pedida;
     }
-    sbcTope = modalidadFutura === 'mod40' ? (reg.sbcTopeMod40 ?? reg.sbcTopeMod10) : reg.sbcTopeMod10;
+    const topeMod40 = entrada.sbcTopeMod40Override != null
+      ? Math.min(reg.sbcTopeMod10, Math.max(reg.sbcPiso, entrada.sbcTopeMod40Override))
+      : reg.sbcTopeMod40;
+    sbcTope = modalidadFutura === 'mod40' ? (topeMod40 ?? reg.sbcTopeMod10) : reg.sbcTopeMod10;
     salarioFuturo = Math.min(sbcTope, Math.max(reg.sbcPiso, salarioMod40));
     if (salarioFuturo < salarioMod40 - 0.005) {
       avisosRegimen.push(

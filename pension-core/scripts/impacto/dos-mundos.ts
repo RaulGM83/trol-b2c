@@ -17,7 +17,9 @@ import { computeProyectoMod40 } from '../../src/mod40-proyecto';
 import { regimenMod40, type RegistroHistorialMod40 } from '../../src/mod40-ventana';
 import { sugerirInicio, MOD10_ESCALON_MESES } from '../../src/caminos-ley73';
 import { parseSemillaV2 } from '../../src/semilla';
-import { UMA } from '../../src/tablas';
+import { UMA, SALARIO_MINIMO, CESANTIA97_ANIOS, CESANTIA97_PCT } from '../../src/tablas';
+import { CESANTIA97_BANDAS_UMA_SUP, TASA_CESANTIA_TRABAJADOR, TASA_CESANTIA_PATRON_PRE2023 } from '../../src/tablas-contrafactual';
+import { INPC_INDICES } from '../../src/inpc';
 import { ENGINE_VERSION } from '../../src/version';
 import type { EntradaCalculo, Palancas } from '../../src/types';
 
@@ -85,7 +87,22 @@ export interface ResultadoPersona {
   nuevo_pension: number | null;
   nuevo_costo: number | null;
   base_pension: number | null;
-  detalle: { edades: DetalleEdad[]; avisos: string[] } | null;
+  detalle: { edades: DetalleEdad[]; avisos: string[]; resumen?: Resumen; propuestas?: Propuestas } | null;
+}
+
+/** Cesantía y vejez (patrón + trabajador) de cada mundo en el resumen: lo que va a Hacienda al pensionarse. */
+export interface Resumen { viejo_cyv: number; nuevo_cyv: number }
+
+/** Escenarios de política a la primera fecha de retiro (claude/110). */
+export interface Propuestas {
+  tope12: number | null;
+  /** a) Mod 40 hacia adelante con tope = promedio actualizado de 12 meses + 1 UMA. */
+  a_tope12: Camino | null;
+  /** b) 12 meses hacia atrás: al tope de 12 meses (b1) o hasta 25 UMA (b2). Sólo con trámite a los 60+. */
+  b1_retro12_tope: Camino | null;
+  b2_retro12_25uma: Camino | null;
+  /** d) Conservación: con 500+ semanas se pensiona aunque haya perdido la conservación. */
+  d_conservacion: number | null;
 }
 
 const PALANCAS: Palancas = {
@@ -105,6 +122,56 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 function cumple(fnac: Date, edad: number): Date {
   return new Date(Date.UTC(fnac.getUTCFullYear() + edad, fnac.getUTCMonth(), fnac.getUTCDate()));
+}
+
+const anioUTC = (d: Date) => d.getUTCFullYear();
+function porAnioT(t: Record<number, number>, y: number): number {
+  const ks = Object.keys(t).map(Number);
+  const yy = Math.min(Math.max(y, Math.min(...ks)), Math.max(...ks));
+  return t[yy];
+}
+/** Tasa de cesantía y vejez (patrón por banda de UMA + trabajador) en un año. */
+export function tasaCyV(salario: number, anio: number): number {
+  const uma = porAnioT(UMA, anio);
+  const sm = porAnioT(SALARIO_MINIMO, anio);
+  let pat = TASA_CESANTIA_PATRON_PRE2023;
+  if (anio >= 2023 && salario > sm) {
+    const k = Math.min(Math.max(anio, 2023), 2030);
+    const col = CESANTIA97_ANIOS.indexOf(k);
+    let fila = CESANTIA97_BANDAS_UMA_SUP.findIndex((c) => salario / uma <= c);
+    if (fila < 0) fila = CESANTIA97_BANDAS_UMA_SUP.length;
+    pat = CESANTIA97_PCT[fila][col] / 100;
+  }
+  return pat + TASA_CESANTIA_TRABAJADOR;
+}
+/** CyV de una serie mensual [desde, hasta) con salario por mes (meses restantes al final → salario). */
+export function cyvSerie(desde: Date, hasta: Date, salario: (mesesAlFinal: number, mes: Date) => number): number {
+  let total = 0;
+  const meses: Date[] = [];
+  for (let m = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), 1)); m < hasta; m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1))) meses.push(m);
+  meses.forEach((m, i) => {
+    const sal = salario(meses.length - i, m);
+    total += sal * 30.4 * tasaCyV(sal, anioUTC(m));
+  });
+  return Math.round(total);
+}
+/** Promedio de los últimos 12 meses registrados, actualizado por INPC al mes de referencia. */
+export function promedio12Actualizado(salario60: Array<{ salario_diario: number }>, ultimaCot: Date, ref: Date): number | null {
+  const idx = (d: Date) => {
+    const k = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (INPC_INDICES[k]) return INPC_INDICES[k];
+    const ks = Object.keys(INPC_INDICES).sort();
+    return k < ks[0] ? INPC_INDICES[ks[0]] : INPC_INDICES[ks[ks.length - 1]];
+  };
+  const v = salario60.slice(0, 12);
+  if (!v.length) return null;
+  const iRef = idx(ref);
+  let suma = 0;
+  v.forEach((m, i) => {
+    const mes = new Date(Date.UTC(ultimaCot.getUTCFullYear(), ultimaCot.getUTCMonth() - i, 1));
+    suma += m.salario_diario * (iRef / idx(mes));
+  });
+  return suma / v.length;
 }
 
 function pensionDe(r: ReturnType<typeof computeLey73>): number | null {
@@ -265,6 +332,64 @@ export function evaluarDosMundos(f: FilaEntrada, opts: OpcionesDosMundos = {}): 
   });
   const [mejorK, mejorC] = candidatos[0];
 
+  // ---- Cesantía y vejez de cada mundo (lo que va a Hacienda) ----
+  const ultimaCot = new Date(`${s.perfil.fechas.ultima_cotizacion_valida}T00:00:00.000Z`);
+  const fRet = new Date(`${d0.fecha_retiro}T00:00:00.000Z`);
+  const uma25 = (y: number) => 25 * porAnioT(UMA, y);
+  const smA = (y: number) => porAnioT(SALARIO_MINIMO, y);
+  let viejoCyv = 0;
+  if (d0.viejo.mejor === 'proyecto' && d0.viejo.proyecto) {
+    const fT = new Date(`${d0.viejo.proyecto.inicio}T00:00:00.000Z`);
+    const desde = new Date(Math.max(ultimaCot.getTime(), Date.UTC(fT.getUTCFullYear(), fT.getUTCMonth() - 60, 1)));
+    viejoCyv = cyvSerie(desde, fT, () => uma25(anioUTC(ultimaCot)));
+  } else if (d0.viejo.mejor === 'adelante') {
+    const desde = new Date(Math.max(ultimaCot.getTime(), Date.UTC(hoyV.getUTCFullYear(), hoyV.getUTCMonth() - 60, 1)));
+    viejoCyv = cyvSerie(desde, hoyV, () => uma25(anioUTC(ultimaCot))) +
+      cyvSerie(hoyV, fRet, (x, m) => (x > 60 ? smA(anioUTC(m)) : uma25(anioUTC(m))));
+  }
+  let nuevoCyv = 0;
+  const tope40 = reg.sbcTopeMod40 ?? uma25(2026);
+  if (mejorK === 'mod40') nuevoCyv = cyvSerie(hoyN, fRet, () => tope40);
+  else if (mejorK === 'mod10') nuevoCyv = cyvSerie(hoyN, fRet, (_x, m) => uma25(anioUTC(m)));
+  else if (mejorK === 'mod10_escalonada') nuevoCyv = cyvSerie(hoyN, fRet, (x, m) => (x > MOD10_ESCALON_MESES ? smA(anioUTC(m)) : uma25(anioUTC(m))));
+  else if (mejorK === 'sugerido_mod40' || mejorK === 'sugerido_mod10') {
+    const ini = new Date(`${mejorC.inicio}T00:00:00.000Z`);
+    nuevoCyv = cyvSerie(ini, fRet, (_x, m) => (mejorK === 'sugerido_mod40' ? tope40 : uma25(anioUTC(m))));
+  }
+
+  // ---- Propuestas (claude/110) a la primera fecha de retiro ----
+  const prop: Propuestas = { tope12: null, a_tope12: null, b1_retro12_tope: null, b2_retro12_25uma: null, d_conservacion: null };
+  try {
+    const p12 = promedio12Actualizado(s.salario_60m, ultimaCot, hoyN);
+    const tope12 = p12 == null ? null : Math.min(uma25(2026), p12 + UMA[2026]);
+    prop.tope12 = tope12 == null ? null : Math.round(tope12 * 100) / 100;
+    const pal0 = { ...PALANCAS, edadRetiro: d0.edad };
+    if (tope12 != null && reg.mod40Permitida && fRet.getTime() - hoyN.getTime() > 30 * DIA) {
+      const r = computeLey73({ ...base, hoy: hoyN, fechaTramite: hoyN, sbcTopeMod40Override: tope12,
+        palancas: { ...pal0, pctTiempoCotizando: 1, salarioMod40: uma25(2026), modalidadFutura: 'mod40' } });
+      prop.a_tope12 = { pension: pensionDe(r), costo: Math.round(r.costoEstrategiaFutura), status: r.status };
+    }
+    // Retro de 12 meses: se paga y se pensiona en el mismo acto (trámite a los 60+).
+    const fechaB = fRet < hoyV ? hoyV : fRet;
+    const retro = (umas: number): Camino | null => {
+      const p = computeProyectoMod40({ ...base, hoy: hoyV, palancas: pal0, fechaTramite: fechaB, historial, umasProyecto: umas,
+        mesesRetroMax: 12, limiteInscripcionMod40: s.perfil.fechas.limite_inscripcion_mod40 });
+      if (!p || !(p.ventana.diasRestantes == null || p.ventana.diasRestantes >= 0)) return null;
+      return { pension: r0(p.conProyecto.pensionMensual), costo: Math.round(p.pagoImss.total), meses: p.pagoImss.meses };
+    };
+    // Sólo con baja: quien cotiza hoy no tiene periodo que pagar hacia atrás.
+    if (s.perfil.status_empleo !== 'empleado') {
+      if (tope12 != null) prop.b1_retro12_tope = retro(tope12 / porAnioT(UMA, anioUTC(ultimaCot)));
+      prop.b2_retro12_25uma = retro(25);
+    }
+    const sem = s.perfil.semanas.cotizadas - s.perfil.semanas.descontadas + s.perfil.semanas.recuperadas;
+    if (!s.perfil.conserva_derechos && sem >= 500) {
+      prop.d_conservacion = pensionDe(computeLey73({ ...base, perfil: { ...s.perfil, conserva_derechos: true }, hoy: hoyN, palancas: pal0 }));
+    }
+  } catch (e) {
+    avisos.push(`propuestas: ${(e as Error).message}`);
+  }
+
   return {
     persona_id: f.persona_id,
     motor_version: ENGINE_VERSION,
@@ -281,6 +406,6 @@ export function evaluarDosMundos(f: FilaEntrada, opts: OpcionesDosMundos = {}): 
     nuevo_pension: mejorC.pension,
     nuevo_costo: mejorC.costo,
     base_pension: d0.nuevo.base,
-    detalle: { edades: detalle, avisos: avisos.slice(0, 10) },
+    detalle: { edades: detalle, avisos: avisos.slice(0, 10), resumen: { viejo_cyv: viejoCyv, nuevo_cyv: nuevoCyv }, propuestas: prop },
   };
 }

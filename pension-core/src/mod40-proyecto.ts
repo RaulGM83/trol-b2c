@@ -94,6 +94,11 @@ export interface EntradaProyecto extends EntradaCalculo {
    * al cumpleaños 60 se recorre a ese día y se avisa.
    */
   permitirMenorDe60?: boolean;
+  /**
+   * Sólo para escenarios de política (claude/110): tope de meses hacia atrás
+   * (default 60, art. 219). La propuesta «12 meses hacia atrás» pasa 12.
+   */
+  mesesRetroMax?: number;
 }
 
 /**
@@ -178,6 +183,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     umas: umasProyecto,
     sdi: salarioRetro,
     serieINPC: entrada.serieINPC,
+    ...(entrada.mesesRetroMax != null ? { mesesMax: entrada.mesesRetroMax } : {}),
   });
   const cuotaBase = lineas.retro; // I7
   const actualizaciones = lineas.actualizaciones; // I8
@@ -210,7 +216,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
   // — que ahora es también el del retiro.
   const serie: Date[] = [];
   let m = inicioMes(fechaRetiro); // T5
-  while (serie.length < MESES_RETRO_ART219) {
+  while (serie.length < (entrada.mesesRetroMax ?? MESES_RETRO_ART219)) {
     serie.push(m);
     if (diasEntre(ultimaCot, m) < 0) break;
     m = mesAnterior(m);

@@ -48,7 +48,7 @@ describe('dos mundos (sintéticos)', () => {
       console.log(k, `${ms}ms`, JSON.stringify({
         edad: r.edad_retiro_min, permitida: r.mod40_permitida, tope40: r.sbc_tope_mod40,
         viejo: [r.viejo_pension, r.viejo_costo_imss, r.viejo_costo_total], nuevo: [r.nuevo_mejor_camino, r.nuevo_pension, r.nuevo_costo], base: r.base_pension,
-        d0: d0.nuevo, avisos: r.detalle!.avisos.slice(0, 3),
+        resumen: r.detalle!.resumen, prop: r.detalle!.propuestas, avisos: r.detalle!.avisos.filter((a) => a.startsWith("propuestas")),
       }));
       expect(r.error).toBe(null);
       expect(r.base_pension).not.toBe(null);

@@ -206,6 +206,12 @@ export interface EntradaCalculo {
    */
   ultimoSbc?: number | null;
   /**
+   * Sólo para escenarios de política (Informe Trol #2, claude/110): reemplaza el
+   * tope de salario de Mod 40 del régimen nuevo (p. ej. promedio actualizado de
+   * 12 meses + 1 UMA). Nunca se pasa desde la app.
+   */
+  sbcTopeMod40Override?: number | null;
+  /**
    * Clasificación de la última cotización (expediente `ultima_modalidad`).
    * Decide si la Mod 40 está permitida después del corte (una Mod 10 previa la
    * cierra). Sin ella se asume `obligatorio`.
