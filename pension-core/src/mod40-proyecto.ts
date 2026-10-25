@@ -281,7 +281,7 @@ export function computeProyectoMod40(entrada: EntradaProyecto): ProyectoMod40 | 
     semanasRec +
     (palancas.recuperarSemanasDescontadas ? recuperables : 0);
 
-  const negativa = !(semanasRetiro > 500);
+  const negativa = !(semanasRetiro >= 500); // 2026.10.25.2: 500 alcanzan
   const [, cuantia, incremento] = lookupAprox(
     factor,
     CUANTIAS_LEY73 as Array<[number, number, number]>,

@@ -300,7 +300,8 @@ export function computeLey73(entrada: EntradaCalculo): ResultadoLey73 {
   const pierdeConservacion = !reactiva;
 
   // ---- Pensión (D38..D43) ----
-  const faltanSemanas = !(semanasRetiro > 500);
+  // 2026.10.25.2: 500 semanas alcanzan (Raúl, 25-oct; antes exigía más de 500).
+  const faltanSemanas = !(semanasRetiro >= 500);
   const negativa = faltanSemanas || pierdeConservacion;
   const [, cuantia, incremento] = lookupAprox(
     factorSalarial,

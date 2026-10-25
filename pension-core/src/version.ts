@@ -94,7 +94,8 @@
 // empleados e inscritos en Mod 40. `regimenMod40` ya no los cierra por
 // `derechos_perdidos` y `computeLey73` usa conservación vigente para el
 // empleado. Espejo de trol3 migración 260 y n8n v5.8.2 (claude/110).
-export const ENGINE_VERSION = '2026.10.25.1';
+// 2026.10.25.2 — 500 semanas alcanzan para la pensión Ley 73 (antes > 500).
+export const ENGINE_VERSION = '2026.10.25.2';
 
 // ============================================================================
 // Identidad de la implementación que produjo un snapshot.
