@@ -46,6 +46,14 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
   const falta = base.preguntas.filter((q) => q.estado === 'falta').length;
 
   const ley = h.ley === 'Ley73' ? 'Ley 73' : h.ley === 'Ley97' ? 'Ley 97' : null;
+  // 264 · El presente en lugar de la pensión estimada (la pensión va en los pasos que siguen).
+  const sd = num(h.salario_diario);
+  const pensionado = h.status_empleo === 'pensionado';
+  const cotiza = h.cotiza_hoy === true || (h.cotiza_hoy == null && h.status_empleo === 'empleado');
+  const gap = num(h.gap_meses);
+  const situacion = pensionado ? 'Pensionado' : h.status_empleo == null && h.cotiza_hoy == null ? '—' : cotiza ? 'Sí' : 'No';
+  const situacionSub = pensionado ? undefined : cotiza ? (h.ultima_cotizacion && h.datos_vigentes === false ? `al ${fecha(h.ultima_cotizacion)}` : 'con patrón')
+    : h.ultima_cotizacion ? `desde ${new Date(h.ultima_cotizacion).toLocaleDateString('es-MX', { month: 'short', year: 'numeric' })}${gap ? ` · ${gap} ${gap === 1 ? 'mes' : 'meses'}` : ''}` : undefined;
   const derechos = h.ley === 'Ley73' ? (h.conserva_derechos == null ? null : h.conserva_derechos ? `vigentes${h.fin_conservacion ? ` hasta ${fecha(h.fin_conservacion)}` : ''}` : 'no vigentes') : null;
 
   return (
@@ -60,7 +68,8 @@ export function PasoCero({ personaId, base, compartiendo, nombre, onSeguir, segu
           {h.semanas_recuperadas ? <Dato label="Semanas recuperadas" v={Math.round(Number(h.semanas_recuperadas)).toLocaleString('es-MX')} /> : null}
           <Dato label="Edad" v={h.edad_decimal != null ? `${Number(h.edad_decimal).toFixed(1)} años` : h.edad != null ? `${h.edad} años` : '—'} />
           {derechos ? <Dato label="Derechos Ley 73" v={derechos} /> : null}
-          <Dato label={tu ? 'Hoy te tocaría' : 'Hoy le tocaría'} v={h.pension_base ? mxn(h.pension_base) : '—'} sub={h.edad_base ? `a los ${h.edad_base}` : undefined} lime />
+          <Dato label={pensionado ? 'Situación hoy' : tu ? '¿Cotizas hoy?' : '¿Cotiza hoy?'} v={situacion} sub={situacionSub} lime={cotiza && !pensionado} />
+          <Dato label="Último salario de cotización" v={sd ? `${mxn(sd)} diarios` : '—'} sub={sd ? `≈ ${mxn(Math.round(sd * 30.4))} al mes` : undefined} />
         </div>
         {!tu && h.datos_al ? <p className="mt-3 text-[11px] text-white/50">Información del IMSS al {fecha(h.datos_al)}{h.datos_vigentes === false ? ' · conviene actualizarla' : ''}. La máxima y los caminos van en los pasos que siguen.</p> : null}
       </section>

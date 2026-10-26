@@ -38,7 +38,9 @@ export type BaseCampo = { campo: string; nombre: string; tipo: string; unidad: s
 export type BasePregunta = { n: number; titulo: string; estado: 'tenemos' | 'no_sabe' | 'falta'; campos: BaseCampo[] };
 export type BaseAsesoria = {
   highlights: { ley: string | null; semanas: number | null; semanas_capa: string | null; semanas_descontadas: number | null; semanas_recuperadas: number | null; edad: number | null; edad_decimal: number | null; status_empleo: string | null;
-    conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null;
+    conserva_derechos: boolean | null; fin_conservacion: string | null; pension_base: number | null;
+    /** 264 · el presente: si cotiza, último salario de cotización (diario), última cotización y meses sin cotizar. */
+    salario_diario?: number | null; ultima_cotizacion?: string | null; gap_meses?: number | null; cotiza_hoy?: boolean | null; edad_base: number | null; datos_al: string | null; datos_vigentes: boolean | null;
     /** 194 · rango del saldo AFORE (RCV 97 + SAR 92) del motor v5.6; null con semillas anteriores. */
     afore_rango?: RangoAfore | null };
   preguntas: BasePregunta[]; listos: number; total: number;
