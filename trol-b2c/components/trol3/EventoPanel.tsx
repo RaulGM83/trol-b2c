@@ -20,10 +20,10 @@ export type FilaEvento = {
 };
 export type PanelEvento = {
   resumen: {
-    clics: number; registrados: number; registrados_previos: number; registrados_evento: number; via: { web: number; chat: number; pasillo: number };
+    clics: number; clics_ips?: number; desde?: string | null; hasta?: string | null; registrados: number; registrados_previos: number; registrados_evento: number; via: { web: number; chat: number; pasillo: number };
     sin_curp: number; con_historial: number; buscando: number; atoradas: number; entraron: number; base_completa: number;
     con_sesion: number; sesion_hecha: number; pagaron: number; ingresos: number; sin_aviso?: number;
-    meta: { registrados_previos?: number; registrados_evento?: number; ingresos?: number; fecha?: string };
+    meta: { registrados_previos?: number; registrados_evento?: number; ingresos?: number; fecha?: string; envios?: { fecha: string; nombre: string }[] };
   };
   filas: FilaEvento[];
 };
@@ -68,7 +68,16 @@ function Meta({ titulo, valor, meta, dinero }: { titulo: string; valor: number; 
   );
 }
 
-export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo: string; etiqueta: string; panel: PanelEvento; filtroInicial: string }) {
+// 262 · cortes por envío: cada correo del organizador abre un corte [su fecha, la del siguiente).
+export type CorteEvento = { clave: string; nombre: string; desde?: string; hasta?: string };
+export function cortesEvento(envios: { fecha: string; nombre: string }[] | undefined, hoy: string): CorteEvento[] {
+  const lista: CorteEvento[] = [{ clave: 'todos', nombre: 'Todos' }, { clave: 'hoy', nombre: 'Hoy', desde: hoy }];
+  const ord = [...(envios ?? [])].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  ord.forEach((e, i) => lista.push({ clave: e.fecha, nombre: e.nombre, desde: e.fecha, hasta: ord[i + 1]?.fecha }));
+  return lista;
+}
+
+export function EventoPanel({ codigo, etiqueta, panel, filtroInicial, corte = 'todos', hoy }: { codigo: string; etiqueta: string; panel: PanelEvento; filtroInicial: string; corte?: string; hoy: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [filtro, setFiltro] = useState(filtroInicial);
@@ -76,6 +85,7 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
   const [msg, setMsg] = useState<Record<string, string>>({});
   const [msgLote, setMsgLote] = useState<string | null>(null);
   const r = panel.resumen; const meta = r.meta ?? {};
+  const cortes = cortesEvento(meta.envios, hoy); const corteSel = cortes.find((c) => c.clave === corte);
   const filas = useMemo(() => panel.filas.map((f) => ({ f, s: situacion(f) })), [panel.filas]);
   const conteo = useMemo(() => filas.reduce<Record<string, number>>((a, x) => { a[x.s.clave] = (a[x.s.clave] ?? 0) + 1; return a; }, {}), [filas]);
   const visibles = filas.filter((x) => (filtro === 'todos' || x.s.clave === filtro) && (!q || `${x.f.nombre ?? ''} ${x.f.apellidos ?? ''} ${x.f.telefono ?? ''} ${x.f.curp ?? ''}`.toLowerCase().includes(q.toLowerCase())));
@@ -119,11 +129,24 @@ export function EventoPanel({ codigo, etiqueta, panel, filtroInicial }: { codigo
     <div className="space-y-4">
       <div><h1 className="text-2xl font-extrabold">{etiqueta}</h1><p className="text-xs text-muted">Código {codigo}{meta.fecha ? ` · evento el ${new Date(meta.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}` : ''} · {r.via.web} por web · {r.via.chat} por chat · {r.via.pasillo} en pasillo</p></div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Meta titulo="Registrados antes del evento" valor={r.registrados_previos} meta={meta.registrados_previos} />
-        <Meta titulo="Registrados el día del evento" valor={r.registrados_evento} meta={meta.registrados_evento} />
-        <Meta titulo="Ingresos del código" valor={r.ingresos} meta={meta.ingresos} dinero />
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-semibold text-muted">Corte:</span>
+        {cortes.map((c) => <Link key={c.clave} href={`/trabajo/evento/panel?c=${codigo}${c.clave === 'todos' ? '' : `&e=${c.clave}`}`} className={c.clave === corte ? 'rounded-full bg-ink px-3 py-1 font-bold text-white' : 'rounded-full border border-line bg-white px-3 py-1 font-semibold'}>{c.nombre}{c.desde && c.clave !== 'hoy' ? ` · desde ${new Date(c.desde + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}` : ''}</Link>)}
       </div>
+
+      {corte === 'todos' ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Meta titulo="Registrados antes del evento" valor={r.registrados_previos} meta={meta.registrados_previos} />
+          <Meta titulo="Registrados el día del evento" valor={r.registrados_evento} meta={meta.registrados_evento} />
+          <Meta titulo="Ingresos del código" valor={r.ingresos} meta={meta.ingresos} dinero />
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Meta titulo={`Clics en «${corteSel?.nombre ?? corte}»`} valor={r.clics} />
+          <Meta titulo="Personas distintas que abrieron (IPs)" valor={r.clics_ips ?? 0} />
+          <Meta titulo={`Registrados en «${corteSel?.nombre ?? corte}»`} valor={r.registrados} />
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-white p-4">
         <ol className="flex min-w-max items-end gap-1">
