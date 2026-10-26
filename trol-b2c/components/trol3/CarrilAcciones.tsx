@@ -145,7 +145,8 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex flex-wrap justify-end gap-1.5">{principales}{secundarios}</div>
+      <div className="flex flex-wrap justify-end gap-1.5">{principales}</div>
+      {secundarios ? <div className="flex flex-wrap justify-end gap-1.5">{secundarios}</div> : null}
       {hoja ? (
         <div className="mt-1 w-full max-w-md rounded-xl bg-cream p-3 text-left">
           <div className="text-xs font-bold">{titulo}</div>

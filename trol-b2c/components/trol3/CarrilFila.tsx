@@ -91,7 +91,7 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
   const urg = pot?.urgencia_fecha && (pot.factor ?? 1) > 1 ? `ventana ${dia(pot.urgencia_fecha)}` : null;
   const dueno = equipo && f.cabecera_id ? miembros?.find((m) => m.id === f.cabecera_id)?.nombre?.split(' ')[0] : null;
   return (
-    <li className={`grid grid-cols-1 items-center gap-3 border-t border-line py-3 ${izquierda ? 'md:grid-cols-[24px_170px_200px_96px_minmax(0,1fr)_auto]' : 'md:grid-cols-[170px_200px_96px_minmax(0,1fr)_auto]'} ${atenuada ? 'opacity-70' : ''}`}>
+    <li className={`grid grid-cols-1 items-center gap-3 border-t border-line py-3 ${izquierda ? 'md:grid-cols-[24px_150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]' : 'md:grid-cols-[150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]'} ${atenuada ? 'opacity-70' : ''}`}>
       {izquierda}
       <div className="flex flex-wrap gap-1">
         {conCarril ? <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${PILL[f.carril] ?? PILL.frios}`}>{({ favoritos: 'Favorito', calientes: 'Caliente', tibios: 'Tibio', frios: 'Frío', descartado: 'Descartado' } as Record<string, string>)[f.carril] ?? f.carril}</span> : null}
