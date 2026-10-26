@@ -2123,6 +2123,17 @@ export async function abrirOportunidad(personaId: string, codigo: string, nota: 
   return ok({ resultado: r, texto: r.ya_estaba ? `Ya estaba ${r.estado}.` : r.cerradas ? `Abierta. Cerró ${r.cerradas} que ya no aplican.` : 'Abierta.' });
 }
 
+/** 263 · Cambio de asesor: cualquier asesor pasa el cliente a otro; se mueven cabecera y oportunidades abiertas. */
+export async function cambiarAsesor(personaId: string, nuevoId: string, motivo: 'producto' | 'apoyo' | 'otro', nota: string) {
+  await requireMiembro();
+  if (!nuevoId) return fail('Elige a quién se lo pasas.');
+  const { data, error } = await t3().rpc('cambiar_cabecera', { p_persona: personaId, p_nuevo: nuevoId, p_motivo: motivo, p_nota: nota.trim() || null });
+  if (error) return fail(error.message === 'asesor_invalido' ? 'Ese asesor no está activo.' : error);
+  const r = data as { sin_cambio?: boolean; a_nombre?: string; oportunidades?: number };
+  revalidatePath(`/trabajo/p/${personaId}`); revalidatePath('/trabajo/cartera');
+  return ok({ texto: r.sin_cambio ? 'Ya es suyo.' : `Pasado a ${r.a_nombre ?? 'el asesor'}${r.oportunidades ? ` con ${r.oportunidades} oportunidad${r.oportunidades === 1 ? '' : 'es'}` : ''}.` });
+}
+
 /** Sesión programada por fuera (teléfono, WhatsApp, en persona): queda en la agenda a nombre de quien la atiende. */
 export async function registrarSesion(personaId: string, inicioISO: string, miembroId: string | null, notas: string) {
   const m = await requireMiembro();

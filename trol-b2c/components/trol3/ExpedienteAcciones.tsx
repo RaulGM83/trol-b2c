@@ -1,24 +1,60 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { tomarCabecera, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar, reprocesarConsulta } from '@/app/trabajo/actions';
+import { tomarCabecera, cambiarAsesor, abrirOportunidad, pedirConsulta, agregarNota, declararAsesor, marcarEtapa, crearCita, reevaluar, reprocesarConsulta } from '@/app/trabajo/actions';
 import { mensajeError, desenrollarError } from '@/lib/trol3/errores';
 
 type R = { ok: boolean; error?: string; resultado?: unknown };
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50';
 const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50';
 
-export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa }: { personaId: string; esMia: boolean; sinCabecera: boolean; etapa: string }) {
+const MOTIVOS_PASE: [string, string][] = [['producto', 'Por el producto que va a cerrar'], ['apoyo', 'Para que me apoye'], ['otro', 'Otro motivo']];
+
+export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa, cabeceraId = null, miembros = [], pensionAbierta = false }: {
+  personaId: string; esMia: boolean; sinCabecera: boolean; etapa: string;
+  cabeceraId?: string | null; miembros?: { id: string; nombre: string | null }[]; pensionAbierta?: boolean;
+}) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
-  const run = (fn: () => Promise<R>) => start(async () => { const r = (await fn()) as R; setMsg(r.ok ? null : r.error ?? 'error'); });
+  const [hoja, setHoja] = useState(false);
+  const [nuevo, setNuevo] = useState('');
+  const [motivo, setMotivo] = useState<'producto' | 'apoyo' | 'otro'>('producto');
+  const [nota, setNota] = useState('');
+  const run = (fn: () => Promise<R>) => start(async () => { const r = (await fn()) as R & { texto?: string }; setMsg(r.ok ? r.texto ?? null : r.error ?? 'error'); });
+  const otros = miembros.filter((x) => x.id !== cabeceraId);
+  const pasar = () => start(async () => {
+    const r = (await cambiarAsesor(personaId, nuevo, motivo, nota)) as R & { texto?: string };
+    setMsg(r.ok ? r.texto ?? null : r.error ?? 'error');
+    if (r.ok) { setHoja(false); setNuevo(''); setNota(''); }
+  });
+  const pensionado = () => {
+    if (!window.confirm('¿Ya está pensionado? Se abre “Crédito con descuento a pensión” y se cierran las oportunidades que ya no aplican (Mod 40, Mod 10, etc.).')) return;
+    run(() => abrirOportunidad(personaId, 'credito_pension', 'Ya está pensionado') as Promise<R>);
+  };
   return (
     <div className="mt-2 flex flex-wrap justify-end gap-2">
       {sinCabecera && <button disabled={pending} className={btnDark} onClick={() => run(() => tomarCabecera(personaId))}>Tomarlo como mi cliente</button>}
+      {!pensionAbierta && <button disabled={pending} className="rounded-lg border border-lime bg-lime px-2.5 py-1 text-xs font-semibold text-ink hover:opacity-90 disabled:opacity-50" onClick={pensionado}>Ya está pensionado → Crédito a pensionados</button>}
+      {!sinCabecera && otros.length > 0 && <button disabled={pending} className={btn} onClick={() => setHoja(!hoja)}>Cambiar asesor</button>}
       {etapa !== 'asesorado' && etapa !== 'cliente' && <button disabled={pending} className={btn} onClick={() => run(() => marcarEtapa(personaId, 'asesorado'))}>Marcar “situación entendida”</button>}
       {etapa !== 'cliente' && <button disabled={pending} className={btn} onClick={() => run(() => marcarEtapa(personaId, 'cliente'))}>Marcar cliente</button>}
       <button disabled={pending} className={btn} onClick={() => run(() => reevaluar(personaId))}>Re-evaluar</button>
-      {msg && <span className="text-xs text-red-600">{msg}</span>}
+      {msg && <span className="text-xs text-muted">{msg}</span>}
       {esMia ? null : null}
+      {hoja && (
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 rounded-xl bg-cream p-2 text-xs">
+          <span className="font-semibold">Pasarlo a</span>
+          <select value={nuevo} onChange={(e) => setNuevo(e.target.value)} className="rounded-lg border border-line px-2 py-1">
+            <option value="">Elige asesor…</option>
+            {otros.map((x) => <option key={x.id} value={x.id}>{x.nombre ?? x.id}</option>)}
+          </select>
+          <select value={motivo} onChange={(e) => setMotivo(e.target.value as 'producto' | 'apoyo' | 'otro')} className="rounded-lg border border-line px-2 py-1">
+            {MOTIVOS_PASE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Qué le toca hacer (opcional)" className="min-w-[200px] flex-1 rounded-lg border border-line px-2 py-1" />
+          <button disabled={pending || !nuevo} className={btnDark} onClick={pasar}>Pasar</button>
+          <span className="w-full text-right text-muted">Pasan con él todas sus oportunidades abiertas; lo verá en sus Calientes.</span>
+        </div>
+      )}
     </div>
   );
 }

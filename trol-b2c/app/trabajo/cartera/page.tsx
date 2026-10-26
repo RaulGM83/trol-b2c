@@ -93,7 +93,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
 
       {tab === 'calientes' ? (() => {
         const filas: FilaCompleta[] = d.filas ?? [];
-        const react = filas.filter((f) => ['reacciono', 'llego_hoy', 'cita'].includes(f.origen));
+        const react = filas.filter((f) => ['reacciono', 'te_lo_pasaron', 'llego_hoy', 'cita'].includes(f.origen));
         const tocados = filas.filter((f) => f.origen === 'tocado');
         const deFav = filas.filter((f) => ['tramite', 'favorito', 'asignado'].includes(f.origen));
         const pct = Math.min(100, Math.round(((d.tocados ?? 0) / (d.tope ?? 25)) * 100));

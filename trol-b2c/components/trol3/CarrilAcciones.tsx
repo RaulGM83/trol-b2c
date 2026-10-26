@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { activarCliente, registrarContacto, tomarCabecera, carrilMarcar, carrilDespertar, asignarCabecera, noAplicaOportunidad } from '@/app/trabajo/actions';
+import { abrirOportunidad, activarCliente, registrarContacto, tomarCabecera, carrilMarcar, carrilDespertar, asignarCabecera, noAplicaOportunidad } from '@/app/trabajo/actions';
 
 const dark = 'rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50';
 const line = 'rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-50';
@@ -14,6 +14,7 @@ export type FilaCarril = {
   persona_id: string; nombre?: string | null; chat_abierto: boolean; telefono: string | null; no_contactar: boolean; cabecera_id: string | null;
   oportunidad: string | null; oportunidad_id: string | null; oportunidad_estado?: string | null;
   carril: 'favoritos' | 'calientes' | 'tibios' | 'frios' | 'descartado'; origen: string;
+  pase?: { en: string; por: string | null; de: string | null; motivo: string | null; nota: string | null } | null;
   marca?: { id: string; marca: string; motivo?: string | null; nota?: string | null; hasta?: string | null; toques?: number; por_miembro_id?: string | null; en?: string | null } | null;
   ultimo_gesto?: string | null; ultimo_toque?: string | null; toques_30d?: number; vuelve_el?: string | null; en_proceso?: boolean; pide_equipo?: boolean;
   potencial?: { oportunidad_id?: string; nombre?: string; potencial?: number; valor?: number; urgencia_fecha?: string | null; factor?: number } | null;
@@ -98,20 +99,22 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
   const enfriar = <button disabled={pending} className={quiet} onClick={() => abrir('enfriar')}>Enfriar</button>;
   const favorito = <button disabled={pending} className={quiet} onClick={() => abrir('favorito')}>Favorito</button>;
   const noAplica = fila.oportunidad_id ? <button disabled={pending} className={quiet} onClick={() => abrir('noaplica')}>No aplica…</button> : null;
+  const pensionado = <button disabled={pending} className={quiet} title="Abre Crédito a pensionados y cierra lo que ya no aplica" onClick={() => { if (window.confirm('¿Ya está pensionado? Se abre “Crédito con descuento a pensión” y se cierran las oportunidades que ya no aplican.')) run(() => abrirOportunidad(fila.persona_id, 'credito_pension', 'Ya está pensionado (cartera)') as Promise<{ ok: boolean; error?: string; texto?: string }>, 'Crédito a pensionados abierto.'); }}>Ya es pensionado</button>;
   const descartar = <button disabled={pending} className={quiet} onClick={() => abrir('descartar')}>Descartar</button>;
   const asignar = esAdmin && equipo ? <button disabled={pending} className={adm} onClick={() => abrir('asignar')}>Asignar a…</button> : null;
   const despertarPara = esAdmin && equipo ? <button disabled={pending} className={adm} onClick={() => abrir('despertar_para')}>Despertar para…</button> : null;
 
   if (fila.carril === 'calientes') {
     if (fila.origen === 'reacciono' || fila.origen === 'llego_hoy') principales = <>{chat}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'atendido_chat'), 'Anotado: atendido.')}>Ya lo atendí</button></>;
+    else if (fila.origen === 'te_lo_pasaron') principales = <><Link href={`/trabajo/p/${fila.persona_id}?tab=relacion`} className={dark}>Ver por qué</Link>{fila.chat_abierto ? chat : null}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'atendido_chat'), 'Anotado: atendido.')}>Ya lo atendí</button></>;
     else if (fila.origen === 'cita') principales = <>{fila.base_listos != null && fila.base_listos < 5 ? <Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria&paso=0`} className={dark}>Prepárale la base ({fila.base_listos}/5)</Link> : null}<Link href={`/trabajo/p/${fila.persona_id}?tab=asesoria`} className={fila.base_listos != null && fila.base_listos < 5 ? line : dark}>Preparar asesoría</Link></>;
     else if (fila.origen === 'tramite' || fila.origen === 'asignado') principales = <><Link href={`/trabajo/p/${fila.persona_id}?tab=oportunidades`} className={dark}>Ver trámite</Link><button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'contesto'), 'Anotado: contestó.')}>Contestó</button></>;
     else if (fila.origen === 'tocado') principales = <>{fila.chat_abierto ? chat : null}<button disabled={pending} className={line} onClick={() => run(() => registrarContacto(fila.persona_id, 'contesto'), 'Anotado: contestó. Ya no cuenta en el tope.')}>Contestó</button></>;
     else principales = llamadas(true);
-    secundarios = <>{enfriar}{favorito}{noAplica}{asignar}</>;
+    secundarios = <>{enfriar}{favorito}{noAplica}{pensionado}{asignar}</>;
   } else if (fila.carril === 'tibios') {
     principales = tocar();
-    secundarios = <>{noAplica}{!pozo ? enfriar : null}{asignar}{despertarPara}</>;
+    secundarios = <>{noAplica}{pensionado}{!pozo ? enfriar : null}{asignar}{despertarPara}</>;
   } else if (fila.carril === 'favoritos') {
     if (fila.en_proceso) principales = <><Link href={`/trabajo/p/${fila.persona_id}?tab=oportunidades`} className={dark}>Ver trámite</Link>{fila.chat_abierto && takoUrl ? <a href={takoUrl} target="_blank" rel="noreferrer" className={line}>Abrir chat</a> : null}</>;
     else principales = <button disabled={pending} className={line} onClick={() => run(() => carrilMarcar(fila.persona_id, 'favorito', null, fila.marca?.nota ?? null, isoEn(0)), 'En Calientes hoy (no cuenta en el tope).')}>Traer a Calientes hoy</button>;

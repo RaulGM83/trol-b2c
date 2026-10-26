@@ -28,6 +28,7 @@ export function etiqueta(f: FilaCarril, miembros: Miembro[] = []): [string, stri
     case 'calientes':
       if (f.origen === 'reacciono') return [`Reaccionó ${hace(f.ultimo_gesto)}`, PILL.calientes];
       if (f.origen === 'llego_hoy') return ['Llegó hoy', PILL.calientes];
+      if (f.origen === 'te_lo_pasaron') return [`Te lo pasó ${f.pase?.por?.split(' ')[0] ?? 'el equipo'}`, PILL.favoritos];
       if (f.origen === 'cita') return ['Cita', PILL.calientes];
       if (f.origen === 'tramite') return ['Trámite: nos toca', PILL.proceso];
       if (f.origen === 'asignado') return [`Te lo mandó ${por ?? 'admin'}`, PILL.favoritos];

@@ -553,7 +553,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
               {tel && <a className="rounded-lg border border-line px-2.5 py-1 font-semibold hover:bg-cream" href={`https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}`} target="_blank" rel="noreferrer">WhatsApp (Tako)</a>}
               <AgendarBoton info={(linkCitas ?? null) as LinkCitas | null} />
             </div>
-            <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} />
+            <ExpedienteAcciones personaId={e.persona_id} esMia={e.cabecera_id === m.id} sinCabecera={!e.cabecera_id} etapa={e.etapa} cabeceraId={e.cabecera_id} miembros={((miembros ?? []) as Any[]).map((x) => ({ id: x.id, nombre: x.nombre ?? x.email }))} pensionAbierta={opsAbiertas.some((o: Any) => o.codigo === 'credito_pension')} />
           </div>
         </div>
         <nav className="mt-4 flex flex-wrap items-center gap-1 border-t border-line pt-3 text-sm">
