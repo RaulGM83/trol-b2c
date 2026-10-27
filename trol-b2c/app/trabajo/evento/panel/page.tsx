@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3 } from '@/lib/trol3/server';
-import { EventoPanel, cortesEvento, type PanelEvento } from '@/components/trol3/EventoPanel';
+import { EventoPanel, type PanelEvento } from '@/components/trol3/EventoPanel';
+import { cortesEvento } from '@/lib/trol3/evento-cortes';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Panel del evento · Trol equipo' };

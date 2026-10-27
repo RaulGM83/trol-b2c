@@ -3,6 +3,7 @@
 // registrado con "qué le toca" y el botón que lo resuelve. Pensado para los 24 días alrededor
 // del Foro: quien lo abra ve de un vistazo dónde se atora la gente y a quién llamar.
 import { useEffect, useMemo, useState, useTransition } from 'react';
+import { cortesEvento, type CorteEvento } from '@/lib/trol3/evento-cortes';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { accionEvento, avisarSinAvisoEvento, plantillaEvento, reintentarAtoradosEvento, type AccionEvento, type PlantillaEvento } from '@/app/trabajo/actions';
@@ -66,15 +67,6 @@ function Meta({ titulo, valor, meta, dinero }: { titulo: string; valor: number; 
       {pct != null ? <div className="mt-2 h-2 overflow-hidden rounded-full bg-cream"><div className="h-full rounded-full bg-lime" style={{ width: `${pct}%` }} /></div> : null}
     </div>
   );
-}
-
-// 262 · cortes por envío: cada correo del organizador abre un corte [su fecha, la del siguiente).
-export type CorteEvento = { clave: string; nombre: string; desde?: string; hasta?: string };
-export function cortesEvento(envios: { fecha: string; nombre: string }[] | undefined, hoy: string): CorteEvento[] {
-  const lista: CorteEvento[] = [{ clave: 'todos', nombre: 'Todos' }, { clave: 'hoy', nombre: 'Hoy', desde: hoy }];
-  const ord = [...(envios ?? [])].sort((a, b) => a.fecha.localeCompare(b.fecha));
-  ord.forEach((e, i) => lista.push({ clave: e.fecha, nombre: e.nombre, desde: e.fecha, hasta: ord[i + 1]?.fecha }));
-  return lista;
 }
 
 export function EventoPanel({ codigo, etiqueta, panel, filtroInicial, corte = 'todos', hoy }: { codigo: string; etiqueta: string; panel: PanelEvento; filtroInicial: string; corte?: string; hoy: string }) {
