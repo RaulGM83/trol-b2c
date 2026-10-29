@@ -103,7 +103,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
               <span className="font-mono font-bold">Tocados hoy {d.tocados ?? 0} de {d.tope ?? 25}</span>
               <div className="h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-white"><div className="h-full bg-red-500" style={{ width: `${pct}%` }} /></div>
               <span className="font-mono font-bold text-green-800">{d.reaccionaron ?? 0} reaccionaron</span>
-              <span className="w-full text-xs text-muted">{(d.libres ?? 0) > 0 ? <>Te caben <b>{d.libres}</b> toques más hoy. </> : <span className="font-semibold text-red-700">Tope del día alcanzado. </span>}Favoritos y trámites no cuentan.</span>
+              <span className="w-full text-xs text-muted">{error ? null : (d.libres ?? 0) > 0 ? <>Te caben <b>{d.libres}</b> toques más hoy. </> : <span className="font-semibold text-red-700">Tope del día alcanzado. </span>}Favoritos y trámites no cuentan.</span>
             </div>
             <div className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">
               <div className="flex items-baseline justify-between"><h2 className="text-sm font-bold">Reaccionaron · te toca a ti <span className="font-normal text-muted">· {react.length}</span></h2><span className="text-xs text-muted">lo más reciente primero</span></div>

@@ -1,0 +1,8 @@
+-- 271 · Calientes (statement timeout, Andrea 29-oct): el prefiltro de mi_calientes aceptaba cualquier evento de 8 días;
+--       los de sistema (consultas automáticas, dato_nuevo, SISEC) metían ~90 % de la cartera. Ahora sólo los tipos que
+--       usa carril_de (gestos del cliente + cabecera_cambiada).
+--       _ultimo_gesto: documento_subido sólo cuenta si lo subió el cliente (284 PDFs de SISEC del sistema en 30 días
+--       contaban como "reaccionó"; Andrea pasó de 40 calientes a 17 reales).
+-- 272 · carril_de (STABLE) se evaluaba una vez por cada referencia a k: OFFSET 0 / MATERIALIZED en mi_tibios,
+--       mi_calientes, mi_frios y mi_favoritos. Tiempos Andrea: calientes 3.2 → 1.4 s, tibios 3.6 → 1.0 s;
+--       Raúl equipo calientes 5.6 → 4.2 s (66 filas). Aplicadas en producción; definición viva con pg_get_functiondef.
