@@ -7,5 +7,5 @@
 export const LEGAL = {
   terminos:
     'https://landing.trol.mx/wp-content/uploads/2024/11/El-Trol-I-Terminos-y-Condiciones-de-uso-de-la-Plataforma._compressed.pdf',
-  privacidad: 'https://landing.trol.mx/privacidad/',
+  privacidad: 'https://trol.mx/privacidad',
 };

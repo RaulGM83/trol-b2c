@@ -46,10 +46,8 @@ function sitioPublico(request: NextRequest, host: string): NextResponse | null {
     return NextResponse.redirect(new URL(destino, APEX), 301);
   }
 
-  // El aviso de privacidad vive en el WordPress propio.
-  if (pathname === '/privacidad') {
-    return NextResponse.redirect('https://landing.trol.mx/privacidad/', 301);
-  }
+  // Aviso de privacidad versionado en trol3.documentos_legales (251).
+  if (pathname === '/privacidad') return NextResponse.rewrite(new URL('/sitio/privacidad', request.url));
 
   if (pathname === '/') return NextResponse.rewrite(new URL('/sitio', request.url));
   if (pathname === '/asesorias') return NextResponse.rewrite(new URL('/sitio/asesorias', request.url));

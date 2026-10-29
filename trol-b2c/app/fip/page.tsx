@@ -147,7 +147,7 @@ export default async function Fip() {
 
       <footer className="bg-ink px-5 py-8 text-center text-xs text-white/60">
         El Trol Financiero · Asesoría pensional independiente. Usamos tu información con tu autorización y sólo para tu asesoría.{' '}
-        <a href="https://landing.trol.mx/privacidad/" className="underline hover:text-lime" target="_blank" rel="noopener noreferrer">Aviso de privacidad</a>
+        <a href="https://trol.mx/privacidad" className="underline hover:text-lime" target="_blank" rel="noopener noreferrer">Aviso de privacidad</a>
       </footer>
     </main>
   );

@@ -63,9 +63,9 @@ export function SitioFooter() {
             <a href="https://app.trol.mx/login?next=/mi" className="hover:text-lime">
               Mi expediente
             </a>
-            <a href="https://landing.trol.mx/privacidad/" className="hover:text-lime">
+            <Link href="/privacidad" className="hover:text-lime">
               Aviso de privacidad
-            </a>
+            </Link>
           </div>
           <p className="text-white/60">© 2026 El Trol Financiero</p>
         </div>
