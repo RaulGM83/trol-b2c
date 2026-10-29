@@ -11,8 +11,7 @@
 //  · El riesgo de vacancia lo mide lo que falta cada mes entre renta neta y pago, contra lo
 //    que el cliente dijo que puede destinar, y la reserva que necesita para N meses sin renta.
 //  · Retención arriba del 30% del salario: Infonavit rara vez la autoriza (rojo).
-//  · 231 (caso LOMJ, 10-oct-2026): tope de apalancamiento (crédito ≤ apalancamiento_max × saldo
-//    aplicado; arriba = "para saldos mayores", al final) y empate técnico (ventajas a menos de
+//  · 231 (caso LOMJ, 10-oct-2026): empate técnico (el tope de apalancamiento se quitó en 276) (ventajas a menos de
 //    max(empate_min, empate_pct × recibe al vender) de la mejor se ordenan por menor pago).
 import { calcularAsesoriaInfonavit, sobreprecioMinimo } from '@trol/pension-core';
 import type { ClienteInfonavit, InmuebleInfonavit, PalancasInfonavit, ResultadoInfonavit, SupuestosInfonavit } from '@trol/pension-core';
@@ -160,12 +159,11 @@ export function rankearInmuebles(args: {
       if (sem === 'verde') sem = 'ambar';
       motivos.push(`Necesita el dinero en ${factores.urgencia_meses} meses y el horizonte más corto del motor es ${fila.horizonte}`);
     }
+    // 276 (Raúl, 29-oct): se QUITA la regla de "veces su saldo" (231). Hay situaciones muy variadas
+    // (cotiza alto y lo sostiene años: aportaciones, deducción, seguro de vida; o une crédito con otra
+    // persona). El apalancamiento queda como dato informativo; no pinta rojo ni reordena.
     const apalancamiento = op.saldo_apl > 0 ? op.credito / op.saldo_apl : Infinity;
-    const paraSaldosMayores = apalancamiento > reglas.apalancamiento_max;
-    if (paraSaldosMayores) {
-      sem = 'rojo';
-      motivos.unshift(`Crédito de ${apalancamiento.toFixed(1)}× su saldo (tope ${reglas.apalancamiento_max}×): es un inmueble para saldos mayores`);
-    }
+    const paraSaldosMayores = false;
     filas.push({
       id: p.id, desarrollo: p.desarrollo, zona: p.zona, ficha_url: p.ficha_url ?? null, viable: true, sobreprecio_requerido: min.requerido,
       credito: op.credito, pmt: op.pmt, renta_neta: op.renta_neta, cobertura, faltante, pct_salario: op.pct_salario,

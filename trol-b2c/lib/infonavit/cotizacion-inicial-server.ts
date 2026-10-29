@@ -2,7 +2,7 @@
 import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { t3, type Any } from '@/lib/trol3/server';
 import { titularDesdeExpediente } from './prefill';
-import { armarCotizacionInicial, textoWhatsApp, type CotizacionInicial } from './cotizacion-inicial';
+import { armarCotizacionInicial, textoWhatsApp, SALDO_MIN_COTIZACION, type CotizacionInicial } from './cotizacion-inicial';
 import type { Proyecto, SupuestosGlobales } from '@/components/trol3/AsesoriaInfonavit';
 
 export type CargaCotizacion =
@@ -53,7 +53,8 @@ export async function cargarCotizacionInicial(personaId: string): Promise<CargaC
     creditoMax: num('infonavit_monto_credito'),
     fechaSaldo: (map.get('saldo_infonavit')?.obtenido_en as string | undefined) ?? null,
   });
-  if (!cot) return { ok: false, motivo: 'Con su saldo ningún inmueble del catálogo le queda: el crédito pasaría de 1.5× su saldo (inmuebles para saldos mayores) o no llega al mínimo' };
+  if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
+  if (!cot) return { ok: false, motivo: 'Ningún inmueble del catálogo le queda (crédito mínimo o retención arriba del 30% de su salario)' };
   const primerNombre = (e.nombre as string | null)?.trim().split(/\s+/)[0] ?? null;
   const pn = primerNombre ? primerNombre.charAt(0).toUpperCase() + primerNombre.slice(1).toLowerCase() : null;
   return {

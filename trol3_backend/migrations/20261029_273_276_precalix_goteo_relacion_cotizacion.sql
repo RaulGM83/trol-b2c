@@ -19,7 +19,7 @@
 --   Nunca pide Jordan solo (decisión Raúl).
 --
 -- 276 · Tarea "Cotización inicial Infonavit lista" para el asesor de cabecera.
-insert into trol3.config(clave, valor) values ('cotizacion_infonavit_saldo_min', '370000')
+insert into trol3.config(clave, valor) values ('cotizacion_infonavit_saldo_min', '100000')  -- 29-oct 17:25: Raúl relaja el tope 1.5× y baja el mínimo a 100k
 on conflict (clave) do update set valor = excluded.valor, updated_at = now();
 
 create or replace function trol3.tg_tarea_cotizacion_infonavit()

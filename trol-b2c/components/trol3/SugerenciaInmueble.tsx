@@ -25,8 +25,7 @@ export function SugerenciaInmueble({ sugerencia, proyectoId, onElegir }: {
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Qué inmueble le conviene</h2>
         {sugerencia && (
           <span className="text-[11px] text-muted">
-            Comparados a {sugerencia.horizonte_ref} meses · orden por ventaja · empate técnico si la diferencia es ≤ {money(sugerencia.umbral_empate)} (gana el de menor pago) ·
-            crédito mayor a {sugerencia.reglas.apalancamiento_max}× su saldo = para saldos mayores, al final
+            Comparados a {sugerencia.horizonte_ref} meses · orden por ventaja · empate técnico si la diferencia es ≤ {money(sugerencia.umbral_empate)} (gana el de menor pago)
           </span>
         )}
       </div>

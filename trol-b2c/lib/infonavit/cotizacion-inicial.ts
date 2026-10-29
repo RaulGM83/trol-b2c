@@ -4,7 +4,10 @@
 // Reglas:
 //  · Sólo con saldo validado (Precalix/broker) y cotizando. Un titular, sin cotitular, con el
 //    sobreprecio mínimo que pida cada inmueble y los supuestos globales.
-//  · Fuera: inmuebles "para saldos mayores" (apalancamiento) y retención > 30% del salario.
+//  · Fuera siempre: retención > 30% del salario. Saldo mínimo $100,000.
+//  · SIN tope de "veces su saldo" (Raúl, 29-oct): hay situaciones muy variadas. Con saldo chico puede
+//    ser estrategia si cotiza alto y lo sostiene varios años: las aportaciones abonan, deduce intereses
+//    y el crédito trae seguro de vida; además puede unir su crédito con el de otra persona.
 //  · 18 meses: el que le pide MENOS dinero al mes (pago − renta neta); empate → mayor ventaja.
 //  · 60 meses: si hay OTRO inmueble viable, el de mayor potencial total (ventaja al corte) y que no sea
 //    variante del mismo (misma ficha), para que se vean alternativas distintas (ej. Zumpango corto, Playa del
@@ -16,6 +19,7 @@ import type { Proyecto, SupuestosGlobales } from '@/components/trol3/AsesoriaInf
 
 export const PLAZO_CORTO = 18;
 export const PLAZO_LARGO = 60;
+export const SALDO_MIN_COTIZACION = 100000;
 
 export interface OpcionCotizacion {
   plazo: number;
@@ -71,7 +75,7 @@ export function armarCotizacionInicial(a: {
   };
   const factores = FACTORES_DEFAULT(a.titular.ingreso_real || a.titular.salario_imss || 0);
   const disponibles = a.proyectos.filter((p) => p.disponible);
-  if (!disponibles.length || !(a.titular.ssv > 0)) return null;
+  if (!disponibles.length || !(a.titular.ssv >= SALDO_MIN_COTIZACION)) return null;
 
   const corrida = (h: number): FilaSugerencia[] => {
     try {
@@ -80,12 +84,12 @@ export function armarCotizacionInicial(a: {
         palancas: { plusvalia: 0.06, alterno: a.supuestos.alterno, pct_deuda: 0, tasa_deuda: 0.2, corte_anios: Math.max(5, h / 12 + 3) },
         factores, creditoMin, horizonteElegido: h, horizonteFallback: null, reglas,
       });
-      return s.filas.filter((f) => f.horizonte === h && !f.para_saldos_mayores && !(f.meses_cotizando > 0 && f.pct_salario > 0.30));
+      return s.filas.filter((f) => f.horizonte === h && !(f.meses_cotizando > 0 && f.pct_salario > 0.30));
     } catch { return []; }
   };
 
-  const corto = corrida(PLAZO_CORTO)
-    .sort((x, y) => (Math.max(0, x.pmt - x.renta_neta) - Math.max(0, y.pmt - y.renta_neta)) || (y.ventaja - x.ventaja))[0];
+  const pone = (f: FilaSugerencia) => Math.max(0, f.pmt - f.renta_neta);
+  const corto = corrida(PLAZO_CORTO).sort((x, y) => (pone(x) - pone(y)) || (y.ventaja - x.ventaja))[0];
   const filasLargo = corrida(PLAZO_LARGO);
   const opciones: OpcionCotizacion[] = [];
   if (corto) opciones.push(opcion(corto, PLAZO_CORTO, 'menor_pago'));
@@ -94,7 +98,7 @@ export function armarCotizacionInicial(a: {
   const otro = filasLargo.filter((f) => !mismoProducto(f) && f.ventaja > 0).sort((x, y) => y.ventaja - x.ventaja)[0];
   if (otro) opciones.push(opcion(otro, PLAZO_LARGO, 'mayor_potencial'));
   else {
-    const mismo = corto ? filasLargo.find((f) => f.id === corto.id) : filasLargo.sort((x, y) => y.ventaja - x.ventaja)[0];
+    const mismo = corto ? filasLargo.find((f) => f.id === corto.id) : [...filasLargo].sort((x, y) => y.ventaja - x.ventaja)[0];
     if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial'));
   }
   if (!opciones.length) return null;
@@ -115,6 +119,8 @@ export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null)
     const pone = o.pone_al_mes > 0 ? `pones ${cientos(o.pone_al_mes)} al mes` : 'la renta cubre el pago';
     lineas.push(`• *Si vendes en ${o.plazo} meses* — ${lugar}: ${pone} y al vender recibes ${miles(o.recibe_al_vender)}.${o.ficha_url ? `\n  Ficha: ${o.ficha_url}` : ''}`);
   }
+  lineas.push('');
+  lineas.push('Funciona mejor si lo mantienes varios años: mientras cotizas tus aportaciones abonan al crédito, deduces intereses y el crédito trae seguro de vida. También puedes unir tu crédito con el de otra persona.');
   lineas.push('');
   lineas.push('Son cifras iniciales con supuestos de renta y plusvalía; las afinamos juntos. ¿Te late una llamada de 20 min esta semana?');
   return lineas.join('\n');
