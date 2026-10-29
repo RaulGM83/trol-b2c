@@ -31,6 +31,8 @@ import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
+import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
+import { CotizacionInicialCard } from '@/components/trol3/CotizacionInicialCard';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
 import { DiagnosticoPanel, type AsesoriaOpcion, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
 import type { Feedback, InstruccionesVigentes } from '@/components/trol3/AfinarRedactor';
@@ -293,6 +295,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
     });
   }
   const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;
+  // 276 · Cotización inicial (18 y 60 meses) para compartir sin abrir la calculadora.
+  const cotInicial = searchParams.tab === 'infonavit' ? await cargarCotizacionInicial(params.id) : null;
   const MAS: [string, string][] = TABS_MAS.filter(([t]) => t !== 'infonavit' || verTabInfonavit);
   const TABS: [string, string][] = [...TABS_PRINCIPALES, ...MAS, ['viraal', 'Viraal']];
   const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'relacion';
@@ -738,7 +742,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
             {tenemos.length ? (
               <section className="rounded-2xl border border-line bg-white p-5">
                 <h2 className="mb-3 text-sm font-bold">Lo que ya tenemos <span className="ml-2 text-xs font-normal text-muted">(edita junto a cada dato · <a href="#detalle" className="underline">ver todo</a>)</span></h2>
-                <DatosTabla personaId={e.persona_id} rows={tenemos} grupos={['imss', 'afore', 'infonavit', 'ahorro_privado', 'contexto']} fechas={{ imss: e.ley_en }} />
+                <DatosTabla personaId={e.persona_id} rows={tenemos} grupos={['imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'ingresos', 'contexto']} fechas={{ imss: e.ley_en }} />
                 <CredencialInfonavit personaId={e.persona_id} estado={((credenciales ?? []) as Any[]).find((c) => c.servicio === 'infonavit') ?? null} />
               </section>
             ) : null}
@@ -781,7 +785,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 <HistorialLaboral historial={historialLaboral} />
                 <div>
                   <p className="mb-3 text-xs text-muted">Mejor dato por campo: <span className="rounded bg-green-50 px-1 text-green-700">Oficial</span> (instituto/proveedor) &gt; <span className="rounded bg-blue-50 px-1 text-blue-700">Trol</span> (calculado) &gt; <span className="rounded bg-amber-50 px-1 text-amber-700">Declarado</span>. Tachado = vencido. “editar” captura o corrige; el botón de cada grupo pide la actualización al proveedor.</p>
-                  <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
+                  <DatosTabla personaId={e.persona_id} rows={rows} grupos={['identidad', 'imss', 'afore', 'infonavit', 'ahorro_privado', 'issste', 'ingresos', 'contexto', 'calculo']} fechas={{ imss: e.ley_en, calculo: datosMap.get('semilla')?.obtenido_en }} />
                 </div>
                 <div className="border-t border-line pt-4">
                   <h3 className="mb-1 text-xs font-bold uppercase text-muted">Consultas</h3>
@@ -836,7 +840,12 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
       {tab === 'diagnostico' && diagPanel}
 
-      {tab === 'infonavit' && infPanel}
+      {tab === 'infonavit' && (
+        <>
+          {cotInicial ? <CotizacionInicialCard personaId={e.persona_id} cot={cotInicial.ok ? cotInicial.cot : null} texto={cotInicial.ok ? cotInicial.texto : null} motivo={cotInicial.ok ? null : cotInicial.motivo} /> : null}
+          {infPanel}
+        </>
+      )}
 
       {tab === 'documentos' && (<div className="space-y-4"><ActasBloque personaId={e.persona_id} servicio={svcActas} tieneCurp={!!e.curp} abiertas={actasAbiertas} ultimas={actasUltimas} /><CobroPanel personaId={e.persona_id} productos={[...((prodsCobro ?? []) as Any[]).map((x) => ({ codigo: x.codigo, nombre: x.nombre, precio: Number(x.precio_mxn), tipo: x.tipo })), ...productos.map((x) => ({ codigo: x.codigo, nombre: `Gestoría: ${x.nombre}`, precio: x.honorario_default, tipo: 'gestoria' }))]} /><BeneficiosPanel personaId={e.persona_id} beneficios={bens ?? []} catalogo={(catBen ?? []) as { codigo: string; nombre: string }[]} /><DocumentosPanel personaId={e.persona_id} docs={docs ?? []} legacy={legacyDocs ?? null} tiposSubida={(catDocs ?? []) as { tipo: string; nombre: string; formatos: string[]; parseable: boolean }[]} tieneCurp={!!e.curp} /></div>)}
 

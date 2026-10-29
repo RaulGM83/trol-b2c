@@ -22,8 +22,8 @@ function show(r: DatoRow) {
   return <>{String(v)}</>;
 }
 
-const CONSULTA_POR_GRUPO: Record<string, [string, string]> = { imss: ['imss_historial', 'Actualizar del IMSS'], afore: ['cda', 'Consultar AFORE (CDA)'], infonavit: ['infonavit', 'Precalificación Infonavit ($5)'], issste: ['issste', 'Consultar ISSSTE'] };
-const GRUPO_LABEL: Record<string, string> = { identidad: 'Identidad', imss: 'IMSS', afore: 'AFORE', infonavit: 'Infonavit', ahorro_privado: 'Ahorro fuera del IMSS', issste: 'ISSSTE', contexto: 'Contexto personal', calculo: 'Cálculos Trol' };
+const CONSULTA_POR_GRUPO: Record<string, [string, string]> = { imss: ['imss_historial', 'Actualizar del IMSS'], afore: ['cda', 'Consultar AFORE (CDA)'], infonavit: ['infonavit', 'Precalificación Infonavit (gratis)'], issste: ['ingresos', 'Consultar ISSSTE (Buró de Ingresos)'], ingresos: ['ingresos', 'Consultar ingresos (Buró de Ingresos)'] };
+const GRUPO_LABEL: Record<string, string> = { identidad: 'Identidad', imss: 'IMSS', afore: 'AFORE', infonavit: 'Infonavit', ahorro_privado: 'Ahorro fuera del IMSS', issste: 'ISSSTE', ingresos: 'Ingresos (nómina SAT) · sólo asesor', contexto: 'Contexto personal', calculo: 'Cálculos Trol' };
 
 export function DatosTabla({ personaId, rows, grupos, compacto = false, fechas = {} }: { personaId: string; rows: DatoRow[]; grupos: string[]; compacto?: boolean; fechas?: Record<string, string | null | undefined> }) {
   return (

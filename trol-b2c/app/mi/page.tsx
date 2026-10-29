@@ -183,6 +183,38 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
           {pa ? <LoQueSigue pa={pa} jugada={(jugada as Any | null) ?? null} identidad={identidad} faltan={faltan} tieneSemilla={!!e.tiene_semilla} linkCitas={((linkCitas as Any)?.link as string | undefined) ?? null} /> : <ChatTrol />}
 
           {millas ? <MillasCard m={millas} /> : null}
+          {(() => {
+            // 270 · Tiempo en el ISSSTE (validado por Buró de Ingresos o Nubarium). Sin monto: no calculamos pensión ISSSTE.
+            const dv = (c: string) => datos.find((d) => d.campo === c && d.capa === 'validado')?.valor;
+            const st = dv('status_issste') as string | undefined;
+            if (!st || !['Activo', 'Inactivo', 'Pensionado'].includes(st)) return null;
+            const reg = dv('regimen_issste') as string | undefined;
+            const antig = Number(dv('antiguedad_issste_anios'));
+            const sb = Number(dv('sueldo_basico_issste'));
+            const ramo = dv('ramo_issste') as string | undefined;
+            const emp = dv('empalme_issste_imss') === true;
+            const cuentasInd = !reg || /cuentas|sin r/i.test(reg);
+            return (
+              <section className="rounded-2xl border border-line bg-white p-5">
+                <h2 className="text-sm font-bold">Tu tiempo en el gobierno (ISSSTE)</h2>
+                <p className="mt-1 text-xs text-muted">Además del IMSS, tienes periodos en el ISSSTE. Ese tiempo es tuyo y lo vamos a considerar en tu plan.</p>
+                <table className="mt-3 w-full text-sm"><tbody>
+                  <tr className="border-t border-line/70"><td className="py-1 text-muted">Situación</td><td className="py-1 text-right font-medium">{st === 'Activo' ? 'Cotizas hoy' : st === 'Pensionado' ? 'Pensionado' : 'Cotizaste antes'}</td></tr>
+                  {ramo ? <tr className="border-t border-line/70"><td className="py-1 text-muted">Dependencia</td><td className="py-1 text-right font-medium">{ramo}</td></tr> : null}
+                  <tr className="border-t border-line/70"><td className="py-1 text-muted">Régimen</td><td className="py-1 text-right font-medium">{reg ? reg.charAt(0) + reg.slice(1).toLowerCase() : 'Por confirmar'}</td></tr>
+                  {antig > 0 ? <tr className="border-t border-line/70"><td className="py-1 text-muted">Antigüedad</td><td className="py-1 text-right font-medium">{fmtNum(Math.round(antig * 10) / 10)} años</td></tr> : null}
+                  {sb > 0 ? <tr className="border-t border-line/70"><td className="py-1 text-muted">Sueldo básico</td><td className="py-1 text-right font-medium">{fmtMXN(sb)} al mes</td></tr> : null}
+                </tbody></table>
+                <p className="mt-3 text-xs">
+                  {emp
+                    ? 'Hubo años en que cotizaste al mismo tiempo en el IMSS y en el ISSSTE. Tu asesor revisa cómo se cuentan para que no pierdas semanas.'
+                    : cuentasInd
+                      ? 'Con tu régimen, tus años en el ISSSTE pueden sumar a tus semanas del IMSS. Tu asesor lo revisa contigo.'
+                      : 'Con Décimo Transitorio, tu pensión del ISSSTE se calcula aparte de la del IMSS. Tu asesor te orienta.'}
+                </p>
+              </section>
+            );
+          })()}
 
           {e.ley === 'Ley73' ? (
             // claude/109: Informe Trol #1 (cierre de la Mod 40). Sólo Ley 73: es a quien le cambió la regla.
@@ -283,7 +315,7 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
                       <tr key={d.campo} className="border-t border-line/70">
                         <td className="py-1 text-muted">{d.nombre}</td>
                         <td className="py-1 text-right font-medium">{d.tipo === 'bool' ? (d.valor === true ? 'Sí' : d.valor === false ? 'No' : String(d.valor)) : d.tipo === 'number' ? (/saldo|pension|costo|ingreso|infonavit|salario|expectativa|disponible/.test(d.campo) ? fmtMXN(Number(d.valor)) : fmtNum(Number(d.valor))) : d.tipo === 'date' ? fmtFecha(String(d.valor)) : String(d.valor)}</td>
-                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? 'del IMSS' : d.capa === 'calculado' ? 'calculado' : 'nos dijiste'}{d.vigente === false ? ' · antiguo' : ''}</td>
+                        <td className="py-1 pl-2 text-right text-[10px] text-muted">{d.capa === 'validado' ? (g === 'issste' ? 'del ISSSTE' : g === 'infonavit' ? 'del Infonavit' : g === 'afore' ? 'de tu AFORE' : g === 'identidad' ? 'validado' : 'del IMSS') : d.capa === 'calculado' ? 'calculado' : 'nos dijiste'}{d.vigente === false ? ' · antiguo' : ''}</td>
                       </tr>
                     ))}
                   </tbody></table>

@@ -62,7 +62,7 @@ export function ExpedienteAcciones({ personaId, esMia, sinCabecera, etapa, cabec
 // OportunidadAcciones se reemplazó por components/trol3/OportunidadEtapa.tsx (ciclo unificado, 25-ago).
 
 const TIPOS = [
-  ['imss_historial', 'Historial IMSS (Belvo → Jordan)'], ['cda', 'CDA / AFORE (gratis)'], ['calculo_base', 'Recalcular con SISEC'], ['issste', 'ISSSTE (Nubarium)'], ['infonavit', 'Precalificación Infonavit (broker, $5)'], ['pdf_semanas', 'Subir PDF de semanas'],
+  ['imss_historial', 'Historial IMSS (Jordan)'], ['cda', 'CDA / AFORE (gratis)'], ['calculo_base', 'Recalcular con SISEC'], ['ingresos', 'Ingresos SAT e ISSSTE (Buró de Ingresos)'], ['infonavit', 'Precalificación Infonavit (Precalix, gratis)'], ['pdf_semanas', 'Subir PDF de semanas'],
 ];
 export function ConsultaForm({ personaId }: { personaId: string }) {
   const [tipo, setTipo] = useState('imss_historial');

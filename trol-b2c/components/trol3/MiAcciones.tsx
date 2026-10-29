@@ -329,7 +329,7 @@ export function MisionCta({ mision, campos, identidad = null, compacto = false }
     );
   }
   if (cta === 'issste') {
-    // Sí → la consulta al ISSSTE (Nubarium) se dispara sola desde la base; No → la misión queda cerrada.
+    // Sí → la consulta al ISSSTE (Buró de Ingresos, 270) se dispara sola desde la base; No → la misión queda cerrada.
     return (
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={pending} className={cls} onClick={() => start(async () => {

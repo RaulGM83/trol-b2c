@@ -1,0 +1,6 @@
+-- 270 · Oportunidad issste_estrategia + ficha O18 + trol3.evaluar_issste (llamada desde evaluar_persona).
+-- Detectada: status_issste validado Activo/Inactivo/Pensionado (BDI o Nubarium); motivo con régimen, antigüedad
+-- y "revisar empalme" (empalme_issste_imss) o "revisar portabilidad" (Cuentas Individuales / Sin régimen).
+-- Posible: cotiza_issste declarado sin consulta. No calcula pensión ISSSTE.
+-- Aplicada en producción el 29-oct-2026 (apply_migration 270_issste_estrategia + ajuste SIN RÉGIMEN / antigüedad 0).
+-- Texto completo: ver claude/113 §B y la definición viva con pg_get_functiondef('trol3.evaluar_issste(uuid,uuid)').

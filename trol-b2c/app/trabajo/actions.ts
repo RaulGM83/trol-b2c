@@ -2156,3 +2156,26 @@ export async function cancelarCita(citaId: string, personaId: string) {
 export async function actualizarSisec(personaId: string) {
   return pedirConsulta(personaId, 'imss_historial', false, 'actualizar desde Relación', true);
 }
+
+/**
+ * 276 · El asesor compartió la cotización inicial Infonavit (texto o imagen): se guarda la foto
+ * de los números que vio el cliente y se cierra la tarea "Cotización inicial lista".
+ */
+export async function registrarCotizacionInicial(personaId: string, medio: 'texto' | 'imagen', cotizacion: unknown) {
+  const m = await requireMiembro();
+  const c = cotizacion as { opciones?: { plazo: number; desarrollo: string; pone_al_mes: number; recibe_al_vender: number }[] } | null;
+  const resumen = (c?.opciones ?? [])
+    .map((o) => `${o.plazo} m ${o.desarrollo}: pone $${Math.round(o.pone_al_mes).toLocaleString('es-MX')}/mes, recibe $${Math.round(o.recibe_al_vender).toLocaleString('es-MX')}`)
+    .join(' · ');
+  const { error } = await t3().rpc('registrar_interaccion', {
+    p_persona: personaId, p_canal: 'nota', p_actor: 'asesor', p_actor_id: m.id, p_direccion: 'interna',
+    p_contenido: `Cotización inicial Infonavit compartida (${medio}): ${resumen}`,
+    p_visible_cliente: false,
+    p_meta: { tipo: 'cotizacion_infonavit_inicial', medio, cotizacion: c },
+  });
+  if (error) return fail(error);
+  await t3().from('tareas').update({ estado: 'hecha', hecha_en: new Date().toISOString(), hecha_por: m.id, nota_cierre: `Compartida (${medio})` })
+    .eq('persona_id', personaId).eq('origen', 'cotizacion_infonavit').eq('estado', 'pendiente');
+  revalidatePath(`/trabajo/p/${personaId}`);
+  return ok();
+}
