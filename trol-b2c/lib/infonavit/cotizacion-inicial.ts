@@ -24,6 +24,10 @@ export const SALDO_MIN_COTIZACION = 100000;
 export interface OpcionCotizacion {
   plazo: number;
   proyecto_id: string; desarrollo: string; zona: string | null; ficha_url: string | null;
+  /** 279 · Lo que ve el cliente (nombre comercial; si no hay, el del desarrollo). */
+  nombre: string;
+  /** 279 · Ubicación comercial, renglón aparte. */
+  ubicacion: string | null;
   credito: number; pago: number; renta_neta: number;
   /** Lo que sale de su bolsa al mes: pago − renta neta (0 = la renta lo cubre). */
   pone_al_mes: number;
@@ -50,9 +54,11 @@ export function supuestosMotor(s: SupuestosGlobales): Partial<SupuestosInfonavit
   };
 }
 
-function opcion(f: FilaSugerencia, plazo: number, criterio: OpcionCotizacion['criterio']): OpcionCotizacion {
+function opcion(f: FilaSugerencia, plazo: number, criterio: OpcionCotizacion['criterio'], nombres: Map<string, { nombre: string; ubicacion: string | null }>): OpcionCotizacion {
   return {
     plazo, proyecto_id: f.id, desarrollo: f.desarrollo, zona: f.zona, ficha_url: f.ficha_url,
+    nombre: nombres.get(f.id)?.nombre || f.desarrollo,
+    ubicacion: nombres.get(f.id)?.ubicacion ?? f.zona,
     credito: f.credito, pago: f.pmt, renta_neta: f.renta_neta,
     pone_al_mes: Math.max(0, f.pmt - f.renta_neta),
     recibe_al_vender: f.recibe_dia, ventaja: f.ventaja, criterio,
@@ -75,6 +81,7 @@ export function armarCotizacionInicial(a: {
   };
   const factores = FACTORES_DEFAULT(a.titular.ingreso_real || a.titular.salario_imss || 0);
   const disponibles = a.proyectos.filter((p) => p.disponible);
+  const nombres = new Map(disponibles.map((p) => [p.id, { nombre: (p.nombre_comercial ?? '').trim(), ubicacion: (p.ubicacion_comercial ?? '').trim() || null }] as [string, { nombre: string; ubicacion: string | null }]));
   if (!disponibles.length || !(a.titular.ssv >= SALDO_MIN_COTIZACION)) return null;
 
   const corrida = (h: number): FilaSugerencia[] => {
@@ -92,14 +99,14 @@ export function armarCotizacionInicial(a: {
   const corto = corrida(PLAZO_CORTO).sort((x, y) => (pone(x) - pone(y)) || (y.ventaja - x.ventaja))[0];
   const filasLargo = corrida(PLAZO_LARGO);
   const opciones: OpcionCotizacion[] = [];
-  if (corto) opciones.push(opcion(corto, PLAZO_CORTO, 'menor_pago'));
+  if (corto) opciones.push(opcion(corto, PLAZO_CORTO, 'menor_pago', nombres));
   // Alternativa de verdad: otro inmueble que no sea variante del mismo (Laureles PA/PB comparten ficha).
   const mismoProducto = (f: FilaSugerencia) => !!corto && (f.id === corto.id || (!!f.ficha_url && f.ficha_url === corto.ficha_url));
   const otro = filasLargo.filter((f) => !mismoProducto(f) && f.ventaja > 0).sort((x, y) => y.ventaja - x.ventaja)[0];
-  if (otro) opciones.push(opcion(otro, PLAZO_LARGO, 'mayor_potencial'));
+  if (otro) opciones.push(opcion(otro, PLAZO_LARGO, 'mayor_potencial', nombres));
   else {
     const mismo = corto ? filasLargo.find((f) => f.id === corto.id) : [...filasLargo].sort((x, y) => y.ventaja - x.ventaja)[0];
-    if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial'));
+    if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial', nombres));
   }
   if (!opciones.length) return null;
   return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones };
@@ -111,17 +118,18 @@ const cientos = (n: number) => '$' + (Math.round(Math.abs(n) / 100) * 100).toLoc
 /** El mensaje para copiar (texto aprobado por Raúl, 29-oct). Montos redondeados. */
 export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null): string {
   const lineas: string[] = [];
-  lineas.push(`Hola${primerNombre ? ' ' + primerNombre : ''}, ya tenemos tu precalificación de Infonavit: tu saldo de vivienda es de ${miles(c.saldo)}${c.credito_max ? ` y tu crédito llega a ${miles(c.credito_max)}` : ''}.`);
+  lineas.push(`Hola${primerNombre ? ' ' + primerNombre : ''}, te comparto tu cotización personalizada con tus datos de Infonavit: tu saldo de vivienda es de ${miles(c.saldo)}.`);
   lineas.push('');
-  lineas.push(c.opciones.length > 1 ? 'Te comparto dos opciones para usarlo con un inmueble que se renta:' : 'Te comparto una opción para usarlo con un inmueble que se renta:');
+  lineas.push('Aprovéchalo para comprar un inmueble a precio preferencial en un proyecto con potencial de plusvalía. Dos opciones para ti:');
   for (const o of c.opciones) {
-    const lugar = `${o.desarrollo}${o.zona ? ` (${o.zona})` : ''}`;
-    const pone = o.pone_al_mes > 0 ? `pones ${cientos(o.pone_al_mes)} al mes` : 'la renta cubre el pago';
-    lineas.push(`• *Si vendes en ${o.plazo} meses* — ${lugar}: ${pone} y al vender recibes ${miles(o.recibe_al_vender)}.${o.ficha_url ? `\n  Ficha: ${o.ficha_url}` : ''}`);
+    const pone = o.pone_al_mes > 0 ? `pones ${cientos(o.pone_al_mes)} al mes (crédito menos renta)` : 'la renta cubre el crédito';
+    lineas.push(`• *Si vendes en ${o.plazo} meses* — ${o.nombre}${o.ubicacion ? ` (${o.ubicacion})` : ''}: ${pone} y al vender recibes ${miles(o.recibe_al_vender)}.${o.ficha_url ? `\n  Ficha: ${o.ficha_url}` : ''}`);
   }
   lineas.push('');
   lineas.push('Funciona mejor si lo mantienes varios años: mientras cotizas tus aportaciones abonan al crédito, deduces intereses y el crédito trae seguro de vida. También puedes unir tu crédito con el de otra persona.');
   lineas.push('');
-  lineas.push('Son cifras iniciales con supuestos de renta y plusvalía; las afinamos juntos. ¿Te late una llamada de 20 min esta semana?');
+  lineas.push('Nosotros no cobramos ningún porcentaje de tu saldo (nos paga la constructora), pagamos los gastos notariales y, si quieres, administramos la renta y lo vendemos cuando tú decidas.');
+  lineas.push('');
+  lineas.push('Son cifras iniciales: asumen que sigues cotizando con tu salario actual y usan renta y plusvalía estimadas. Pueden mejorar si sumas a otra persona al crédito. ¿Te la explico en una llamada de 20 min? Dime qué día y hora te acomodan.');
   return lineas.join('\n');
 }

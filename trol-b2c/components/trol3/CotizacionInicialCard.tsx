@@ -54,9 +54,11 @@ export function CotizacionInicialCard({ personaId, cot, texto, motivo }: {
         {cot.opciones.map((o) => (
           <div key={o.plazo} className="rounded-xl border border-line p-3">
             <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Si vende en {o.plazo} meses</div>
-            <div className="mt-1 text-sm font-bold">{o.desarrollo}{o.zona ? <span className="font-normal text-muted"> · {o.zona}</span> : null}</div>
+            <div className="mt-1 text-sm font-bold">{o.nombre}</div>
+            {o.ubicacion ? <div className="text-xs">{o.ubicacion}</div> : null}
+            <div className="text-[11px] text-muted">{o.desarrollo}{o.zona ? ` · ${o.zona}` : ''}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-              <div><div className="text-[11px] text-muted">Pone al mes</div><div className="font-semibold tabular-nums">{o.pone_al_mes > 0 ? money(o.pone_al_mes) : 'La renta lo cubre'}</div></div>
+              <div><div className="text-[11px] text-muted">Pone al mes (crédito − renta)</div><div className="font-semibold tabular-nums">{o.pone_al_mes > 0 ? money(o.pone_al_mes) : 'La renta lo cubre'}</div></div>
               <div><div className="text-[11px] text-muted">Recibe al vender</div><div className="font-bold tabular-nums text-green-800">{money(o.recibe_al_vender)}</div></div>
             </div>
             <div className="mt-2 text-[11px] text-muted">

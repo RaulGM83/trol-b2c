@@ -30,6 +30,10 @@ export interface Proyecto {
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
   /** Ficha PDF pública del inmueble (bucket fichas-inmuebles); va a la cotización y a la propuesta. */
   ficha_url?: string | null;
+  /** 279 · Nombre comercial: lo ve el cliente en la cotización inicial. */
+  nombre_comercial?: string | null;
+  /** 279 · Ubicación comercial, en renglón aparte (ej. Zumpango · cerca del AIFA). */
+  ubicacion_comercial?: string | null;
 }
 
 export interface SupuestosGlobales {

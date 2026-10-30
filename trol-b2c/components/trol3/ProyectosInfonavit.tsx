@@ -13,6 +13,8 @@ export interface ProyectoRow {
   notariales_credito: number; notariales_adicionales: number; comision_desarrollador: number;
   aliado_cubre_notariales: boolean; disponible: boolean; notas: string | null;
   ficha_url?: string | null;
+  nombre_comercial?: string | null;
+  ubicacion_comercial?: string | null;
 }
 
 const mxn = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -24,7 +26,7 @@ const btnDark = 'rounded-lg bg-ink px-2.5 py-1 text-xs font-semibold text-white 
 const VACIO: ProyectoRow = {
   id: '', clave: null, desarrollo: '', zona: '', m2: null, avaluo: 0, escrituracion: 0, costo_aliado: null, pct_excedente_constructora: 0,
   renta: 0, renta_estimada: true, plusvalia: 0.06, plusvalia_validada: false, notariales_credito: 0,
-  notariales_adicionales: 0, comision_desarrollador: 0, aliado_cubre_notariales: true, disponible: true, notas: '', ficha_url: '',
+  notariales_adicionales: 0, comision_desarrollador: 0, aliado_cubre_notariales: true, disponible: true, notas: '', ficha_url: '', nombre_comercial: '', ubicacion_comercial: '',
 };
 
 function Campo({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
@@ -68,6 +70,8 @@ function Editor({ inicial, onListo }: { inicial: ProyectoRow; onListo: () => voi
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={p.disponible} onChange={(e) => set('disponible', e.target.checked)} /> Disponible</label>
       </div>
       <Campo label="Notas"><textarea value={p.notas ?? ''} onChange={(e) => set('notas', e.target.value)} rows={2} className={`${inp} mt-1`} /></Campo>
+      <Campo label="Nombre comercial (lo ve el cliente)" sub="Va en la cotización inicial por WhatsApp. Ej.: Casa dúplex de 3 recámaras"><input value={p.nombre_comercial ?? ''} onChange={(e) => set('nombre_comercial', e.target.value)} className={inp} placeholder="Departamento de 3 recámaras" /></Campo>
+      <Campo label="Ubicación comercial (lo ve el cliente)" sub="Renglón aparte, corto. Ej.: Playa del Carmen · 12 min en coche de la Quinta Avenida"><input value={p.ubicacion_comercial ?? ''} onChange={(e) => set('ubicacion_comercial', e.target.value)} className={inp} placeholder="Zumpango · cerca del AIFA" /></Campo>
       <Campo label="Ficha del inmueble (URL del PDF)" sub="Bucket público fichas-inmuebles; se enlaza en la cotización y en la propuesta extendida"><input type="url" value={p.ficha_url ?? ''} onChange={(e) => set('ficha_url', e.target.value)} className={inp} placeholder="https://…/storage/v1/object/public/fichas-inmuebles/ficha-….pdf" /></Campo>
       <div className="mt-3 flex items-center gap-2">
         <button disabled={pending} className={btnDark} onClick={() => start(async () => {
