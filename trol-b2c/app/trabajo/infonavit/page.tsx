@@ -12,19 +12,25 @@ const FASES: { clave: string; nombre: string }[] = [
   ...ETAPAS_INFONAVIT,
 ];
 const POR_PAGINA = 50;
+// 288 · Rangos de saldo para ir según el inventario de inmuebles.
+const RANGOS: [string, string][] = [['100-250', '$100–250k'], ['250-500', '$250–500k'], ['500-800', '$500–800k'], ['800+', '$800k+']];
 
-export default async function TramitesInfonavit({ searchParams }: { searchParams: { fase?: string; asesor?: string; pag?: string } }) {
+export default async function TramitesInfonavit({ searchParams }: { searchParams: { fase?: string; asesor?: string; pag?: string; rango?: string } }) {
   await requireMiembro();
   const db = t3();
   const fase = FASES.some((f) => f.clave === searchParams.fase) ? searchParams.fase! : 'en_tramite';
   const asesor = searchParams.asesor;
+  const rango = RANGOS.some(([k]) => k === searchParams.rango) ? searchParams.rango : undefined;
   const pag = Math.max(1, Number(searchParams.pag) || 1);
 
   const [{ data: todas }, { data: miembros }] = await Promise.all([
-    db.from('v_tramites_infonavit').select('oportunidad_id,persona_id,nombre,apellidos,fase,fase_en,cabecera_id,asesor,saldo,monto_credito,inmueble,broker,docs,tramite_infonavit').limit(5000),
+    db.from('v_tramites_infonavit').select('oportunidad_id,persona_id,nombre,apellidos,fase,fase_en,cabecera_id,asesor,saldo,monto_credito,inmueble,broker,docs,tramite_infonavit,rango').limit(5000),
     db.from('miembros').select('id,nombre').eq('activo', true).order('nombre'),
   ]);
-  const base = ((todas ?? []) as Any[]).filter((r) => !asesor || (asesor === 'sin' ? !r.cabecera_id : r.cabecera_id === asesor));
+  const porAsesor = ((todas ?? []) as Any[]).filter((r) => !asesor || (asesor === 'sin' ? !r.cabecera_id : r.cabecera_id === asesor));
+  const nRango = new Map<string, number>();
+  porAsesor.forEach((r) => { if (r.rango) nRango.set(r.rango, (nRango.get(r.rango) ?? 0) + 1); });
+  const base = porAsesor.filter((r) => !rango || r.rango === rango);
   const conteo = new Map<string, number>();
   base.forEach((r) => conteo.set(r.fase, (conteo.get(r.fase) ?? 0) + 1));
   const enTramite = new Set(ETAPAS_INFONAVIT.map((e) => e.clave));
@@ -40,7 +46,7 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
   const nombreFase = new Map(FASES.map((f) => [f.clave, f.nombre]));
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    Object.entries({ fase: fase !== 'en_tramite' ? fase : undefined, asesor, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
+    Object.entries({ fase: fase !== 'en_tramite' ? fase : undefined, asesor, rango, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
     const s = sp.toString();
     return `/trabajo/infonavit${s ? `?${s}` : ''}`;
   };
@@ -57,6 +63,12 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
         <Link href={href({ asesor: undefined, pag: undefined })} className={chip(!asesor)}>Todos</Link>
         {((miembros ?? []) as Any[]).map((x) => <Link key={x.id} href={href({ asesor: x.id, pag: undefined })} className={chip(asesor === x.id)}>{(x.nombre ?? '').split(' ')[0]}</Link>)}
         <Link href={href({ asesor: 'sin', pag: undefined })} className={chip(asesor === 'sin')}>Sin dueño</Link>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <span className="font-semibold text-muted">Saldo Infonavit:</span>
+        <Link href={href({ rango: undefined, pag: undefined })} className={chip(!rango)}>Todos</Link>
+        {RANGOS.map(([k, l]) => <Link key={k} href={href({ rango: k, pag: undefined })} className={chip(rango === k)}>{l} · {nRango.get(k) ?? 0}</Link>)}
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">

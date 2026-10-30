@@ -4,3 +4,6 @@
 -- Vista v_tramites_infonavit (security_invoker, solo miembros): compra_inmueble abiertas/ganadas con fase
 -- por_contactar · interesado · 7 etapas del broker. Página /trabajo/infonavit (Negocio → Trámites Infonavit).
 -- 284 · Precalix a $2.50 y campaña campana_precalix_base_20261030 (1,740 personas).
+-- 286 · catalogo_documentos: taller_infonavit, solicitud_credito_infonavit, sic_infonavit, instruccion_notarial, condiciones_financieras, aviso_retencion, acuse_tramite_infonavit, seguro_tramite_infonavit.
+-- 287 · compra_inmueble desde 100,000 sin tope (igual que la cotización inicial); inversion_inmueble apagada y sus abiertas unificadas en compra_inmueble. credito_infonavit_activo migrada (abiertas cerradas o pasadas al trámite); 49 consultas broker_infonavit atoradas canceladas.
+-- 288 · _rango_infonavit(saldo): 100-250 · 250-500 · 500-800 · 800+. mi_tibios(..., p_rango) filtra por la compra_inmueble abierta y devuelve 'rangos' (conteos). v_tramites_infonavit.rango. Chips 'Saldo Infonavit' en Tibios y en Trámites Infonavit.

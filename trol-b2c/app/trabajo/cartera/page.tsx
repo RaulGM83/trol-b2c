@@ -14,7 +14,7 @@ export const metadata = { title: 'Mi cartera · Trol equipo' };
 // Las reglas viven en la base (carril_de, mi_*); esta página sólo pinta y ofrece los gestos.
 const CARRILES: Carril[] = ['favoritos', 'calientes', 'tibios', 'frios'];
 
-export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string; pag?: string; dueno?: string } }) {
+export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string; pag?: string; dueno?: string; rango?: string } }) {
   const m = await requireMiembro();
   const tab: Carril = CARRILES.includes(searchParams.tab as Carril) ? (searchParams.tab as Carril) : 'calientes';
   const vista = searchParams.vista === 'equipo' ? 'equipo' : 'mios';
@@ -24,6 +24,9 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
     : searchParams.alcance === 'mios' ? 'mios' : (searchParams.vista === 'equipo' ? 'todos' : 'mios');
   const POR_PAGINA = 20;
   const pag = Math.max(1, Number(searchParams.pag) || 1);
+  // 288 · Rango de saldo Infonavit, para ir según el inventario de inmuebles.
+  const RANGOS: [string, string][] = [['100-250', '$100–250k'], ['250-500', '$250–500k'], ['500-800', '$500–800k'], ['800+', '$800k+']];
+  const rango = RANGOS.some(([k]) => k === searchParams.rango) ? searchParams.rango : undefined;
   const esAdmin = (m.roles ?? []).some((r) => r === 'admin' || r === 'coach');
   // 283 · Admin/coach puede ver los tibios de otro asesor (alcance 'mios' + dueno).
   const dueno = esAdmin && alcance === 'mios' && searchParams.dueno && searchParams.dueno !== m.id ? searchParams.dueno : undefined;
@@ -35,7 +38,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
 
   const [{ data, error }, { data: misTareas }, { data: miembrosRaw }] = await Promise.all([
     tab === 'calientes' ? db.rpc('mi_calientes', { p_vista: vista })
-      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? null, p_limit: POR_PAGINA, p_offset: (pag - 1) * POR_PAGINA, p_dueno: dueno ?? null })
+      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? (rango ? 'todas' : null), p_limit: POR_PAGINA, p_offset: (pag - 1) * POR_PAGINA, p_dueno: dueno ?? null, p_rango: rango ?? null })
       : tab === 'favoritos' ? db.rpc('mi_favoritos', { p_vista: vista })
       : db.rpc('mi_frios', { p_vista: vista }),
     db.from('v_tareas').select('id,vencida').eq('estado', 'pendiente').eq('responsable_id', m.id).limit(200),
@@ -47,7 +50,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const nombre = (m.nombre ?? '').split(' ')[0];
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance !== (equipo ? 'todos' : 'mios') ? alcance : undefined, tema: searchParams.tema, q: q || undefined, dueno, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
+    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance !== (equipo ? 'todos' : 'mios') ? alcance : undefined, tema: searchParams.tema, q: q || undefined, dueno, rango, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
     return `/trabajo/cartera?${sp.toString()}`;
   };
   const query = `${equipo ? '&vista=equipo' : ''}`;
@@ -146,6 +149,13 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
               })}
             </div>
           ) : null}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="font-semibold text-muted">Saldo Infonavit:</span>
+            <Link href={href({ rango: undefined, tema: undefined, pag: undefined })} className={!rango ? 'rounded-full bg-ink px-3 py-1 font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 font-semibold'}>Todos</Link>
+            {RANGOS.map(([k, l]) => (
+              <Link key={k} href={href({ rango: k, tema: undefined, pag: undefined })} className={rango === k ? 'rounded-full bg-ink px-3 py-1 font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 font-semibold'}>{l} · {fmtNum(Number(d.rangos?.[k] ?? 0))}</Link>
+            ))}
+          </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {((d.grupos ?? []) as Any[]).map((g) => (
               <Link key={g.nombre} href={href({ tema: g.nombre })} className={g.nombre === d.grupo ? 'rounded-full bg-ink px-3 py-1 text-[11px] font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 text-[11px] font-semibold'}>{g.nombre} · {fmtNum(Number(g.n))}</Link>
