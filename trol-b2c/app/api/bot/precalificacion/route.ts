@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const { data: link } = await db.from('links_cotizacion').insert({ persona_id: pid }).select('token').single();
     const base = c.get('app_url') || 'https://app.trol.mx';
     payload.texto = cot.texto;
-    if ((link as Any)?.token) payload.imagen_url = `${base}/c/${(link as Any).token}.png`;
+    if ((link as Any)?.token) payload.imagen_url = `${base}/cotizacion/${(link as Any).token}.png`;
   } else if (consultaEstado === 'sin_resultado') {
     resultado = 'no_encontrado';
   } else if (/crédito Infonavit vigente/i.test(cot.motivo)) {

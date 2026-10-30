@@ -1,6 +1,6 @@
 /**
  * 289 · Imagen pública y temporal de la cotización inicial Infonavit (la manda el bot por WhatsApp).
- * La liga es /c/<token>.png; el token caduca a los 30 días (trol3.links_cotizacion).
+ * La liga es /cotizacion/<token>.png; el token caduca a los 30 días (trol3.links_cotizacion).
  */
 import { t3admin, type Any } from '@/lib/trol3/server';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
