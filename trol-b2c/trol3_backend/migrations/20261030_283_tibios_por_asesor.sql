@@ -1,0 +1,3 @@
+-- 283 · (aplicada en producción 30-oct) mi_tibios gana p_dueno uuid default null:
+-- en alcance 'mios' usa coalesce(p_dueno, yo) para _carril_mios y las marcas 'despertado'.
+-- La cartera muestra la fila "Asesor:" (solo admin/coach) bajo "Mis tibios".

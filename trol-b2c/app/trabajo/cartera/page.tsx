@@ -14,7 +14,7 @@ export const metadata = { title: 'Mi cartera · Trol equipo' };
 // Las reglas viven en la base (carril_de, mi_*); esta página sólo pinta y ofrece los gestos.
 const CARRILES: Carril[] = ['favoritos', 'calientes', 'tibios', 'frios'];
 
-export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string; pag?: string } }) {
+export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string; pag?: string; dueno?: string } }) {
   const m = await requireMiembro();
   const tab: Carril = CARRILES.includes(searchParams.tab as Carril) ? (searchParams.tab as Carril) : 'calientes';
   const vista = searchParams.vista === 'equipo' ? 'equipo' : 'mios';
@@ -25,6 +25,8 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const POR_PAGINA = 20;
   const pag = Math.max(1, Number(searchParams.pag) || 1);
   const esAdmin = (m.roles ?? []).some((r) => r === 'admin' || r === 'coach');
+  // 283 · Admin/coach puede ver los tibios de otro asesor (alcance 'mios' + dueno).
+  const dueno = esAdmin && alcance === 'mios' && searchParams.dueno && searchParams.dueno !== m.id ? searchParams.dueno : undefined;
   const db = t3();
   // 210 · Buscar sin salir de la cartera: cada resultado trae su carril y sus gestos (claude/95).
   const q = (searchParams.q ?? '').trim();
@@ -33,7 +35,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
 
   const [{ data, error }, { data: misTareas }, { data: miembrosRaw }] = await Promise.all([
     tab === 'calientes' ? db.rpc('mi_calientes', { p_vista: vista })
-      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? null, p_limit: POR_PAGINA, p_offset: (pag - 1) * POR_PAGINA })
+      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? null, p_limit: POR_PAGINA, p_offset: (pag - 1) * POR_PAGINA, p_dueno: dueno ?? null })
       : tab === 'favoritos' ? db.rpc('mi_favoritos', { p_vista: vista })
       : db.rpc('mi_frios', { p_vista: vista }),
     db.from('v_tareas').select('id,vencida').eq('estado', 'pendiente').eq('responsable_id', m.id).limit(200),
@@ -45,7 +47,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const nombre = (m.nombre ?? '').split(' ')[0];
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance !== (equipo ? 'todos' : 'mios') ? alcance : undefined, tema: searchParams.tema, q: q || undefined, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
+    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance !== (equipo ? 'todos' : 'mios') ? alcance : undefined, tema: searchParams.tema, q: q || undefined, dueno, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
     return `/trabajo/cartera?${sp.toString()}`;
   };
   const query = `${equipo ? '&vista=equipo' : ''}`;
@@ -130,11 +132,20 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
       {tab === 'tibios' ? (
         <div className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <Link href={href({ alcance: 'todos', tema: undefined })} className={alcance === 'todos' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Todos</Link>
-            <Link href={href({ alcance: 'mios', tema: undefined })} className={alcance === 'mios' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Mis tibios</Link>
-            <Link href={href({ alcance: 'pozo', tema: undefined })} className={alcance === 'pozo' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Sin dueño</Link>
-            <span className="ml-2 text-muted">{alcance === 'pozo' ? 'Nadie los lleva: a quien toques te lo quedas.' : alcance === 'todos' ? 'Toda la base con oportunidad, con o sin dueño (sin los fríos ni los que escribieron esta semana).' : 'Asignados a ti, sin conversación viva ni avance.'} · {fmtNum(d.total ?? 0)} en total</span>
+            <Link href={href({ alcance: 'todos', tema: undefined, dueno: undefined })} className={alcance === 'todos' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Todos</Link>
+            <Link href={href({ alcance: 'mios', tema: undefined, dueno: undefined })} className={alcance === 'mios' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Mis tibios</Link>
+            <Link href={href({ alcance: 'pozo', tema: undefined, dueno: undefined })} className={alcance === 'pozo' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Sin dueño</Link>
+            <span className="ml-2 text-muted">{alcance === 'pozo' ? 'Nadie los lleva: a quien toques te lo quedas.' : alcance === 'todos' ? 'Toda la base con oportunidad, con o sin dueño (sin los fríos ni los que escribieron esta semana).' : dueno ? `Asignados a ${(miembros.find((x) => x.id === dueno)?.nombre ?? 'ese asesor').split(' ')[0]}, sin conversación viva ni avance.` : 'Asignados a ti, sin conversación viva ni avance.'} · {fmtNum(d.total ?? 0)} en total</span>
           </div>
+          {esAdmin && alcance === 'mios' ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="font-semibold text-muted">Asesor:</span>
+              {miembros.map((x) => {
+                const activo = (dueno ?? m.id) === x.id;
+                return <Link key={x.id} href={href({ dueno: x.id === m.id ? undefined : x.id, tema: undefined, pag: undefined })} className={activo ? 'rounded-full bg-ink px-3 py-1 font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 font-semibold'}>{x.id === m.id ? 'Yo' : (x.nombre ?? '').split(' ')[0]}</Link>;
+              })}
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {((d.grupos ?? []) as Any[]).map((g) => (
               <Link key={g.nombre} href={href({ tema: g.nombre })} className={g.nombre === d.grupo ? 'rounded-full bg-ink px-3 py-1 text-[11px] font-semibold text-white' : 'rounded-full border border-line bg-white px-3 py-1 text-[11px] font-semibold'}>{g.nombre} · {fmtNum(Number(g.n))}</Link>
