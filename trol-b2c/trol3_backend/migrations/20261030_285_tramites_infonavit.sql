@@ -1,0 +1,6 @@
+-- 285 · (aplicada en producción 30-oct) Seguimiento de trámites Infonavit del equipo (claude/114).
+-- oportunidades.proyecto_id (inmueble asignado) y tramite_infonavit jsonb {fechas:{etapa:fecha}, casa, conyugal, nota}.
+-- mover_etapa_infonavit(p_op, p_etapa, p_fecha date, p_proyecto uuid): fecha real del paso, inmueble; Entregado => ganada.
+-- Vista v_tramites_infonavit (security_invoker, solo miembros): compra_inmueble abiertas/ganadas con fase
+-- por_contactar · interesado · 7 etapas del broker. Página /trabajo/infonavit (Negocio → Trámites Infonavit).
+-- 284 · Precalix a $2.50 y campaña campana_precalix_base_20261030 (1,740 personas).

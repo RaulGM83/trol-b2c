@@ -303,6 +303,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const brokerInf = searchParams.tab === 'infonavit' && opInf
     ? ((await db.from('referidos').select('aliados(nombre,programa_infonavit)').eq('persona_id', params.id).eq('estado', 'atribuido').limit(1).maybeSingle()).data as Any)?.aliados
     : null;
+  // 285 · Inmuebles para asignar al trámite (incluye los ya no disponibles: hay casas colocadas).
+  const proyTramite = searchParams.tab === 'infonavit' && opInf
+    ? (((await db.from('proyectos_inmobiliarios').select('id,desarrollo,nombre_comercial,zona').order('desarrollo')).data ?? []) as Any[])
+        .map((p) => ({ id: p.id as string, nombre: `${p.desarrollo}${p.zona ? ` · ${String(p.zona).split(',')[0]}` : ''}` }))
+    : [];
   const MAS: [string, string][] = TABS_MAS.filter(([t]) => t !== 'infonavit' || verTabInfonavit);
   const TABS: [string, string][] = [...TABS_PRINCIPALES, ...MAS, ['viraal', 'Viraal']];
   const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'relacion';
@@ -848,7 +853,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
       {tab === 'infonavit' && (
         <>
-          {opInf ? <EtapaInfonavit personaId={e.persona_id} oportunidadId={opInf.id} etapa={opInf.etapa_infonavit ?? null} broker={brokerInf?.programa_infonavit ? brokerInf.nombre : null} /> : null}
+          {opInf ? <EtapaInfonavit personaId={e.persona_id} oportunidadId={opInf.id} etapa={opInf.etapa_infonavit ?? null} broker={brokerInf?.programa_infonavit ? brokerInf.nombre : null} proyectos={proyTramite} proyectoId={opInf.proyecto_id ?? null} fechas={(opInf.tramite_infonavit?.fechas ?? {}) as Record<string, string>} /> : null}
           {cotInicial ? <CotizacionInicialCard personaId={e.persona_id} cot={cotInicial.ok ? cotInicial.cot : null} texto={cotInicial.ok ? cotInicial.texto : null} motivo={cotInicial.ok ? null : cotInicial.motivo} /> : null}
           {infPanel}
         </>

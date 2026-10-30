@@ -20,6 +20,7 @@ const ITEMS_ADMIN: [string, string][] = [['/trabajo/redactor', 'Redactor']];
 const ITEMS_NEGOCIO: [string, string][] = [
   ['/trabajo/hoy', 'Operación'],
   ['/trabajo/lista', 'Oportunidades'],
+  ['/trabajo/infonavit', 'Trámites Infonavit'],
   ['/trabajo/embudo', 'Embudo'],
   ['/trabajo/embudo-mi', 'Embudo de /mi'],
   ['/trabajo/eventos', 'Actividad'],

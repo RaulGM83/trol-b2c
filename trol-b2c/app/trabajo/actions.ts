@@ -2181,10 +2181,11 @@ export async function registrarCotizacionInicial(personaId: string, medio: 'text
 }
 
 /** 282 · El equipo mueve la etapa de la operación Infonavit (la ve el broker; en escrituras se le devenga). */
-export async function moverEtapaInfonavit(personaId: string, oportunidadId: string, etapa: string) {
+export async function moverEtapaInfonavit(personaId: string, oportunidadId: string, etapa: string, fecha: string | null = null, proyectoId: string | null = null) {
   await requireMiembro();
-  const { data, error } = await t3().rpc('mover_etapa_infonavit', { p_op: oportunidadId, p_etapa: etapa });
+  const { data, error } = await t3().rpc('mover_etapa_infonavit', { p_op: oportunidadId, p_etapa: etapa, p_fecha: fecha, p_proyecto: proyectoId });
   if (error) return fail(error);
   revalidatePath(`/trabajo/p/${personaId}`);
+  revalidatePath('/trabajo/infonavit');
   return ok({ resultado: data });
 }
