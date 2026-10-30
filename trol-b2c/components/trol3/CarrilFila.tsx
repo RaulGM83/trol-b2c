@@ -39,7 +39,7 @@ export function etiqueta(f: FilaCarril, miembros: Miembro[] = []): [string, stri
       if (f.origen === 'cadencia') return ['Lo iba a pensar · 2º intento', PILL.tibios];
       if (f.origen === 'toca_llamar') return ['Plantilla sin respuesta · toca llamar', PILL.tibios];
       if (f.origen === 'segundo_intento') return ['No contestó · 2ª llamada', PILL.tibios];
-      if (f.origen === 'pozo') return ['Sin dueño', PILL.frios];
+      if (f.origen === 'pozo' || (f.origen === 'todos' && !f.cabecera_id)) return ['Sin dueño', PILL.frios];
       return [f.ultimo_toque ? `Último toque ${hace(f.ultimo_toque)}` : 'Nunca tocado', PILL.tibios];
     case 'favoritos':
       if (f.en_proceso) return [f.pide_equipo ? 'En proceso · nos toca' : 'En proceso', PILL.proceso];

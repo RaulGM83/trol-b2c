@@ -14,12 +14,16 @@ export const metadata = { title: 'Mi cartera · Trol equipo' };
 // Las reglas viven en la base (carril_de, mi_*); esta página sólo pinta y ofrece los gestos.
 const CARRILES: Carril[] = ['favoritos', 'calientes', 'tibios', 'frios'];
 
-export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string } }) {
+export default async function Cartera({ searchParams }: { searchParams: { tab?: string; vista?: string; alcance?: string; tema?: string; q?: string; pag?: string } }) {
   const m = await requireMiembro();
   const tab: Carril = CARRILES.includes(searchParams.tab as Carril) ? (searchParams.tab as Carril) : 'calientes';
   const vista = searchParams.vista === 'equipo' ? 'equipo' : 'mios';
   const equipo = vista === 'equipo';
-  const alcance: 'mios' | 'pozo' = searchParams.alcance === 'pozo' ? 'pozo' : 'mios';
+  // 280 · 'todos' = toda la base con oportunidad, con o sin dueño. Con "Todo el equipo" es el default.
+  const alcance: 'mios' | 'pozo' | 'todos' = searchParams.alcance === 'pozo' ? 'pozo' : searchParams.alcance === 'todos' ? 'todos'
+    : searchParams.alcance === 'mios' ? 'mios' : (searchParams.vista === 'equipo' ? 'todos' : 'mios');
+  const POR_PAGINA = 20;
+  const pag = Math.max(1, Number(searchParams.pag) || 1);
   const esAdmin = (m.roles ?? []).some((r) => r === 'admin' || r === 'coach');
   const db = t3();
   // 210 · Buscar sin salir de la cartera: cada resultado trae su carril y sus gestos (claude/95).
@@ -29,7 +33,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
 
   const [{ data, error }, { data: misTareas }, { data: miembrosRaw }] = await Promise.all([
     tab === 'calientes' ? db.rpc('mi_calientes', { p_vista: vista })
-      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? null, p_limit: 20 })
+      : tab === 'tibios' ? db.rpc('mi_tibios', { p_alcance: alcance, p_oportunidad: searchParams.tema ?? null, p_limit: POR_PAGINA, p_offset: (pag - 1) * POR_PAGINA })
       : tab === 'favoritos' ? db.rpc('mi_favoritos', { p_vista: vista })
       : db.rpc('mi_frios', { p_vista: vista }),
     db.from('v_tareas').select('id,vencida').eq('estado', 'pendiente').eq('responsable_id', m.id).limit(200),
@@ -41,7 +45,7 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
   const nombre = (m.nombre ?? '').split(' ')[0];
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance === 'pozo' ? 'pozo' : undefined, tema: searchParams.tema, q: q || undefined, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
+    Object.entries({ tab, vista: equipo ? 'equipo' : undefined, alcance: alcance !== (equipo ? 'todos' : 'mios') ? alcance : undefined, tema: searchParams.tema, q: q || undefined, ...patch }).forEach(([k, v]) => { if (v) sp.set(k, v); });
     return `/trabajo/cartera?${sp.toString()}`;
   };
   const query = `${equipo ? '&vista=equipo' : ''}`;
@@ -126,9 +130,10 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
       {tab === 'tibios' ? (
         <div className="rounded-2xl border border-line bg-white px-5 pb-2 pt-5">
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <Link href={href({ alcance: undefined, tema: undefined })} className={alcance === 'mios' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Mis tibios</Link>
+            <Link href={href({ alcance: 'todos', tema: undefined })} className={alcance === 'todos' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Todos</Link>
+            <Link href={href({ alcance: 'mios', tema: undefined })} className={alcance === 'mios' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Mis tibios</Link>
             <Link href={href({ alcance: 'pozo', tema: undefined })} className={alcance === 'pozo' ? 'rounded-lg bg-ink px-3 py-1.5 font-bold text-white' : 'rounded-lg border border-line bg-white px-3 py-1.5 font-bold'}>Sin dueño</Link>
-            <span className="ml-2 text-muted">{alcance === 'pozo' ? 'Nadie los lleva: a quien toques te lo quedas.' : 'Asignados a ti, sin conversación viva ni avance.'} · {fmtNum(d.total ?? 0)} en total</span>
+            <span className="ml-2 text-muted">{alcance === 'pozo' ? 'Nadie los lleva: a quien toques te lo quedas.' : alcance === 'todos' ? 'Toda la base con oportunidad, con o sin dueño (sin los fríos ni los que escribieron esta semana).' : 'Asignados a ti, sin conversación viva ni avance.'} · {fmtNum(d.total ?? 0)} en total</span>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {((d.grupos ?? []) as Any[]).map((g) => (
@@ -139,6 +144,24 @@ export default async function Cartera({ searchParams }: { searchParams: { tab?: 
           <div className="mt-3">
             <TibiosLista filas={(d.filas ?? []) as FilaCompleta[]} reto={{ meta: d.reto?.meta ?? null, llevas: d.reto?.llevas ?? 0 }} tope={d.tope ?? 25} tocados={d.tocados ?? 0} libres={d.libres ?? 0} alcance={alcance} {...comunes} />
           </div>
+          {(() => {
+            // 280 · Páginas: del tema elegido (o de todos si es "Todas").
+            const total = Number(d.total_grupo ?? d.total ?? 0);
+            const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+            if (paginas <= 1) return null;
+            const desde = (pag - 1) * POR_PAGINA + 1; const hasta = Math.min(total, pag * POR_PAGINA);
+            const pagHref = (n: number) => href({ tema: searchParams.tema, pag: n > 1 ? String(n) : undefined });
+            return (
+              <div className="my-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-muted">{fmtNum(desde)}–{fmtNum(hasta)} de {fmtNum(total)} · página {pag} de {fmtNum(paginas)}</span>
+                <div className="flex gap-1.5">
+                  {pag > 1 ? <Link href={pagHref(1)} className="rounded-lg border border-line bg-white px-3 py-1.5 font-bold">« Primera</Link> : null}
+                  {pag > 1 ? <Link href={pagHref(pag - 1)} className="rounded-lg border border-line bg-white px-3 py-1.5 font-bold">← Anterior</Link> : null}
+                  {pag < paginas ? <Link href={pagHref(pag + 1)} className="rounded-lg bg-ink px-3 py-1.5 font-bold text-white">Siguiente →</Link> : null}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       ) : null}
 

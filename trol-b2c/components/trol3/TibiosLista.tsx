@@ -14,7 +14,7 @@ import type { Miembro } from '@/components/trol3/CarrilAcciones';
  */
 export function TibiosLista({ filas, reto, tope, tocados, libres, alcance, esAdmin, miembros, equipo }: {
   filas: FilaCompleta[]; reto: { meta: number | null; llevas: number }; tope: number; tocados: number; libres: number;
-  alcance: 'mios' | 'pozo'; esAdmin: boolean; miembros: Miembro[]; equipo: boolean;
+  alcance: 'mios' | 'pozo' | 'todos'; esAdmin: boolean; miembros: Miembro[]; equipo: boolean;
 }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -27,7 +27,7 @@ export function TibiosLista({ filas, reto, tope, tocados, libres, alcance, esAdm
   const mandar = () => {
     const items = elegibles.filter((f) => sel.has(f.persona_id)).map((f) => ({ opId: f.oportunidad_id as string, personaId: f.persona_id }));
     if (!items.length) return;
-    if (!window.confirm(`Se le avisa a ${items.length} ${items.length === 1 ? 'persona' : 'personas'}: dentro de su chat si sigue abierto, o con la plantilla de lo que le encontramos. Pasan a Calientes por hoy${alcance === 'pozo' ? ' y quedan como tuyas' : ''}. ¿Mandamos?`)) return;
+    if (!window.confirm(`Se le avisa a ${items.length} ${items.length === 1 ? 'persona' : 'personas'}: dentro de su chat si sigue abierto, o con la plantilla de lo que le encontramos. Pasan a Calientes por hoy${alcance !== 'mios' ? ' y las que no tienen dueño quedan como tuyas' : ''}. ¿Mandamos?`)) return;
     start(async () => {
       const r = await activarLote(items) as { ok: boolean; error?: string; texto?: string };
       setMsg(r.ok ? { ok: true, texto: r.texto ?? 'Enviado.' } : { ok: false, texto: r.error ?? 'No se pudo.' });
@@ -41,7 +41,7 @@ export function TibiosLista({ filas, reto, tope, tocados, libres, alcance, esAdm
   const cumplido = reto.meta != null && reto.llevas >= reto.meta;
   const t1 = filas.filter((f) => (f.tramo ?? 1) === 1); const t2 = filas.filter((f) => f.tramo === 2);
   const fila = (f: FilaCompleta, atenuada = false) => (
-    <CarrilFila key={f.persona_id} f={f} libres={libres} alcance={alcance} esAdmin={esAdmin} miembros={miembros} equipo={equipo} atenuada={atenuada}
+    <CarrilFila key={f.persona_id} f={f} libres={libres} alcance={alcance === 'todos' ? (f.cabecera_id ? 'mios' : 'pozo') : alcance} esAdmin={esAdmin} miembros={miembros} equipo={equipo || alcance === 'todos'} atenuada={atenuada}
       izquierda={<input type="checkbox" aria-label={`Seleccionar a ${f.nombre ?? 'esta persona'}`} className="h-4 w-4" checked={sel.has(f.persona_id)} disabled={!elegibles.includes(f) || (!sel.has(f.persona_id) && sel.size >= max)} onChange={() => alternar(f.persona_id)} />} />
   );
   return (

@@ -24,3 +24,7 @@ $$;
 alter table trol3.proyectos_inmobiliarios add column if not exists nombre_comercial text;
 -- Propuesta inicial cargada el 30-oct (ver claude/113 §H).
 alter table trol3.proyectos_inmobiliarios add column if not exists ubicacion_comercial text;  -- 279b: renglón aparte en la cotización
+
+-- 280 · (Raúl, 30-oct) mi_tibios(p_alcance, p_oportunidad, p_limit, p_offset):
+--   alcance 'todos' = misma consulta del pozo sin exigir cabecera_id null (toda la base con oportunidad);
+--   p_offset para páginas; devuelve total_grupo, offset, limit. Se borró la firma de 3 parámetros.
