@@ -116,7 +116,7 @@ const miles = (n: number) => '$' + (Math.round(Math.abs(n) / 1000) * 1000).toLoc
 const cientos = (n: number) => '$' + (Math.round(Math.abs(n) / 100) * 100).toLocaleString('es-MX');
 
 /** El mensaje para copiar (texto aprobado por Raúl, 29-oct). Montos redondeados. */
-export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null): string {
+export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null, voz: 'trol' | 'aliado' = 'trol'): string {
   const lineas: string[] = [];
   lineas.push(`Hola${primerNombre ? ' ' + primerNombre : ''}, te comparto tu cotización personalizada con tus datos de Infonavit: tu saldo de vivienda es de ${miles(c.saldo)}.`);
   lineas.push('');
@@ -128,7 +128,7 @@ export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null)
   lineas.push('');
   lineas.push('Funciona mejor si lo mantienes varios años: mientras cotizas tus aportaciones abonan al crédito, deduces intereses y el crédito trae seguro de vida. También puedes unir tu crédito con el de otra persona.');
   lineas.push('');
-  lineas.push('Nosotros no cobramos ningún porcentaje de tu saldo (nos paga la constructora), pagamos los gastos notariales y, si quieres, administramos la renta y lo vendemos cuando tú decidas.');
+  lineas.push((voz === 'aliado' ? 'En Trol no cobran' : 'Nosotros no cobramos') + ' ningún porcentaje de tu saldo (' + (voz === 'aliado' ? 'les paga la constructora), pagan los gastos notariales y, si quieres, administran la renta y lo venden' : 'nos paga la constructora), pagamos los gastos notariales y, si quieres, administramos la renta y lo vendemos') + ' cuando tú decidas.');
   lineas.push('');
   lineas.push('Son cifras iniciales: asumen que sigues cotizando con tu salario actual y usan renta y plusvalía estimadas. Pueden mejorar si sumas a otra persona al crédito. ¿Te la explico en una llamada de 20 min? Dime qué día y hora te acomodan.');
   return lineas.join('\n');

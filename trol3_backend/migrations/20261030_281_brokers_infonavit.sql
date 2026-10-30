@@ -1,0 +1,12 @@
+-- 30-oct-2026 · Aplicada en producción. Brokers Infonavit, fase 1 (claude/114).
+-- aliados.programa_infonavit (bool, default false) y aliados.comision_infonavit (25000, IVA incluido, al escriturar);
+-- referidos.pide_infonavit_en; v_aliado_yo expone ambas columnas.
+-- alta_infonavit_por_aliado(p_tel, p_nombre, p_curp, p_nss, p_consentimiento): candado de NSS (no mezcla
+--   con otra persona), reusa alta_por_aliado, guarda NSS si falta y marca pide_infonavit_en.
+-- v_infonavit_aliado: sólo las precalificaciones del aliado (current_aliado_id()), resultado
+--   procesando/buscando_nss/falta_nss/con_monto/credito_vigente/sin_relacion/no_califica/ya_cliente;
+--   saldo y monto sólo si quedó atribuido (por_revisar = ya_cliente sin números).
+-- aliado_infonavit_pendientes() + cron 'trol3-aliado-infonavit' cada 3 min: con sólo CURP, pide Precalix
+--   en cuanto el historial IMSS trae el NSS.
+-- Perfil de prueba 'Raúl Gallego (prueba aliado)' con programa_infonavit = true.
+-- (El SQL completo está en la migración 281_brokers_infonavit_precalifica del proyecto Supabase.)

@@ -126,6 +126,9 @@ export interface Aliado {
   telefono: string | null;
   comision_pct: number | null;
   codigo: string | null;
+  /** 281 · Broker Infonavit: puede precalificar y ver el resultado de sus referidos. */
+  programa_infonavit?: boolean;
+  comision_infonavit?: number | null;
 }
 
 /** Aliado referidor autenticado, o null. */

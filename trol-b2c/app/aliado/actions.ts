@@ -30,6 +30,10 @@ const EXPLICACION: Record<string, string> = {
   telefono_de_otra_persona: 'Ese teléfono ya es de otra persona en nuestro sistema. Confirma el número.',
   falta_consentimiento: 'Falta confirmar que la persona te autorizó.',
   no_autorizado: 'Tu sesión no está activa. Vuelve a entrar.',
+  nss_invalido: 'El NSS debe traer 11 dígitos.',
+  nss_de_otra_persona: 'Ese NSS ya está registrado con otra persona. Verifícalo con tu cliente.',
+  falta_curp_o_nss: 'Necesitamos la CURP o el NSS para precalificar.',
+  sin_programa_infonavit: 'Tu cuenta todavía no tiene activa la precalificación Infonavit. Escríbenos.',
 };
 const explicar = (e: Any) => {
   const raw = String(e?.message ?? e ?? '');
@@ -131,4 +135,62 @@ export async function altaClientePorAliado(x: {
     por_revisar: r?.estado === 'por_revisar',
     aviso,
   });
+}
+
+/**
+ * 281 · Broker Infonavit (claude/114): precalifica con CURP o NSS.
+ *
+ * Con NSS se pide a Precalix de inmediato; sólo con CURP primero sale el historial IMSS (trae el NSS)
+ * y un barrido pide la precalificación en cuanto llega. Todo lo ejecuta Trol con su llave; el broker
+ * sólo ve el resultado Infonavit de las personas que él mandó (v_infonavit_aliado). Lo de pensión
+ * se calcula igual por dentro, pero no se le muestra.
+ */
+export async function precalificarInfonavitPorAliado(x: {
+  telefono: string; nombre: string; curp?: string | null; nss?: string | null; autoriza: boolean;
+}) {
+  const a = await requireAliado();
+  if (!a.programa_infonavit) return fail(new Error(EXPLICACION.sin_programa_infonavit));
+  const tel = (x.telefono ?? '').replace(/\D/g, '').slice(-10);
+  const nombre = (x.nombre ?? '').trim();
+  const curp = (x.curp ?? '').trim().toUpperCase();
+  const nss = (x.nss ?? '').replace(/\D/g, '');
+  if (tel.length !== 10) return fail(new Error('El teléfono debe traer 10 dígitos.'));
+  if (nombre.length < 3) return fail(new Error('Escribe el nombre de la persona.'));
+  if (!curp && !nss) return fail(new Error(EXPLICACION.falta_curp_o_nss));
+  if (curp && !CURP_RE.test(curp)) return fail(new Error('Esa CURP no tiene la forma correcta (18 caracteres).'));
+  if (nss && nss.length !== 11) return fail(new Error(EXPLICACION.nss_invalido));
+  if (!x.autoriza) return fail(new Error('Necesitamos que confirmes que la persona te autorizó.'));
+
+  const consentimiento =
+    `${a.nombre} declara que ${nombre} lo autorizó a compartir su nombre, teléfono` +
+    `${curp ? ', CURP' : ''}${nss ? ', NSS' : ''} con El Trol Financiero para consultar su precalificación ` +
+    `de crédito Infonavit${curp ? ' y su historial ante el IMSS' : ''}, y para que lo contacten con una propuesta.`;
+
+  const { data, error } = await t3().rpc('alta_infonavit_por_aliado', {
+    p_tel: tel, p_nombre: nombre, p_curp: curp || null, p_nss: nss || null, p_consentimiento: consentimiento,
+  });
+  if (error) return fail(new Error(explicar(error)));
+  const r = data as Any;
+  const personaId = r?.persona_id as string;
+  const admin = t3admin();
+  let aviso: string | null = null;
+
+  if (r?.curp) {
+    const d = await admin.rpc('declarar', { p_persona: personaId, p_campo: 'curp', p_valor: r.curp, p_actor: 'aliado', p_actor_id: null, p_capa: 'declarado' });
+    if (!d.error) {
+      await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'imss_historial', p_actor: 'aliado', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'alta_aliado', p_forzar: false, p_proveedor: 'jordan' });
+    }
+  }
+  if (r?.estado !== 'por_revisar' && r?.tiene_nss) {
+    const c = await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'infonavit', p_actor: 'sistema', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'aliado_infonavit', p_forzar: false, p_proveedor: null });
+    const m = (c.data as Any)?.motivo;
+    if (c.error) aviso = 'Lo registramos; la precalificación la pedimos en unos minutos.';
+    else if (m === 'validado_vigente') aviso = 'Ya teníamos su precalificación reciente: aquí está.';
+  } else if (r?.estado !== 'por_revisar') {
+    aviso = 'Con la CURP primero sacamos su NSS del IMSS; la precalificación sale en unos minutos.';
+  }
+
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok({ persona_id: personaId, por_revisar: r?.estado === 'por_revisar', aviso });
 }

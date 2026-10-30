@@ -9,8 +9,9 @@ export type CargaCotizacion =
   | { ok: true; cot: CotizacionInicial; nombre: string; primerNombre: string | null; texto: string }
   | { ok: false; motivo: string };
 
-export async function cargarCotizacionInicial(personaId: string): Promise<CargaCotizacion> {
-  const db = t3();
+export async function cargarCotizacionInicial(personaId: string, opts: { db?: Any; voz?: 'trol' | 'aliado' } = {}): Promise<CargaCotizacion> {
+  // 281 · Los brokers la piden con la llave de servicio, sólo después de verificar que la persona es suya.
+  const db = opts.db ?? t3();
   const [{ data: e }, { data: datos }, { data: sup }, { data: proys }, { data: rel }] = await Promise.all([
     db.from('v_expediente').select('*').eq('persona_id', personaId).maybeSingle(),
     db.from('v_mejor_dato').select('*').eq('persona_id', personaId),
@@ -61,6 +62,6 @@ export async function cargarCotizacionInicial(personaId: string): Promise<CargaC
     ok: true, cot,
     nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
     primerNombre: pn,
-    texto: textoWhatsApp(cot, pn),
+    texto: textoWhatsApp(cot, pn, opts.voz ?? 'trol'),
   };
 }

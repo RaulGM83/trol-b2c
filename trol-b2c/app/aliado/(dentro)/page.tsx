@@ -8,9 +8,15 @@
 //
 // Y lo que se enseña es avance y resultado. Nunca saldos, semanas, CURP ni
 // nada del expediente: esa gente es cliente de Trol, no de él.
+//
+// 281 · ÚNICA excepción: el broker Infonavit (aliados.programa_infonavit) ve saldo, monto y la
+// cotización inicial de las personas que ÉL pidió precalificar y le quedaron atribuidas
+// (v_infonavit_aliado). Nada de pensión.
 // ---------------------------------------------------------------------------
 import QRCode from 'qrcode';
-import { requireAliado, t3, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
+import { requireAliado, t3, t3admin, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
+import { InfonavitAliado, type FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
+import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { LinkAliado } from '@/components/trol3/LinkAliado';
 import { AltaPorAliado } from '@/components/trol3/AltaPorAliado';
 
@@ -50,6 +56,25 @@ export default async function EspacioAliado() {
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
 
+  // 281 · Broker Infonavit: sus precalificaciones (la vista ya filtra por current_aliado_id()).
+  // La cotización se arma con la llave de servicio SÓLO para filas que la vista le devolvió.
+  let infonavit: FilaInfonavitAliado[] = [];
+  if (a.programa_infonavit) {
+    const { data: inf } = await db.from('v_infonavit_aliado')
+      .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en')
+      .order('pide_infonavit_en', { ascending: false }).limit(50);
+    const admin = t3admin();
+    infonavit = await Promise.all(((inf ?? []) as Any[]).map(async (r) => {
+      const fila: FilaInfonavitAliado = { ...r, nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ') || null };
+      if (r.resultado === 'con_monto') {
+        const c = await cargarCotizacionInicial(r.persona_id, { db: admin, voz: 'aliado' });
+        if (c.ok) fila.cotizacion = { texto: c.texto, opciones: c.cot.opciones.map((o) => ({ plazo: o.plazo, nombre: o.nombre, ubicacion: o.ubicacion, pone_al_mes: o.pone_al_mes, recibe_al_vender: o.recibe_al_vender, ficha_url: o.ficha_url })) };
+        else fila.sin_cotizacion = c.motivo;
+      }
+      return fila;
+    }));
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -81,6 +106,8 @@ export default async function EspacioAliado() {
           Todavía no tienes tu liga para compartir. Escríbenos y te la generamos.
         </section>
       )}
+
+      {a.programa_infonavit ? <InfonavitAliado filas={infonavit} comision={Number(a.comision_infonavit ?? 25000)} /> : null}
 
       <AltaPorAliado aliado={a.nombre} />
 
