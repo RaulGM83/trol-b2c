@@ -4,11 +4,13 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { precalificarInfonavitPorAliado } from '@/app/aliado/actions';
+import { precalificarInfonavitPorAliado, subirDocumentoInfonavitPorAliado } from '@/app/aliado/actions';
+import { DOCS_INFONAVIT, ETAPAS_INFONAVIT } from '@/lib/aliado/infonavit';
 
 export interface FilaInfonavitAliado {
   persona_id: string; nombre: string | null; resultado: string; saldo: number | null; monto_credito: number | null;
   pide_infonavit_en: string; precalificado_en: string | null;
+  etapa?: string | null; etapa_en?: string | null; docs?: string[] | null;
   cotizacion?: { texto: string; opciones: { plazo: number; nombre: string; ubicacion: string | null; pone_al_mes: number; recibe_al_vender: number; ficha_url: string | null }[] } | null;
   sin_cotizacion?: string | null;
 }
@@ -28,6 +30,48 @@ const RES: Record<string, [string, string]> = {
 const VACIO = { nombre: '', telefono: '', curp: '', nss: '', autoriza: false };
 const inp = 'w-full rounded-lg border border-line px-3 py-2 text-sm';
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream';
+
+/** 282 · Dónde va la operación (lo mueve el equipo de Trol). */
+function Etapas({ etapa }: { etapa: string | null | undefined }) {
+  const i = ETAPAS_INFONAVIT.findIndex((e) => e.clave === etapa);
+  return (
+    <ol className="mt-2 flex flex-wrap gap-1 text-[10px]">
+      {ETAPAS_INFONAVIT.map((e, k) => (
+        <li key={e.clave} className={`rounded-full px-2 py-0.5 font-semibold ${k < i ? 'bg-emerald-100 text-emerald-900' : k === i ? 'bg-ink text-white' : 'bg-cream text-muted'}`}>{k + 1}. {e.nombre}</li>
+      ))}
+    </ol>
+  );
+}
+
+/** 282 · El broker sube lo que falte; nunca ve los archivos, sólo si ya está. */
+function Documentos({ personaId, docs }: { personaId: string; docs: string[] }) {
+  const router = useRouter();
+  const [subiendo, start] = useTransition();
+  const subir = (tipo: string, file: File | undefined) => {
+    if (!file) return;
+    const fd = new FormData(); fd.set('persona_id', personaId); fd.set('tipo', tipo); fd.set('archivo', file);
+    start(async () => {
+      const r = await subirDocumentoInfonavitPorAliado(fd) as { ok: boolean; error?: string };
+      if (r.ok) { toast.success('Documento recibido'); router.refresh(); } else toast.error(r.error ?? 'No se pudo subir');
+    });
+  };
+  return (
+    <details className="mt-2 text-xs">
+      <summary className="cursor-pointer font-semibold">Documentos · {DOCS_INFONAVIT.filter((d) => docs.includes(d.tipo)).length} de {DOCS_INFONAVIT.length}{subiendo ? ' · subiendo…' : ''}</summary>
+      <ul className="mt-1 space-y-1">
+        {DOCS_INFONAVIT.map((d) => (
+          <li key={d.tipo} className="flex flex-wrap items-center gap-2">
+            <span className={docs.includes(d.tipo) ? 'text-emerald-800' : ''}>{docs.includes(d.tipo) ? '✓' : '○'} {d.nombre}{d.nota ? <span className="text-muted"> ({d.nota})</span> : null}</span>
+            {!docs.includes(d.tipo) ? (
+              <label className="cursor-pointer underline">subir<input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => subir(d.tipo, e.target.files?.[0])} /></label>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-muted">Las referencias, el taller y las firmas los vemos directo con tu cliente.</p>
+    </details>
+  );
+}
 
 export function InfonavitAliado({ filas, comision }: { filas: FilaInfonavitAliado[]; comision: number }) {
   const router = useRouter();
@@ -77,6 +121,7 @@ export function InfonavitAliado({ filas, comision }: { filas: FilaInfonavitAliad
                 </div>
                 {r.resultado === 'con_monto' ? (
                   <>
+                    <Etapas etapa={r.etapa} />
                     <div className="mt-1 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · crédito hasta <b className="text-ink">{money(r.monto_credito)}</b></div>
                     {r.cotizacion ? (
                       <>
@@ -96,6 +141,7 @@ export function InfonavitAliado({ filas, comision }: { filas: FilaInfonavitAliad
                         </div>
                       </>
                     ) : <div className="mt-1 text-xs text-muted">{r.sin_cotizacion ?? 'Armando la propuesta…'}</div>}
+                    <Documentos personaId={r.persona_id} docs={r.docs ?? []} />
                   </>
                 ) : null}
               </li>

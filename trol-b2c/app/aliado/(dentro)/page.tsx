@@ -61,7 +61,7 @@ export default async function EspacioAliado() {
   let infonavit: FilaInfonavitAliado[] = [];
   if (a.programa_infonavit) {
     const { data: inf } = await db.from('v_infonavit_aliado')
-      .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en')
+      .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs')
       .order('pide_infonavit_en', { ascending: false }).limit(50);
     const admin = t3admin();
     infonavit = await Promise.all(((inf ?? []) as Any[]).map(async (r) => {
@@ -156,7 +156,7 @@ export default async function EspacioAliado() {
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-1 text-sm font-bold">Tus comisiones</h2>
           <p className="mb-3 text-xs text-muted">
-            Se calculan sobre lo que Trol cobró por esa operación, con lo que tenemos pactado.
+            Infonavit: {fmtMXN(Number(a.comision_infonavit ?? 25000))} por inmueble al firmar escrituras. Lo demás, sobre lo que Trol cobró por esa operación, con lo que tenemos pactado.
           </p>
           <ul className="space-y-1 text-sm">
             {coms.map((c) => (

@@ -12,6 +12,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAliado, t3, t3admin, type Any } from '@/lib/trol3/server';
+import { subirDocumentoExpediente } from '@/lib/trol3/documentos';
+import { DOCS_INFONAVIT } from '@/lib/aliado/infonavit';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({
@@ -193,4 +195,21 @@ export async function precalificarInfonavitPorAliado(x: {
   revalidatePath('/aliado');
   revalidatePath('/trabajo/aliados/referidores');
   return ok({ persona_id: personaId, por_revisar: r?.estado === 'por_revisar', aviso });
+}
+
+export async function subirDocumentoInfonavitPorAliado(form: FormData) {
+  await requireAliado();
+  const personaId = String(form.get('persona_id') ?? '');
+  const tipo = String(form.get('tipo') ?? '');
+  const file = form.get('archivo');
+  if (!DOCS_INFONAVIT.some((d) => d.tipo === tipo)) return fail(new Error('Ese documento no se sube desde aquí.'));
+  if (!(file instanceof File)) return fail(new Error('Elige un archivo.'));
+  // La sesión del aliado decide si la persona es suya: si la vista no la devuelve, no se sube nada.
+  const { data: fila } = await t3().from('v_infonavit_aliado').select('persona_id,estado_ref').eq('persona_id', personaId).maybeSingle();
+  if (!fila || (fila as Any).estado_ref === 'por_revisar') return fail(new Error('No encontramos a esa persona en tus referidos.'));
+  try {
+    await subirDocumentoExpediente({ personaId, tipo, file, actor: 'aliado', actorId: null });
+  } catch (e) { return fail(e); }
+  revalidatePath('/aliado');
+  return ok();
 }

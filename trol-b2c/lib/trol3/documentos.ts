@@ -10,7 +10,7 @@ export const BUCKET_EXPEDIENTE = 'expediente';
 const MAX_BYTES = 15 * 1024 * 1024;
 const MIME_OK: Record<string, string> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' };
 
-export type ActorDoc = 'cliente' | 'asesor' | 'recepcionista';
+export type ActorDoc = 'cliente' | 'asesor' | 'recepcionista' | 'aliado';
 export const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
 /** Intenta leer la CURP del texto de un PDF (constancia de semanas IMSS). Best-effort. */

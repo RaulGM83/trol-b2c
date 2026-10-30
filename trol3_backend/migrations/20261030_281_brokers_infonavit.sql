@@ -10,3 +10,10 @@
 --   en cuanto el historial IMSS trae el NSS.
 -- Perfil de prueba 'Raúl Gallego (prueba aliado)' con programa_infonavit = true.
 -- (El SQL completo está en la migración 281_brokers_infonavit_precalifica del proyecto Supabase.)
+
+-- 282 · Fases 2 y 3: oportunidades.etapa_infonavit (precalificado/documentos/formatos/en_infonavit/
+--   aviso_retencion/escrituras/entregado) + etapa_infonavit_en; catálogo de documentos: curp_doc,
+--   constancia_fiscal, recibo_nomina (actas aceptan jpg/png). mover_etapa_infonavit(op, etapa) (miembros):
+--   pasa la oportunidad a en_proceso y, en escrituras/entregado, devenga la comisión fija del broker
+--   (aliados.comision_infonavit, una por oportunidad). tg_devengar_comision ya no devenga % en inmuebles
+--   de brokers Infonavit. v_infonavit_aliado suma etapa, etapa_en y docs (sólo tipos, nunca archivos).

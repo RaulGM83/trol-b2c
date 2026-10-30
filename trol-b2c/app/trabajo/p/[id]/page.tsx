@@ -33,6 +33,7 @@ import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type Asesoria
 import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { CotizacionInicialCard } from '@/components/trol3/CotizacionInicialCard';
+import { EtapaInfonavit } from '@/components/trol3/EtapaInfonavit';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
 import { DiagnosticoPanel, type AsesoriaOpcion, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
 import type { Feedback, InstruccionesVigentes } from '@/components/trol3/AfinarRedactor';
@@ -297,6 +298,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;
   // 276 · Cotización inicial (18 y 60 meses) para compartir sin abrir la calculadora.
   const cotInicial = searchParams.tab === 'infonavit' ? await cargarCotizacionInicial(params.id) : null;
+  // 282 · Etapa de la operación Infonavit y, si lo trajo un broker, su nombre.
+  const opInf = ((ops ?? []) as Any[]).find((o) => ['compra_inmueble', 'inversion_inmueble'].includes(o.codigo) && !['no_aplica', 'perdida'].includes(o.estado)) ?? null;
+  const brokerInf = searchParams.tab === 'infonavit' && opInf
+    ? ((await db.from('referidos').select('aliados(nombre,programa_infonavit)').eq('persona_id', params.id).eq('estado', 'atribuido').limit(1).maybeSingle()).data as Any)?.aliados
+    : null;
   const MAS: [string, string][] = TABS_MAS.filter(([t]) => t !== 'infonavit' || verTabInfonavit);
   const TABS: [string, string][] = [...TABS_PRINCIPALES, ...MAS, ['viraal', 'Viraal']];
   const tab = TABS.some(([t]) => t === searchParams.tab) ? (searchParams.tab as string) : 'relacion';
@@ -842,6 +848,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
 
       {tab === 'infonavit' && (
         <>
+          {opInf ? <EtapaInfonavit personaId={e.persona_id} oportunidadId={opInf.id} etapa={opInf.etapa_infonavit ?? null} broker={brokerInf?.programa_infonavit ? brokerInf.nombre : null} /> : null}
           {cotInicial ? <CotizacionInicialCard personaId={e.persona_id} cot={cotInicial.ok ? cotInicial.cot : null} texto={cotInicial.ok ? cotInicial.texto : null} motivo={cotInicial.ok ? null : cotInicial.motivo} /> : null}
           {infPanel}
         </>
