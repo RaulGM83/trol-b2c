@@ -30,7 +30,7 @@ import type { OrigenPersona } from '@/app/trabajo/actions';
 import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
-import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
+import { titularDesdeExpediente, extrasInfonavit } from '@/lib/infonavit/prefill';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { CotizacionInicialCard } from '@/components/trol3/CotizacionInicialCard';
 import { EtapaInfonavit } from '@/components/trol3/EtapaInfonavit';
@@ -293,6 +293,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       mesesCotizandoDefault: Number(supInfonavit.meses_cotizando_default ?? 60),
       ingresoRealMensual: datosMap.get('ingreso_mensual')?.valor == null ? null : Number(datosMap.get('ingreso_mensual')?.valor),
       deduccionesUsadas: datosMap.get('deducciones_personales_anuales')?.valor == null ? null : Number(datosMap.get('deducciones_personales_anuales')?.valor),
+      ...extrasInfonavit(datosMap as Map<string, { valor?: unknown; capa?: string | null }>, e.curp),
     });
   }
   const verTabInfonavit = aplicaInfonavit || historialInf.length > 0;

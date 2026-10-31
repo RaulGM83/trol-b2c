@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     resultado = 'sin_relacion';
   } else if (/Saldo menor/i.test(cot.motivo)) {
     resultado = 'saldo_bajo';
-  } else if (/Ningún inmueble/i.test(cot.motivo)) {
+  } else if (/Ningún inmueble|Solo con cotitular/i.test(cot.motivo)) {
     resultado = 'sin_inmueble';
   } else {
     resultado = 'no_encontrado';

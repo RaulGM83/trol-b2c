@@ -1,7 +1,7 @@
 // 276 · Carga lo necesario para la cotización inicial Infonavit de una persona (expediente y PNG).
 import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { t3, type Any } from '@/lib/trol3/server';
-import { titularDesdeExpediente } from './prefill';
+import { titularDesdeExpediente, extrasInfonavit } from './prefill';
 import { armarCotizacionInicial, textoWhatsApp, SALDO_MIN_COTIZACION, type CotizacionInicial } from './cotizacion-inicial';
 import type { Proyecto, SupuestosGlobales } from '@/components/trol3/AsesoriaInfonavit';
 
@@ -42,6 +42,7 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     mesesCotizandoDefault: Number((sup as Any).meses_cotizando_default ?? 60),
     ingresoRealMensual: num('ingreso_mensual'),
     deduccionesUsadas: num('deducciones_personales_anuales'),
+    ...extrasInfonavit(map, e.curp),
   });
   // Ley 97 sin semilla no tiene conserva_valor proyectado: se toma 1 (la cotización es inicial).
   const bloquea = base.faltantes.filter((f) => f !== 'conserva_valor');
@@ -55,7 +56,12 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     fechaSaldo: (map.get('saldo_infonavit')?.obtenido_en as string | undefined) ?? null,
   });
   if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
-  if (!cot) return { ok: false, motivo: 'Ningún inmueble del catálogo le queda (crédito mínimo o retención arriba del 30% de su salario)' };
+  if (!cot) {
+    const tope = base.titular.credito_max;
+    return { ok: false, motivo: tope
+      ? `Solo con cotitular: con los $${Math.round(tope).toLocaleString('es-MX')} que le presta Infonavit ningún inmueble del catálogo le alcanza solo. Suma a otra persona que cotice (pareja, hijo o hija) para juntar créditos y saldos.`
+      : 'Ningún inmueble del catálogo le queda (crédito mínimo o retención arriba del 30% de su salario)' };
+  }
   const primerNombre = (e.nombre as string | null)?.trim().split(/\s+/)[0] ?? null;
   const pn = primerNombre ? primerNombre.charAt(0).toUpperCase() + primerNombre.slice(1).toLowerCase() : null;
   return {

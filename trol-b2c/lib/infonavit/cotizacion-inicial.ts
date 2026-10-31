@@ -91,7 +91,9 @@ export function armarCotizacionInicial(a: {
         palancas: { plusvalia: 0.06, alterno: a.supuestos.alterno, pct_deuda: 0, tasa_deuda: 0.2, corte_anios: Math.max(5, h / 12 + 3) },
         factores, creditoMin, horizonteElegido: h, horizonteFallback: null, reglas,
       });
-      return s.filas.filter((f) => f.horizonte === h && !(f.meses_cotizando > 0 && f.pct_salario > 0.30));
+      // 290: nada que pida más crédito del que Infonavit le autoriza.
+      const tope = a.titular.credito_max;
+      return s.filas.filter((f) => f.horizonte === h && !(f.meses_cotizando > 0 && f.pct_salario > 0.30) && !(tope && f.credito > tope + 1));
     } catch { return []; }
   };
 

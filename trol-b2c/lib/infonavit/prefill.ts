@@ -58,6 +58,12 @@ export interface EntradaPrefill {
   mesesCotizandoDefault: number;
   ingresoRealMensual: number | null;
   deduccionesUsadas: number | null;
+  /** 290 · Salario mensual que usa Infonavit (pago de la precalificación ÷ 30%). Manda sobre el SBC del IMSS. */
+  salarioInfonavitMensual?: number | null;
+  /** 290 · Sexo de la CURP: Infonavit deja terminar el crédito a los 70 (H) o 75 (M). */
+  sexo?: 'H' | 'M' | null;
+  /** 290 · Crédito que Infonavit le autoriza (precalificación). */
+  creditoMax?: number | null;
 }
 
 function palancasLey97(semilla: SemillaV2, creditoVigente: boolean): Palancas {
@@ -126,7 +132,9 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
 
   const sbc = p?.salario_diario_registrado ?? e.salarioDiario ?? 0;
   if (!(sbc > 0)) faltantes.push('salario_diario');
-  const salarioMensual = sbc * DIAS_MES;
+  const salInf = e.salarioInfonavitMensual && e.salarioInfonavitMensual > 0 ? e.salarioInfonavitMensual : null;
+  const salarioMensual = salInf ?? sbc * DIAS_MES;
+  if (salInf) { const i = faltantes.indexOf('salario_diario'); if (i >= 0) faltantes.splice(i, 1); }
 
   const ssv = e.saldoInfonavit ?? e.semilla?.saldos.infonavit ?? 0;
   const cotiza = (p?.status_empleo ?? e.statusEmpleo) === 'empleado';
@@ -135,7 +143,7 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
   const cv = conservaValor(e, ley, ssv);
   if (cv.falta) faltantes.push('conserva_valor');
 
-  const ingresoReal = e.ingresoRealMensual ?? salarioMensual;
+  const ingresoReal = e.ingresoRealMensual ?? (sbc > 0 ? sbc * DIAS_MES : salarioMensual);
 
   return {
     titular: {
@@ -147,9 +155,13 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
       ingreso_real: ingresoReal,
       deducciones_usadas: e.deduccionesUsadas ?? 0,
       conserva_valor: cv.valor,
+      edad_limite: e.sexo === 'M' ? 75 : 70,
+      ...(e.creditoMax && e.creditoMax > 0 ? { credito_max: e.creditoMax } : {}),
     },
     origen: {
-      salario: sbc > 0
+      salario: salInf
+        ? `Salario que usa Infonavit, deducido de su precalificación (pago máximo ÷ 30%): $${Math.round(salInf).toLocaleString('es-MX')} al mes`
+        : sbc > 0
         ? `SBC de $${sbc.toFixed(2)} diarios × ${DIAS_MES}${p ? '' : ' (declarado en el expediente)'}`
         : 'Falta el salario diario registrado ante el IMSS',
       ssv: e.saldoEsReportado
@@ -173,3 +185,28 @@ export const TITULAR_VACIO: TitularInfonavit = {
   regimen: 0, edad: 0, salario_imss: 0, ssv: 0,
   meses_cotizando: 0, ingreso_real: 0, deducciones_usadas: 0, conserva_valor: 1,
 };
+
+/**
+ * 290 · Lo que la precalificación de Infonavit nos dice del titular, para que la cotización use
+ * sus números y no los del IMSS: el pago que reporta es su capacidad máxima (30% del salario que
+ * Infonavit tiene registrado), el monto es lo que le prestan y la CURP da el sexo (plazo 70/75).
+ * `mejor` es el mapa campo → fila de v_mejor_dato.
+ */
+export function extrasInfonavit(
+  mejor: Map<string, { valor?: unknown; capa?: string | null }>,
+  curp: string | null | undefined,
+): { salarioInfonavitMensual: number | null; creditoMax: number | null; sexo: 'H' | 'M' | null } {
+  const val = (c: string) => {
+    const d = mejor.get(c);
+    if (!d || d.capa !== 'validado' || d.valor == null) return null;
+    const n = Number(d.valor);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const pago = val('infonavit_pago_mensual');
+  const s = (curp ?? '').toUpperCase().charAt(10);
+  return {
+    salarioInfonavitMensual: pago ? pago / 0.30 : null,
+    creditoMax: val('infonavit_monto_credito'),
+    sexo: s === 'H' || s === 'M' ? s : null,
+  };
+}

@@ -6,7 +6,7 @@ import { subirDocumentoExpediente, notificarSisecPdf, asegurarCurp } from '@/lib
 import { parseSemillaV2 } from '@trol/pension-core/semilla';
 import { guardarEscenarioAutorizado, type SujetoEscenario } from '@/lib/viraal/escenario';
 import type { SnapshotEscenario } from '@/lib/viraal/snapshot';
-import { titularDesdeExpediente } from '@/lib/infonavit/prefill';
+import { titularDesdeExpediente, extrasInfonavit } from '@/lib/infonavit/prefill';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { avisar } from '@/lib/trol3/avisar';
 import { crearActa, crearVentanilla, crearVigencia, JordanError, TIPOS_ACTA, type TipoActa } from '@/lib/jordan/client';
@@ -1050,6 +1050,7 @@ export async function cargarCotitular(personaId: string) {
     mesesCotizandoDefault: Number((sup as Any)?.meses_cotizando_default ?? 60),
     ingresoRealMensual: map.get('ingreso_mensual')?.valor == null ? null : Number(map.get('ingreso_mensual')?.valor),
     deduccionesUsadas: map.get('deducciones_personales_anuales')?.valor == null ? null : Number(map.get('deducciones_personales_anuales')?.valor),
+    ...extrasInfonavit(map, e.curp),
   });
   return ok({
     personaId,

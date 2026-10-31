@@ -60,6 +60,10 @@ export interface TitularInfonavit {
   deducciones_usadas: number;
   /** Ley 97: proporción del saldo que conserva valor. 1.0 salvo que quedara en PMG. */
   conserva_valor: number;
+  /** 290 · Edad máxima al terminar el crédito (Infonavit: 70 hombres, 75 mujeres). Default 70. */
+  edad_limite?: number;
+  /** 290 · Crédito que Infonavit le autoriza (precalificación). Si viene, sustituye al monto máximo general. */
+  credito_max?: number;
 }
 
 export interface ClienteInfonavit {
@@ -185,7 +189,9 @@ function derivarCliente(cliente: ClienteInfonavit, sup: SupuestosInfonavit): Cli
   else if (salario === 0) tasa = TASAS_INFONAVIT[TASAS_INFONAVIT.length - 1].tasa;
   else tasa = (tasa1 * t1.salario_imss + tasa2 * t2.salario_imss) / salario;
   // En crédito conyugal el plazo lo determina el titular de MAYOR edad.
-  const plazo = Math.max(1, Math.min(30, 70 - Math.max(t1.edad, t2.edad)));
+  // 290: cada titular con su límite (70 H / 75 M); manda el que deja menos años.
+  const limites = [t1, t2].filter((t) => t.edad > 0).map((t) => (t.edad_limite ?? 70) - t.edad);
+  const plazo = Math.max(1, Math.min(30, limites.length ? Math.min(...limites) : 70 - Math.max(t1.edad, t2.edad)));
   const ingresoAnual = Math.max(t1.ingreso_real ?? 0, t2.ingreso_real ?? 0) * 12;
   // LISR 151-IV: menor entre 15% del ingreso anual y 5 UMA anuales, neto de lo ya usado.
   const topeDeduccion = Math.max(0, Math.min(ingresoAnual * 0.15, 5 * sup.uma_mensual * 12)
@@ -197,7 +203,8 @@ function derivarCliente(cliente: ClienteInfonavit, sup: SupuestosInfonavit): Cli
     ssv_total, salario, aport_mensual: aport, tasa, plazo,
     tope_deduccion: topeDeduccion, marginal,
     // Infonavit SUMA el monto máximo de cada titular en crédito conyugal.
-    monto_max: sup.monto_max_credito * (dos ? 2 : 1),
+    // 290: si hay precalificación, el monto de cada titular es el que Infonavit le autoriza.
+    monto_max: (t1.credito_max ?? sup.monto_max_credito) + (dos ? (t2.credito_max ?? sup.monto_max_credito) : 0),
     meses_cot: Math.max(t1.meses_cotizando, t2.meses_cotizando), aportantes, t1, t2,
   };
 }
