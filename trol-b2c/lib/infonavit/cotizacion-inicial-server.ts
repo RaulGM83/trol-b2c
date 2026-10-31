@@ -58,8 +58,11 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
   if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
   if (!cot) {
     const tope = base.titular.credito_max;
+    // 290b: lo mínimo que tendría que poner en efectivo (hasta $100,000), como alternativa al cotitular.
+    const { data: op } = await db.from('oportunidades').select('efectivo_minimo').eq('persona_id', personaId).eq('codigo', 'compra_inmueble').maybeSingle();
+    const ef = Number((op as Any)?.efectivo_minimo ?? 0);
     return { ok: false, motivo: tope
-      ? `Solo con cotitular: con los $${Math.round(tope).toLocaleString('es-MX')} que le presta Infonavit ningún inmueble del catálogo le alcanza solo. Suma a otra persona que cotice (pareja, hijo o hija) para juntar créditos y saldos.`
+      ? `Solo con cotitular: con los $${Math.round(tope).toLocaleString('es-MX')} que le presta Infonavit ningún inmueble del catálogo le alcanza solo. Suma a otra persona que cotice (pareja, hijo o hija) para juntar créditos y saldos.${ef > 0 ? ` Alternativa: poner $${ef.toLocaleString('es-MX')} en efectivo.` : ''}`
       : 'Ningún inmueble del catálogo le queda (crédito mínimo o retención arriba del 30% de su salario)' };
   }
   const primerNombre = (e.nombre as string | null)?.trim().split(/\s+/)[0] ?? null;

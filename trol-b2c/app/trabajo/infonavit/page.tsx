@@ -24,7 +24,7 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
   const pag = Math.max(1, Number(searchParams.pag) || 1);
 
   const [{ data: todas }, { data: miembros }] = await Promise.all([
-    db.from('v_tramites_infonavit').select('oportunidad_id,persona_id,nombre,apellidos,fase,fase_en,cabecera_id,asesor,saldo,monto_credito,inmueble,broker,docs,tramite_infonavit,rango,solo_cotitular').limit(5000),
+    db.from('v_tramites_infonavit').select('oportunidad_id,persona_id,nombre,apellidos,fase,fase_en,cabecera_id,asesor,saldo,monto_credito,inmueble,broker,docs,tramite_infonavit,rango,solo_cotitular,efectivo_minimo').limit(5000),
     db.from('miembros').select('id,nombre').eq('activo', true).order('nombre'),
   ]);
   const porAsesor = ((todas ?? []) as Any[]).filter((r) => !asesor || (asesor === 'sin' ? !r.cabecera_id : r.cabecera_id === asesor));
@@ -98,7 +98,7 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
               const d = dias(r.fase_en);
               return (
                 <tr key={r.oportunidad_id} className="border-b border-line last:border-0 hover:bg-cream">
-                  <td className="px-3 py-2"><Link href={`/trabajo/p/${r.persona_id}?tab=infonavit`} className="font-semibold hover:underline">{[r.nombre, r.apellidos].filter(Boolean).join(' ') || 'Sin nombre'}</Link>{r.solo_cotitular ? <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">solo con cotitular</span> : null}</td>
+                  <td className="px-3 py-2"><Link href={`/trabajo/p/${r.persona_id}?tab=infonavit`} className="font-semibold hover:underline">{[r.nombre, r.apellidos].filter(Boolean).join(' ') || 'Sin nombre'}</Link>{r.solo_cotitular ? <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">solo con cotitular{r.efectivo_minimo ? ` o poniendo ${fmtMXN(Number(r.efectivo_minimo))}` : ''}</span> : null}</td>
                   <td className="px-3 py-2">{nombreFase.get(r.fase) ?? r.fase}</td>
                   <td className={`px-3 py-2 ${d != null && d > 7 && enTramite.has(r.fase) && r.fase !== 'entregado' ? 'font-semibold text-red-700' : 'text-muted'}`} title={r.fase_en ? fmtFecha(r.fase_en) : ''}>{d == null ? '—' : `${d} d`}</td>
                   <td className="px-3 py-2 text-muted">{r.asesor ? String(r.asesor).split(' ')[0] : 'Sin dueño'}</td>

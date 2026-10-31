@@ -107,7 +107,7 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
       <RutaMini parada={f.parada ?? null} />
       <div className="text-[13px] leading-snug">
         {f.carril === 'tibios' || f.carril === 'frios'
-          ? <>{pot?.nombre ?? f.oportunidad ?? '—'}{pot?.potencial ? <span className="text-muted"> · potencial {fmtMXN(pot.potencial)}</span> : null}{(f as { cotitular?: boolean | null }).cotitular ? <span className="font-semibold text-amber-700"> · solo con cotitular</span> : null}{urg ? <span className="font-semibold text-amber-700"> · {urg}</span> : null}</>
+          ? <>{pot?.nombre ?? f.oportunidad ?? '—'}{pot?.potencial ? <span className="text-muted"> · potencial {fmtMXN(pot.potencial)}</span> : null}{(f as { cotitular?: boolean | null }).cotitular ? <span className="font-semibold text-amber-700"> · solo con cotitular{(f as { efectivo_minimo?: number | null }).efectivo_minimo ? ` (o poniendo ${fmtMXN(Number((f as { efectivo_minimo?: number | null }).efectivo_minimo))})` : ''}</span> : null}{urg ? <span className="font-semibold text-amber-700"> · {urg}</span> : null}</>
           : <>{f.toca === 'cliente' ? `Le toca: ${f.sigue ?? '—'}` : f.sigue ?? '—'}{f.oportunidad ? <span className="text-muted"> · {f.oportunidad}</span> : null}</>}
         {f.marca?.nota ? <div className="text-xs italic text-muted">“{f.marca.nota}”</div> : null}
         <div className="text-xs text-muted">

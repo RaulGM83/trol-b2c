@@ -49,6 +49,8 @@ export async function POST(req: Request) {
     resultado = 'saldo_bajo';
   } else if (/Ningún inmueble|Solo con cotitular/i.test(cot.motivo)) {
     resultado = 'sin_inmueble';
+    const { data: op } = await db.from('oportunidades').select('efectivo_minimo').eq('persona_id', pid).eq('codigo', 'compra_inmueble').maybeSingle();
+    if ((op as Any)?.efectivo_minimo) payload.efectivo_minimo = Number((op as Any).efectivo_minimo);
   } else {
     resultado = 'no_encontrado';
   }
