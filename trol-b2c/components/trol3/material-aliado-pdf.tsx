@@ -54,7 +54,7 @@ const s = StyleSheet.create({
 const NIVELES = [
   {
     t: 'Poner en orden',
-    p: 'Con tu CURP obtenemos tu información oficial: semanas cotizadas, la ley que te aplica, la vigencia de tus derechos y lo que tienes en tu AFORE e Infonavit. Todo en un solo expediente, siempre a tu alcance.',
+    p: 'Con tu CURP obtenemos tu información real del IMSS: semanas cotizadas, la ley que te aplica, la vigencia de tus derechos y lo que tienes en tu AFORE e Infonavit. Todo en un solo expediente, siempre a tu alcance.',
   },
   {
     t: 'Aprovechar las oportunidades de hoy',
@@ -84,7 +84,7 @@ export function materialAliadoDoc(m: MaterialAliado) {
             Tu pensión del IMSS, <Text style={s.h1lime}>en orden y trabajando para ti.</Text>
           </Text>
           <Text style={s.dek}>
-            Trol Financiero revisa tu historial oficial del IMSS y te dice, con claridad, dónde estás, qué te corresponde hoy y cómo llegar mejor al retiro.
+            Trol Financiero revisa tu historial del IMSS y te dice, con claridad, dónde estás, qué te corresponde hoy y cómo llegar mejor al retiro.
           </Text>
         </View>
 

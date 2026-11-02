@@ -106,7 +106,7 @@ export default async function EspacioAliado() {
       </div>
 
       {link ? (
-        <LinkAliado link={link} qr={qr} />
+        <LinkAliado link={link} qr={qr} infonavit={!!a.programa_infonavit} />
       ) : (
         <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
           Todavía no tienes tu liga para compartir. Escríbenos y te la generamos.

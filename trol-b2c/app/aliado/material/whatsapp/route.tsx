@@ -45,7 +45,7 @@ export async function GET() {
             <div style={{ color: LIME, fontWeight: 700 }}>en orden y trabajando para ti.</div>
           </div>
           <div style={{ fontSize: 25, lineHeight: 1.5, color: LIGHT, marginTop: 22, maxWidth: 860 }}>
-            Revisamos tu historial oficial del IMSS y te decimos dónde estás, qué te corresponde hoy y cómo llegar mejor al retiro.
+            Revisamos tu historial del IMSS y te decimos dónde estás, qué te corresponde hoy y cómo llegar mejor al retiro.
           </div>
         </div>
 
