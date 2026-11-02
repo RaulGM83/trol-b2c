@@ -16,7 +16,8 @@
 --    columnas que el aliado puede ver y sólo de sus referidos. Las vistas la usan por LATERAL (que además
 --    evita que el planner aplane v_expediente contra las 14k personas: 9 s → 2 ms). v_referidos_aliado
 --    se corrige igual.
--- 6. Precios parejos con los créditos (1 cr = $20): cálculos $400 / 20 cr · completa $600 / 30 cr.
+-- 6. Para el aliado, 1 cr = $20: cálculos 20 cr ($400) · completa 30 cr ($600). El `precio_mxn` del
+--    catálogo ($500/$800) es el precio B2C de /mi y NO se toca (Raúl, 2-nov): el aliado sólo usa precio_creditos.
 -- Aplicada por MCP el 2-nov-2026 en cuatro pasos (291, 291b, 291c, 291d); este archivo es el estado final.
 
 -- ---------------------------------------------------------------------------
@@ -228,10 +229,3 @@ revoke all on function trol3.comprar_asesoria_por_aliado(uuid, text) from public
 grant execute on function trol3.comprar_asesoria_por_aliado(uuid, text) to authenticated, service_role;
 comment on function trol3.comprar_asesoria_por_aliado is 'El aliado referidor compra una asesoría (diagnostico_avanzado / _sesion) para un referido suyo con los créditos de su wallet. Orden pagada + tarea al equipo. Idempotente. 291 (claude/116).';
 
--- ---------------------------------------------------------------------------
--- 6. Precios parejos con los créditos (Raúl, 2-nov-2026)
--- ---------------------------------------------------------------------------
-update trol3.productos set precio_mxn = 400 where codigo = 'diagnostico_avanzado';
-update trol3.productos set precio_mxn = 600 where codigo = 'diagnostico_avanzado_sesion';
-update public.products set precio_mxn = 400, updated_at = now() where code = 'DIAGNOSTICO_AVANZADO';
-update public.products set precio_mxn = 600, updated_at = now() where code = 'DIAGNOSTICO_AVANZADO_SESION';
