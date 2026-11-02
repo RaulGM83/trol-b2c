@@ -1,7 +1,7 @@
 'use client';
-// 291 · Lo que el aliado ve de cada referido de pensión (claude/116): qué dice el IMSS, cuánto
-// vale, qué oportunidades hay, y los botones para comprar la asesoría con sus créditos.
-// Todo viene de v_resultado_aliado (filtra por current_aliado_id()). Aquí no se calcula nada.
+// 291 · La pestaña Pensión de un cliente del aliado (claude/116): qué dice el IMSS, cuánto vale, qué
+// oportunidades hay, y los botones para comprar la asesoría con sus créditos. Todo viene de
+// v_resultado_aliado (filtra por current_aliado_id()). Aquí no se calcula nada.
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -25,15 +25,19 @@ const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN'
 const money = (n: number | null | undefined) => (n == null ? '—' : mxn0.format(n));
 const fecha = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const fechaHora = (d: string | null | undefined) => (d ? new Date(d).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '—');
+export const leyLabel = (l: string | null) => (l ? `Ley ${l.replace(/^Ley\s*/i, '')}` : null);
 
-const ESTADO: Record<string, [string, string]> = {
-  consultando: ['Consultando al IMSS…', 'bg-cream text-ink'],
-  listo: ['Listo', 'bg-emerald-100 text-emerald-900'],
-  fallida: ['No se pudo consultar', 'bg-amber-100 text-amber-900'],
-  falta_curp: ['Falta la CURP', 'bg-amber-100 text-amber-900'],
-  ya_cliente: ['Ya era cliente de Trol: lo revisamos', 'bg-amber-100 text-amber-900'],
-};
-const leyLabel = (l: string | null) => (l ? `Ley ${l.replace(/^Ley\s*/i, '')}` : null);
+/** Estado de pensión dicho para el aliado (chip de la lista y encabezado de la pestaña). */
+export function estadoPension(r: FilaResultadoAliado): [string, string] {
+  if (r.estado === 'ya_cliente') return ['Ya era cliente de Trol', 'bg-amber-100 text-amber-900'];
+  if (r.diagnostico_estado === 'listo') return ['Diagnóstico listo', 'bg-emerald-100 text-emerald-900'];
+  if ((r.compras ?? []).length) return [r.diagnostico_estado === 'en_elaboracion' ? 'Diagnóstico en elaboración' : 'Cálculos pedidos', 'bg-ink text-white'];
+  if (r.estado === 'listo') return ['Listo', 'bg-emerald-100 text-emerald-900'];
+  if (r.estado === 'fallida') return ['No se pudo consultar', 'bg-amber-100 text-amber-900'];
+  if (r.estado === 'falta_curp') return ['Falta la CURP', 'bg-amber-100 text-amber-900'];
+  return ['Consultando al IMSS…', 'bg-cream text-ink'];
+}
+
 const EMPLEO: Record<string, string> = { empleado: 'Sí, cotiza hoy', desempleado: 'No cotiza hoy', pensionado: 'Ya está pensionado' };
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-40';
 
@@ -46,7 +50,7 @@ function Dato({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
-function mensajeParaCliente(r: FilaResultadoAliado, aliado: string) {
+export function mensajeParaCliente(r: FilaResultadoAliado, aliado: string) {
   const nombre = r.nombre || 'Hola';
   const partes = [`${nombre}, ya revisamos tu información del IMSS con El Trol Financiero.`];
   const datos: string[] = [];
@@ -110,119 +114,94 @@ function Comprar({ persona, productos, creditos, tieneWallet, compras }: {
   );
 }
 
-export function ResultadoAliado({ filas, productos, creditos, tieneWallet, aliado }: {
-  filas: FilaResultadoAliado[]; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean; aliado: string;
+/** La pestaña Pensión de un cliente. */
+export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado }: {
+  r: FilaResultadoAliado; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean; aliado: string;
 }) {
   const copiar = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.success('Mensaje copiado'); } catch { toast.error('No pude copiar'); } };
+  const [label, cls] = estadoPension(r);
+  const ops = r.oportunidades ?? [];
+  const compras = r.compras ?? [];
+  const ley73 = /73/.test(r.ley ?? '');
 
   return (
-    <section className="rounded-2xl border border-line bg-white p-5">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-bold">Tus referidos de pensión</h2>
-          <p className="text-xs text-muted">Lo que dice su información del IMSS, cuánto vale y qué sigue. Con tus créditos puedes pedirnos los cálculos o la asesoría completa.</p>
-        </div>
-        <div className="text-xs text-muted">
-          {productos.map((p) => `${p.codigo === 'diagnostico_avanzado_sesion' ? 'Asesoría completa' : 'Sólo cálculos'} ${p.creditos} cr (${money(p.mxn)})`).join(' · ')}
-        </div>
-      </div>
-      {filas.length === 0 ? (
-        <p className="text-sm text-muted">Todavía no llega nadie por tu liga. En cuanto alguien escriba o lo des de alta, aparece aquí.</p>
-      ) : (
-        <ul className="space-y-3">
-          {filas.map((r) => {
-            const [label, cls] = ESTADO[r.estado] ?? [r.estado, 'bg-cream text-ink'];
-            const nombre = [r.nombre, r.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre';
-            const ops = r.oportunidades ?? [];
-            const compras = r.compras ?? [];
-            const ley73 = /73/.test(r.ley ?? '');
-            return (
-              <li key={r.referido_id} className="rounded-xl border border-line p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <b className="flex-1 text-sm">{nombre}</b>
-                  <span className="text-[11px] text-muted">{fecha(r.referido_en)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
-                </div>
+    <div>
+      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
 
-                {r.estado === 'fallida' ? (
-                  <p className="mt-1 text-xs text-amber-900">Pídele a tu cliente que revise su CURP; si está bien escrita, nosotros buscamos y corregimos la inconsistencia con el IMSS.</p>
-                ) : null}
-                {r.estado === 'falta_curp' ? (
-                  <p className="mt-1 text-xs text-amber-900">Sin CURP no podemos consultar su información. Mándanosla o dalo de alta otra vez con ella.</p>
-                ) : null}
+      {r.estado === 'fallida' ? (
+        <p className="mt-2 text-xs text-amber-900">Pídele a tu cliente que revise su CURP; si está bien escrita, nosotros buscamos y corregimos la inconsistencia con el IMSS.</p>
+      ) : null}
+      {r.estado === 'falta_curp' ? (
+        <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información. Mándanosla o agrégalo otra vez con ella.</p>
+      ) : null}
 
-                {r.estado === 'listo' ? (
-                  <>
-                    <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Lo que dice el IMSS</div>
-                    <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
-                      <Dato k="Edad" v={r.edad != null ? `${r.edad} años` : null} />
-                      <Dato k="Ley" v={leyLabel(r.ley)} />
-                      <Dato k="Semanas" v={r.semanas != null ? r.semanas.toLocaleString('es-MX') : null} />
-                      <Dato k="Cotiza hoy" v={r.status_empleo ? EMPLEO[r.status_empleo] ?? r.status_empleo : null} />
-                      <Dato k="Derechos" v={r.conserva_derechos == null ? null : r.conserva_derechos ? `Vigentes${r.fin_conservacion ? ` hasta ${fecha(r.fin_conservacion)}` : ''}` : 'Hay que reactivarlos'} />
-                      <Dato k="AFORE" v={r.afore_actual} />
-                    </div>
+      {r.estado === 'listo' ? (
+        <>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Lo que dice el IMSS</div>
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
+            <Dato k="Edad" v={r.edad != null ? `${r.edad} años` : null} />
+            <Dato k="Ley" v={leyLabel(r.ley)} />
+            <Dato k="Semanas" v={r.semanas != null ? r.semanas.toLocaleString('es-MX') : null} />
+            <Dato k="Cotiza hoy" v={r.status_empleo ? EMPLEO[r.status_empleo] ?? r.status_empleo : null} />
+            <Dato k="Derechos" v={r.conserva_derechos == null ? null : r.conserva_derechos ? `Vigentes${r.fin_conservacion ? ` hasta ${fecha(r.fin_conservacion)}` : ''}` : 'Hay que reactivarlos'} />
+            <Dato k="AFORE" v={r.afore_actual} />
+          </div>
 
-                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Lo que vale</div>
-                    <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {ley73 ? (
-                        <Dato k="Pensión estimada hoy" v={r.pension_base != null && r.pension_base > 0 ? `${money(r.pension_base)} / mes` : 'Por calcular'} />
-                      ) : (
-                        <Dato k="Ahorro para el retiro (estimado)" v={r.saldo_rcv97 != null && r.saldo_rcv97 > 0 ? money(r.saldo_rcv97) : 'Por calcular'} />
-                      )}
-                      {r.saldo_infonavit != null && r.saldo_infonavit > 0 ? (
-                        <Dato k="Infonavit" v={r.credito_infonavit_vigente ? `Saldo ${money(r.saldo_infonavit)} · ya tiene un crédito vigente` : `Saldo ${money(r.saldo_infonavit)}${r.infonavit_monto_credito ? ` · crédito hasta ${money(r.infonavit_monto_credito)}` : ''}`} />
-                      ) : null}
-                    </div>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Lo que vale</div>
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {ley73 ? (
+              <Dato k="Pensión estimada hoy" v={r.pension_base != null && r.pension_base > 0 ? `${money(r.pension_base)} / mes` : 'Por calcular'} />
+            ) : (
+              <Dato k="Ahorro para el retiro (estimado)" v={r.saldo_rcv97 != null && r.saldo_rcv97 > 0 ? money(r.saldo_rcv97) : 'Por calcular'} />
+            )}
+            {r.saldo_infonavit != null && r.saldo_infonavit > 0 ? (
+              <Dato k="Infonavit" v={r.credito_infonavit_vigente ? `Saldo ${money(r.saldo_infonavit)} · ya tiene un crédito vigente` : `Saldo ${money(r.saldo_infonavit)}${r.infonavit_monto_credito ? ` · crédito hasta ${money(r.infonavit_monto_credito)}` : ''}`} />
+            ) : null}
+          </div>
 
-                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Oportunidades</div>
-                    {ops.length ? (
-                      <ul className="mt-1 space-y-1 text-xs">
-                        {ops.map((o) => (
-                          <li key={o.codigo} className="flex flex-wrap items-baseline gap-1">
-                            <span className="font-semibold">{o.nombre ?? o.codigo}</span>
-                            {o.frase ? <span className="text-muted">— {o.frase}</span> : null}
-                            {o.estado === 'en_proceso' ? <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-900">en proceso</span> : null}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted">Por ahora no vemos una oportunidad clara; en la asesoría se revisa a detalle.</p>
-                    )}
-                  </>
-                ) : null}
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Oportunidades</div>
+          {ops.length ? (
+            <ul className="mt-1 space-y-1 text-xs">
+              {ops.map((o) => (
+                <li key={o.codigo} className="flex flex-wrap items-baseline gap-1">
+                  <span className="font-semibold">{o.nombre ?? o.codigo}</span>
+                  {o.frase ? <span className="text-muted">— {o.frase}</span> : null}
+                  {o.estado === 'en_proceso' ? <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-900">en proceso</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-muted">Por ahora no vemos una oportunidad clara; en la asesoría se revisa a detalle.</p>
+          )}
+        </>
+      ) : null}
 
-                {(r.estado === 'listo' || compras.length) && r.estado !== 'ya_cliente' ? (
-                  <>
-                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Qué sigue</div>
-                    {compras.length ? (
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                        {compras.map((c) => (
-                          <span key={c.producto} className="rounded-full bg-cream px-2 py-0.5 font-semibold">{c.nombre} · {fecha(c.en)}</span>
-                        ))}
-                        {r.diagnostico_estado === 'listo' && r.diagnostico_doc_id ? (
-                          <a className={btn} href={`/aliado/diagnostico/${r.persona_id}`} target="_blank" rel="noreferrer">Ver diagnóstico (PDF)</a>
-                        ) : r.diagnostico_estado === 'en_elaboracion' ? (
-                          <span className="text-muted">Diagnóstico en elaboración</span>
-                        ) : (
-                          <span className="text-muted">Pedido: estamos haciendo los cálculos</span>
-                        )}
-                        {r.proxima_sesion ? <span className="text-muted">· Sesión {fechaHora(r.proxima_sesion)}</span> : null}
-                      </div>
-                    ) : null}
-                    <Comprar persona={r.persona_id} productos={productos} creditos={creditos} tieneWallet={tieneWallet} compras={compras} />
-                    {r.estado === 'listo' ? (
-                      <div className="mt-2">
-                        <button className={btn} onClick={() => copiar(mensajeParaCliente(r, aliado))}>Copiar mensaje para tu cliente</button>
-                      </div>
-                    ) : null}
-                  </>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+      {(r.estado === 'listo' || compras.length) && r.estado !== 'ya_cliente' ? (
+        <>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">Qué sigue</div>
+          {compras.length ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              {compras.map((c) => (
+                <span key={c.producto} className="rounded-full bg-cream px-2 py-0.5 font-semibold">{c.nombre} · {fecha(c.en)}</span>
+              ))}
+              {r.diagnostico_estado === 'listo' && r.diagnostico_doc_id ? (
+                <a className={btn} href={`/aliado/diagnostico/${r.persona_id}`} target="_blank" rel="noreferrer">Ver diagnóstico (PDF)</a>
+              ) : r.diagnostico_estado === 'en_elaboracion' ? (
+                <span className="text-muted">Diagnóstico en elaboración</span>
+              ) : (
+                <span className="text-muted">Pedido: estamos haciendo los cálculos</span>
+              )}
+              {r.proxima_sesion ? <span className="text-muted">· Sesión {fechaHora(r.proxima_sesion)}</span> : null}
+            </div>
+          ) : null}
+          <Comprar persona={r.persona_id} productos={productos} creditos={creditos} tieneWallet={tieneWallet} compras={compras} />
+          {r.estado === 'listo' ? (
+            <div className="mt-2">
+              <button className={btn} onClick={() => copiar(mensajeParaCliente(r, aliado))}>Copiar mensaje para tu cliente</button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   );
 }

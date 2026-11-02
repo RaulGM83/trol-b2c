@@ -14,18 +14,20 @@
 // 291 · Excepción pensión (claude/116): de sus referidos atribuidos ve lo que dice el IMSS
 // (edad, ley, semanas, derechos), la pensión estimada y las oportunidades por nombre, sin
 // montos (v_resultado_aliado). Y con sus créditos compra cálculos o asesoría completa.
+// 291b · Una sola lista "Tus clientes": pensión e Infonavit se juntan por persona aquí, en el
+// servidor, y la pantalla sólo decide cómo enseñarlos (ClientesAliado).
 // ---------------------------------------------------------------------------
 import QRCode from 'qrcode';
 import { requireAliado, t3, t3admin, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
-import { InfonavitAliado, type FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
-import { ResultadoAliado, type FilaResultadoAliado, type ProductoAliado } from '@/components/trol3/ResultadoAliado';
+import type { FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
+import type { FilaResultadoAliado, ProductoAliado } from '@/components/trol3/ResultadoAliado';
+import { ClientesAliado, type ClienteAliado } from '@/components/trol3/ClientesAliado';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { LinkAliado } from '@/components/trol3/LinkAliado';
-import { AltaPorAliado } from '@/components/trol3/AltaPorAliado';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Tus referidos · Trol' };
+export const metadata = { title: 'Tus clientes · Trol' };
 
 /** 291 · Lo que el aliado puede comprar con créditos. 1 crédito = $20 (decisión de Raúl, 2-nov). */
 const PRODUCTOS_ALIADO: ProductoAliado['codigo'][] = ['diagnostico_avanzado', 'diagnostico_avanzado_sesion'];
@@ -36,7 +38,7 @@ export default async function EspacioAliado() {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   const link = a.codigo ? `${sitio}/i/${a.codigo}` : null;
 
-  const [{ data: resultado }, { data: comisiones }, { data: prods }] = await Promise.all([
+  const [{ data: resultado }, { data: comisiones }, { data: prods }, { data: inf }] = await Promise.all([
     db
       .from('v_resultado_aliado')
       .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion')
@@ -44,6 +46,12 @@ export default async function EspacioAliado() {
     db.from('v_comisiones_aliado').select('id,cliente,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
     // El catálogo es público para el aliado: nombre y precio en créditos, nada más.
     t3admin().from('productos').select('codigo,nombre,precio_creditos').in('codigo', PRODUCTOS_ALIADO).eq('activo', true),
+    // 281 · Broker Infonavit: sus precalificaciones (la vista ya filtra por current_aliado_id()).
+    a.programa_infonavit
+      ? db.from('v_infonavit_aliado')
+          .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs')
+          .order('pide_infonavit_en', { ascending: false }).limit(100)
+      : Promise.resolve({ data: [] as Any[] }),
   ]);
 
   const refs = (resultado ?? []) as FilaResultadoAliado[];
@@ -57,29 +65,45 @@ export default async function EspacioAliado() {
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
 
-  // 281 · Broker Infonavit: sus precalificaciones (la vista ya filtra por current_aliado_id()).
   // La cotización se arma con la llave de servicio SÓLO para filas que la vista le devolvió.
-  let infonavit: FilaInfonavitAliado[] = [];
-  if (a.programa_infonavit) {
-    const { data: inf } = await db.from('v_infonavit_aliado')
-      .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs')
-      .order('pide_infonavit_en', { ascending: false }).limit(50);
-    const admin = t3admin();
-    infonavit = await Promise.all(((inf ?? []) as Any[]).map(async (r) => {
-      const fila: FilaInfonavitAliado = { ...r, nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ') || null };
-      if (r.resultado === 'con_monto') {
-        const c = await cargarCotizacionInicial(r.persona_id, { db: admin, voz: 'aliado' });
-        if (c.ok) fila.cotizacion = { texto: c.texto, opciones: c.cot.opciones.map((o) => ({ plazo: o.plazo, nombre: o.nombre, ubicacion: o.ubicacion, pone_al_mes: o.pone_al_mes, recibe_al_vender: o.recibe_al_vender, ficha_url: o.ficha_url })) };
-        else fila.sin_cotizacion = c.motivo;
-      }
-      return fila;
-    }));
+  const admin = t3admin();
+  const infonavit: FilaInfonavitAliado[] = await Promise.all(((inf ?? []) as Any[]).map(async (r) => {
+    const fila: FilaInfonavitAliado = { ...r, nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ') || null };
+    if (r.resultado === 'con_monto') {
+      const c = await cargarCotizacionInicial(r.persona_id, { db: admin, voz: 'aliado' });
+      if (c.ok) fila.cotizacion = { texto: c.texto, opciones: c.cot.opciones.map((o) => ({ plazo: o.plazo, nombre: o.nombre, ubicacion: o.ubicacion, pone_al_mes: o.pone_al_mes, recibe_al_vender: o.recibe_al_vender, ficha_url: o.ficha_url })) };
+      else fila.sin_cotizacion = c.motivo;
+    }
+    return fila;
+  }));
+
+  // Una entrada por persona: pensión (v_resultado_aliado) + Infonavit (v_infonavit_aliado).
+  const porPersona = new Map<string, ClienteAliado>();
+  for (const r of refs) {
+    porPersona.set(r.persona_id, {
+      persona_id: r.persona_id,
+      nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre',
+      fecha: r.referido_en,
+      pension: r,
+      infonavit: null,
+    });
   }
+  for (const i of infonavit) {
+    const c = porPersona.get(i.persona_id);
+    const fecha = [i.pide_infonavit_en, i.precalificado_en, i.etapa_en].filter(Boolean).sort().pop() as string | undefined;
+    if (c) {
+      c.infonavit = i;
+      if (fecha && fecha > c.fecha) c.fecha = fecha;
+    } else {
+      porPersona.set(i.persona_id, { persona_id: i.persona_id, nombre: i.nombre || 'Sin nombre', fecha: fecha ?? i.pide_infonavit_en, pension: null, infonavit: i });
+    }
+  }
+  const clientes = Array.from(porPersona.values());
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-extrabold">Tus referidos</h1>
+        <h1 className="text-xl font-extrabold">Tus clientes</h1>
         <p className="text-xs text-muted">
           Son clientes de Trol: nosotros los contactamos y los atendemos. Aquí ves cómo van.
         </p>
@@ -87,8 +111,8 @@ export default async function EspacioAliado() {
 
       <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-line bg-white p-4">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Personas referidas</div>
-          <div className="text-2xl font-extrabold">{refs.length}</div>
+          <div className="text-[11px] uppercase tracking-wide text-muted">Clientes</div>
+          <div className="text-2xl font-extrabold">{clientes.length}</div>
         </div>
         <div className="rounded-2xl border-2 border-ink bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Tus créditos</div>
@@ -105,6 +129,16 @@ export default async function EspacioAliado() {
         </div>
       </div>
 
+      <ClientesAliado
+        clientes={clientes}
+        productos={productos}
+        creditos={a.creditos ?? null}
+        tieneWallet={!!a.tiene_wallet}
+        aliado={a.nombre}
+        comisionInfonavit={Number(a.comision_infonavit ?? 25000)}
+        programaInfonavit={!!a.programa_infonavit}
+      />
+
       {link ? (
         <LinkAliado link={link} qr={qr} infonavit={!!a.programa_infonavit} />
       ) : (
@@ -112,12 +146,6 @@ export default async function EspacioAliado() {
           Todavía no tienes tu liga para compartir. Escríbenos y te la generamos.
         </section>
       )}
-
-      <AltaPorAliado aliado={a.nombre} />
-
-      <ResultadoAliado filas={refs} productos={productos} creditos={a.creditos ?? null} tieneWallet={!!a.tiene_wallet} aliado={a.nombre} />
-
-      {a.programa_infonavit ? <InfonavitAliado filas={infonavit} comision={Number(a.comision_infonavit ?? 25000)} /> : null}
 
       {coms.length ? (
         <section className="rounded-2xl border border-line bg-white p-5">
