@@ -36,6 +36,10 @@ const EXPLICACION: Record<string, string> = {
   nss_de_otra_persona: 'Ese NSS ya está registrado con otra persona. Verifícalo con tu cliente.',
   falta_curp_o_nss: 'Necesitamos la CURP o el NSS para precalificar.',
   sin_programa_infonavit: 'Tu cuenta todavía no tiene activa la precalificación Infonavit. Escríbenos.',
+  sin_wallet: 'Tu cuenta todavía no tiene créditos. Escríbenos y te los cargamos.',
+  saldo_insuficiente: 'No te alcanzan los créditos. Escríbenos para recargar.',
+  referido_ajeno: 'No encontramos a esa persona en tus referidos.',
+  producto_invalido: 'Ese producto no se compra desde aquí.',
 };
 const explicar = (e: Any) => {
   const raw = String(e?.message ?? e ?? '');
@@ -212,4 +216,20 @@ export async function subirDocumentoInfonavitPorAliado(form: FormData) {
   } catch (e) { return fail(e); }
   revalidatePath('/aliado');
   return ok();
+}
+
+/**
+ * 291 · El aliado compra una asesoría para un referido suyo con los créditos de su wallet
+ * (claude/116). Todo lo decide la base: que la persona sea suya, que le alcance, que no se cobre
+ * dos veces. Aquí sólo se traduce el resultado. No se comisiona: la compra es suya, no una venta.
+ */
+export async function comprarAsesoriaPorAliado(personaId: string, producto: 'diagnostico_avanzado' | 'diagnostico_avanzado_sesion') {
+  await requireAliado();
+  const { data, error } = await t3().rpc('comprar_asesoria_por_aliado', { p_persona: personaId, p_producto: producto });
+  if (error) return fail(new Error(explicar(error)));
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo/aliados/referidores');
+  revalidatePath('/trabajo/tareas');
+  const r = data as Any;
+  return ok({ orden: r?.orden, repetida: !!r?.repetida, creditos_restantes: r?.creditos_restantes ?? null });
 }

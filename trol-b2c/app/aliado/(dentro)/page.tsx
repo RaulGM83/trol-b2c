@@ -6,16 +6,19 @@
 // si algún día alguien agrega un `db.from('personas')` en esta página, se cae
 // la única frontera que hay.
 //
-// Y lo que se enseña es avance y resultado. Nunca saldos, semanas, CURP ni
-// nada del expediente: esa gente es cliente de Trol, no de él.
+// Lo que se enseña es avance y resultado. Nunca CURP, NSS, expediente ni archivos:
+// esa gente es cliente de Trol, no de él.
 //
-// 281 · ÚNICA excepción: el broker Infonavit (aliados.programa_infonavit) ve saldo, monto y la
-// cotización inicial de las personas que ÉL pidió precalificar y le quedaron atribuidas
-// (v_infonavit_aliado). Nada de pensión.
+// 281 · Excepción Infonavit: el broker (aliados.programa_infonavit) ve saldo, monto y la
+// cotización inicial de las personas que ÉL pidió precalificar (v_infonavit_aliado).
+// 291 · Excepción pensión (claude/116): de sus referidos atribuidos ve lo que dice el IMSS
+// (edad, ley, semanas, derechos), la pensión estimada y las oportunidades por nombre, sin
+// montos (v_resultado_aliado). Y con sus créditos compra cálculos o asesoría completa.
 // ---------------------------------------------------------------------------
 import QRCode from 'qrcode';
 import { requireAliado, t3, t3admin, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
 import { InfonavitAliado, type FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
+import { ResultadoAliado, type FilaResultadoAliado, type ProductoAliado } from '@/components/trol3/ResultadoAliado';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { LinkAliado } from '@/components/trol3/LinkAliado';
 import { AltaPorAliado } from '@/components/trol3/AltaPorAliado';
@@ -24,16 +27,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Tus referidos · Trol' };
 
-// Las etapas internas dichas como se las diría uno por teléfono. Lo que él
-// necesita saber es si ya lo agarramos y qué tan lejos va, no nuestro
-// vocabulario.
-const ETAPA_LABEL: Record<string, string> = {
-  nuevo: 'Recién llegado',
-  expediente_base: 'Con su información reunida',
-  conversando: 'Hablando con nosotros',
-  asesorado: 'Ya lo asesoramos',
-  cliente: 'Cliente',
-};
+/** 291 · Lo que el aliado puede comprar con créditos. 1 crédito = $20 (decisión de Raúl, 2-nov). */
+const PRODUCTOS_ALIADO: ProductoAliado['codigo'][] = ['diagnostico_avanzado', 'diagnostico_avanzado_sesion'];
 
 export default async function EspacioAliado() {
   const a = await requireAliado();
@@ -41,18 +36,24 @@ export default async function EspacioAliado() {
   const sitio = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.trol.mx';
   const link = a.codigo ? `${sitio}/i/${a.codigo}` : null;
 
-  const [{ data: referidos }, { data: comisiones }] = await Promise.all([
+  const [{ data: resultado }, { data: comisiones }, { data: prods }] = await Promise.all([
     db
-      .from('v_referidos_aliado')
-      .select('referido_id,nombre,apellidos,etapa,ultima_cita,diagnostico_entregado_en,pension_estimada,productos_contratados,comision_devengada,referido_en')
+      .from('v_resultado_aliado')
+      .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion')
       .order('referido_en', { ascending: false }),
     db.from('v_comisiones_aliado').select('id,cliente,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
+    // El catálogo es público para el aliado: nombre y precio en créditos, nada más.
+    t3admin().from('productos').select('codigo,nombre,precio_creditos').in('codigo', PRODUCTOS_ALIADO).eq('activo', true),
   ]);
 
-  const refs = (referidos ?? []) as Any[];
+  const refs = (resultado ?? []) as FilaResultadoAliado[];
   const coms = (comisiones ?? []) as Any[];
   const porPagar = coms.filter((c) => c.estado === 'devengada').reduce((s, c) => s + Number(c.monto), 0);
   const pagado = coms.filter((c) => c.estado === 'pagada').reduce((s, c) => s + Number(c.monto), 0);
+  const productos: ProductoAliado[] = PRODUCTOS_ALIADO.flatMap((codigo) => {
+    const p = ((prods ?? []) as Any[]).find((x) => x.codigo === codigo);
+    return p && p.precio_creditos ? [{ codigo, nombre: p.nombre as string, creditos: Number(p.precio_creditos), mxn: Number(p.precio_creditos) * 20 }] : [];
+  });
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
 
@@ -84,10 +85,15 @@ export default async function EspacioAliado() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Personas referidas</div>
           <div className="text-2xl font-extrabold">{refs.length}</div>
+        </div>
+        <div className="rounded-2xl border-2 border-ink bg-white p-4">
+          <div className="text-[11px] uppercase tracking-wide text-muted">Tus créditos</div>
+          <div className="text-2xl font-extrabold">{a.tiene_wallet ? (a.creditos ?? 0) : '—'}</div>
+          <div className="text-[11px] text-muted">{a.tiene_wallet ? 'Escríbenos para recargar' : 'Escríbenos para activarlos'}</div>
         </div>
         <div className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Por pagarte</div>
@@ -107,56 +113,17 @@ export default async function EspacioAliado() {
         </section>
       )}
 
-      {a.programa_infonavit ? <InfonavitAliado filas={infonavit} comision={Number(a.comision_infonavit ?? 25000)} /> : null}
-
       <AltaPorAliado aliado={a.nombre} />
 
-      <section className="rounded-2xl border border-line bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold">Cómo van</h2>
-        {refs.length === 0 ? (
-          <p className="text-sm text-muted">
-            Todavía no llega nadie por tu liga. En cuanto alguien escriba, aparece aquí.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-muted">
-                <tr className="border-b border-line">
-                  <th className="py-1 pr-3 font-semibold">Persona</th>
-                  <th className="py-1 pr-3 font-semibold">Cómo va</th>
-                  <th className="py-1 pr-3 font-semibold">Última cita</th>
-                  <th className="py-1 pr-3 font-semibold">Diagnóstico</th>
-                  <th className="py-1 pr-3 font-semibold">Contrató</th>
-                  <th className="py-1 text-right font-semibold">Tu comisión</th>
-                </tr>
-              </thead>
-              <tbody>
-                {refs.map((r) => (
-                  <tr key={r.referido_id} className="border-b border-line/60 align-top">
-                    <td className="py-1.5 pr-3 font-semibold">
-                      {[r.nombre, r.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre'}
-                      <div className="font-normal text-muted">{fmtFecha(r.referido_en)}</div>
-                    </td>
-                    <td className="py-1.5 pr-3">{ETAPA_LABEL[r.etapa] ?? r.etapa ?? '—'}</td>
-                    <td className="py-1.5 pr-3">{fmtFecha(r.ultima_cita)}</td>
-                    <td className="py-1.5 pr-3">{fmtFecha(r.diagnostico_entregado_en)}</td>
-                    <td className="py-1.5 pr-3">{r.productos_contratados ?? '—'}</td>
-                    <td className="py-1.5 text-right font-semibold">
-                      {Number(r.comision_devengada ?? 0) > 0 ? fmtMXN(Number(r.comision_devengada)) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <ResultadoAliado filas={refs} productos={productos} creditos={a.creditos ?? null} tieneWallet={!!a.tiene_wallet} aliado={a.nombre} />
+
+      {a.programa_infonavit ? <InfonavitAliado filas={infonavit} comision={Number(a.comision_infonavit ?? 25000)} /> : null}
 
       {coms.length ? (
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-1 text-sm font-bold">Tus comisiones</h2>
           <p className="mb-3 text-xs text-muted">
-            Infonavit: {fmtMXN(Number(a.comision_infonavit ?? 25000))} por inmueble al firmar escrituras. Lo demás, sobre lo que Trol cobró por esa operación, con lo que tenemos pactado.
+            Infonavit: {fmtMXN(Number(a.comision_infonavit ?? 25000))} por inmueble al firmar escrituras. Lo demás, sobre lo que Trol cobre al cliente por esa operación, con lo que tenemos pactado. Las asesorías que compras con créditos no generan comisión.
           </p>
           <ul className="space-y-1 text-sm">
             {coms.map((c) => (

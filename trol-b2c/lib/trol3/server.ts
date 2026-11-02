@@ -129,6 +129,9 @@ export interface Aliado {
   /** 281 · Broker Infonavit: puede precalificar y ver el resultado de sus referidos. */
   programa_infonavit?: boolean;
   comision_infonavit?: number | null;
+  /** 291 · Wallet de créditos (aliados.partner_id → public.partners). null = sin wallet. */
+  creditos?: number | null;
+  tiene_wallet?: boolean;
 }
 
 /** Aliado referidor autenticado, o null. */
