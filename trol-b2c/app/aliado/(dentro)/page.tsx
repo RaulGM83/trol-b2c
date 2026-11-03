@@ -49,7 +49,7 @@ export default async function EspacioAliado() {
     // 281 · Broker Infonavit: sus precalificaciones (la vista ya filtra por current_aliado_id()).
     a.programa_infonavit
       ? db.from('v_infonavit_aliado')
-          .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs')
+          .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs,fechas,inmueble,inmueble_ubicacion,casa,conyugal,co_titular,comision_estado')
           .order('pide_infonavit_en', { ascending: false }).limit(100)
       : Promise.resolve({ data: [] as Any[] }),
   ]);

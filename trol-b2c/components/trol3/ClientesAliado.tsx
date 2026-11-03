@@ -24,7 +24,7 @@ function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
   const p = c.pension, i = c.infonavit;
   if (i?.resultado === 'con_monto') {
     const idx = etapaIndice(i.etapa);
-    const faltan = docsFaltantes(i.docs);
+    const faltan = docsFaltantes(i.docs, !!i.conyugal);
     if (idx <= 1 && faltan > 0) return { texto: `Subir documentos (faltan ${faltan})`, prioridad: 2 };
   }
   if (i?.resultado === 'falta_nss') return { texto: 'Mandarnos su NSS', prioridad: 2 };
@@ -93,7 +93,10 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
             {` · ${asesorias} con cálculos o asesoría pedidos`}
           </p>
         </div>
-        <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} abiertoInicial={n === 0} />
+        <div className="flex flex-wrap items-center gap-2">
+          {programaInfonavit ? <a href="/aliado/inventario" className="rounded-xl border border-ink px-3 py-2 text-sm font-bold text-ink hover:bg-cream">Inventario Infonavit</a> : null}
+          <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} abiertoInicial={n === 0} />
+        </div>
       </div>
 
       {n > 0 ? (

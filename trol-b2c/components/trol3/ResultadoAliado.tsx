@@ -129,7 +129,7 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado }: 
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
 
       {r.estado === 'fallida' ? (
-        <p className="mt-2 text-xs text-amber-900">Pídele a tu cliente que revise su CURP; si está bien escrita, nosotros buscamos y corregimos la inconsistencia con el IMSS.</p>
+        <p className="mt-2 text-xs text-amber-900">No pudimos consultar su información con esa CURP. Pídele a tu cliente que la revise; si está bien escrita, podemos ayudarle: escríbenos.</p>
       ) : null}
       {r.estado === 'falta_curp' ? (
         <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información. Mándanosla o agrégalo otra vez con ella.</p>

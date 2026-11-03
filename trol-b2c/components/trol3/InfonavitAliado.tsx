@@ -13,6 +13,9 @@ export interface FilaInfonavitAliado {
   persona_id: string; nombre: string | null; resultado: string; saldo: number | null; monto_credito: number | null;
   pide_infonavit_en: string; precalificado_en: string | null;
   etapa?: string | null; etapa_en?: string | null; docs?: string[] | null;
+  /** 293 · Seguimiento real del trámite (oportunidades.tramite_infonavit). */
+  fechas?: Record<string, string> | null; inmueble?: string | null; inmueble_ubicacion?: string | null; casa?: string | null;
+  conyugal?: boolean | null; co_titular?: string | null; comision_estado?: 'devengada' | 'pagada' | string | null;
   cotizacion?: { texto: string; opciones: { plazo: number; nombre: string; ubicacion: string | null; pone_al_mes: number; recibe_al_vender: number; ficha_url: string | null }[] } | null;
   sin_cotizacion?: string | null;
 }
@@ -34,24 +37,37 @@ export const RES_INFONAVIT: Record<string, [string, string]> = {
 
 export const etapaIndice = (etapa: string | null | undefined) => ETAPAS_INFONAVIT.findIndex((e) => e.clave === etapa);
 export const etapaNombre = (etapa: string | null | undefined) => ETAPAS_INFONAVIT.find((e) => e.clave === etapa)?.nombre ?? null;
-export const docsFaltantes = (docs: string[] | null | undefined) => DOCS_INFONAVIT.filter((d) => !(docs ?? []).includes(d.tipo)).length;
+/** Acta de matrimonio sólo cuenta como faltante en crédito conyugal (si es casado y va solo, se pide por WhatsApp). */
+export const docsFaltantes = (docs: string[] | null | undefined, conyugal = false) =>
+  DOCS_INFONAVIT.filter((d) => !(docs ?? []).includes(d.tipo) && (conyugal || d.tipo !== 'acta_matrimonio')).length;
+const fechaCorta = (d: string | null | undefined) => (d ? new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null);
+/** Tiempos típicos (mediana de los 6 trámites cerrados en Laureles, ago–nov 2026): documentos → escrituras 35 días (18–54); escrituras → entrega ~3 semanas. */
+const TIEMPO_TIPICO = 'Lo normal: de documentos a escrituras unas 5 semanas (hemos visto de 3 a 8) y la entrega unas 3 semanas después.';
 
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream';
 
 /** 282 · Dónde va la operación (lo mueve el equipo de Trol). */
-function Etapas({ etapa }: { etapa: string | null | undefined }) {
+function Etapas({ etapa, fechas }: { etapa: string | null | undefined; fechas?: Record<string, string> | null }) {
   const i = etapaIndice(etapa);
   return (
-    <ol className="mt-2 flex flex-wrap gap-1 text-[10px]">
-      {ETAPAS_INFONAVIT.map((e, k) => (
-        <li key={e.clave} className={`rounded-full px-2 py-0.5 font-semibold ${k < i ? 'bg-emerald-100 text-emerald-900' : k === i ? 'bg-ink text-white' : 'bg-cream text-muted'}`}>{k + 1}. {e.nombre}</li>
-      ))}
-    </ol>
+    <>
+      <ol className="mt-2 flex flex-wrap gap-1 text-[10px]">
+        {ETAPAS_INFONAVIT.map((e, k) => {
+          const f = fechaCorta(fechas?.[e.clave]);
+          return (
+            <li key={e.clave} className={`rounded-full px-2 py-0.5 font-semibold ${k < i ? 'bg-emerald-100 text-emerald-900' : k === i ? 'bg-ink text-white' : 'bg-cream text-muted'}`}>
+              {k + 1}. {e.nombre}{f ? <span className="font-normal opacity-80"> · {f}</span> : null}
+            </li>
+          );
+        })}
+      </ol>
+      {i >= 0 && i < ETAPAS_INFONAVIT.length - 1 ? <p className="mt-1 text-[11px] text-muted">{TIEMPO_TIPICO}</p> : null}
+    </>
   );
 }
 
 /** 282 · El broker sube lo que falte; nunca ve los archivos, sólo si ya está. */
-function Documentos({ personaId, docs }: { personaId: string; docs: string[] }) {
+function Documentos({ personaId, docs, conyugal }: { personaId: string; docs: string[]; conyugal: boolean }) {
   const router = useRouter();
   const [subiendo, start] = useTransition();
   const subir = (tipo: string, file: File | undefined) => {
@@ -62,10 +78,11 @@ function Documentos({ personaId, docs }: { personaId: string; docs: string[] }) 
       if (r.ok) { toast.success('Documento recibido'); router.refresh(); } else toast.error(r.error ?? 'No se pudo subir');
     });
   };
-  const faltan = docsFaltantes(docs);
+  const faltan = docsFaltantes(docs, conyugal);
+  const total = conyugal ? DOCS_INFONAVIT.length : DOCS_INFONAVIT.length - 1;
   return (
     <details className="mt-2 text-xs" open={faltan > 0}>
-      <summary className="cursor-pointer font-semibold">Documentos · {DOCS_INFONAVIT.length - faltan} de {DOCS_INFONAVIT.length}{subiendo ? ' · subiendo…' : ''}</summary>
+      <summary className="cursor-pointer font-semibold">Documentos · {total - faltan} de {total}{!conyugal ? ' (+ acta de matrimonio si es casado)' : ''}{subiendo ? ' · subiendo…' : ''}</summary>
       <ul className="mt-1 space-y-1">
         {DOCS_INFONAVIT.map((d) => (
           <li key={d.tipo} className="flex flex-wrap items-center gap-2">
@@ -93,8 +110,14 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
       {r.resultado === 'con_monto' ? (
         <>
-          <Etapas etapa={r.etapa} />
-          <div className="mt-2 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · crédito hasta <b className="text-ink">{money(r.monto_credito)}</b> · ganas <b className="text-ink">{money(comision)}</b> al escriturar</div>
+          <Etapas etapa={r.etapa} fechas={r.fechas} />
+          <div className="mt-2 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · crédito hasta <b className="text-ink">{money(r.monto_credito)}</b> · {r.comision_estado === 'pagada' ? <b className="text-emerald-800">comisión {money(comision)} pagada</b> : r.comision_estado === 'devengada' ? <b className="text-emerald-800">comisión {money(comision)} por pagarte</b> : <>ganas <b className="text-ink">{money(comision)}</b> al escriturar</>}</div>
+          {r.inmueble || r.conyugal ? (
+            <div className="mt-1 text-xs">
+              {r.inmueble ? <span><b>Inmueble:</b> {r.inmueble}{r.casa ? ` · ${r.casa}` : ''}{r.inmueble_ubicacion ? <span className="text-muted"> · {r.inmueble_ubicacion}</span> : null}</span> : null}
+              {r.conyugal ? <span className="ml-2 rounded-full bg-cream px-2 py-0.5 text-[11px] font-semibold">Crédito conyugal{r.co_titular ? ` con ${r.co_titular}` : ''}</span> : null}
+            </div>
+          ) : null}
           {r.cotizacion ? (
             <>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -113,7 +136,8 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
               </div>
             </>
           ) : <div className="mt-1 text-xs text-muted">{r.sin_cotizacion ?? 'Armando la propuesta…'}</div>}
-          <Documentos personaId={r.persona_id} docs={r.docs ?? []} />
+          {etapaIndice(r.etapa) <= 1 ? <Documentos personaId={r.persona_id} docs={r.docs ?? []} conyugal={!!r.conyugal} /> : null}
+          <div className="mt-2"><a href="/aliado/inventario" className="text-xs underline text-muted">Ver todo el inventario y para qué saldo aplica cada inmueble</a></div>
         </>
       ) : r.resultado === 'falta_nss' ? (
         <p className="mt-1 text-xs text-muted">Sin NSS ni CURP no podemos consultar. Mándanos su NSS.</p>
