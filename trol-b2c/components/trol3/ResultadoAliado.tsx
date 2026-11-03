@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { comprarAsesoriaPorAliado } from '@/app/aliado/actions';
+import { AgregarNss } from '@/components/trol3/AgregarNss';
 
 export interface OportunidadAliado { codigo: string; nombre: string | null; frase: string | null; estado: string }
 export interface CompraAliado { producto: string; nombre: string; en: string | null }
@@ -115,8 +116,10 @@ function Comprar({ persona, productos, creditos, tieneWallet, compras }: {
 }
 
 /** La pestaña Pensión de un cliente. */
-export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado }: {
+export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, puedeNss = false, tieneInfonavit = false }: {
   r: FilaResultadoAliado; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean; aliado: string;
+  /** 294 · El aliado tiene el programa Infonavit: si la CURP falló, con el NSS se puede seguir por ahí. */
+  puedeNss?: boolean; tieneInfonavit?: boolean;
 }) {
   const copiar = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.success('Mensaje copiado'); } catch { toast.error('No pude copiar'); } };
   const [label, cls] = estadoPension(r);
@@ -129,7 +132,10 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado }: 
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
 
       {r.estado === 'fallida' ? (
-        <p className="mt-2 text-xs text-amber-900">No pudimos consultar su información con esa CURP. Pídele a tu cliente que la revise; si está bien escrita, podemos ayudarle: escríbenos.</p>
+        <>
+          <p className="mt-2 text-xs text-amber-900">No pudimos consultar su información con esa CURP. Pídele a tu cliente que la revise; si está bien escrita, podemos ayudarle: escríbenos.</p>
+          {puedeNss && !tieneInfonavit ? <AgregarNss persona={r.persona_id} motivo="pension_fallida" /> : null}
+        </>
       ) : null}
       {r.estado === 'falta_curp' ? (
         <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información. Mándanosla o agrégalo otra vez con ella.</p>

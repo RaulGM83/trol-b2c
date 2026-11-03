@@ -40,6 +40,7 @@ const EXPLICACION: Record<string, string> = {
   saldo_insuficiente: 'No te alcanzan los créditos. Escríbenos para recargar.',
   referido_ajeno: 'No encontramos a esa persona en tus referidos.',
   producto_invalido: 'Ese producto no se compra desde aquí.',
+  nss_invalido_11: 'El NSS debe traer 11 dígitos.',
 };
 const explicar = (e: Any) => {
   const raw = String(e?.message ?? e ?? '');
@@ -232,4 +233,25 @@ export async function comprarAsesoriaPorAliado(personaId: string, producto: 'dia
   revalidatePath('/trabajo/tareas');
   const r = data as Any;
   return ok({ orden: r?.orden, repetida: !!r?.repetida, creditos_restantes: r?.creditos_restantes ?? null });
+}
+
+/**
+ * 294 · El aliado agrega el NSS después del alta (claude/116, opción D): cuando la consulta por CURP falló
+ * o Infonavit sigue buscando el NSS. La base valida que la persona sea suya y el candado de NSS; si ya
+ * había otro NSS distinto no se pisa (queda nota al equipo). Con el programa Infonavit, aquí mismo se
+ * pide Precalix con la llave de servicio, como en el alta.
+ */
+export async function agregarNssPorAliado(personaId: string, nss: string) {
+  await requireAliado();
+  const limpio = (nss ?? '').replace(/\D/g, '');
+  if (limpio.length !== 11) return fail(new Error(EXPLICACION.nss_invalido));
+  const { data, error } = await t3().rpc('agregar_nss_por_aliado', { p_persona: personaId, p_nss: limpio });
+  if (error) return fail(new Error(explicar(error)));
+  const r = data as Any;
+  if (r?.estado !== 'nss_distinto' && r?.infonavit) {
+    await t3admin().rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'infonavit', p_actor: 'sistema', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'aliado_infonavit', p_forzar: false, p_proveedor: null });
+  }
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo/aliados/referidores');
+  return ok({ estado: r?.estado ?? 'guardado' });
 }

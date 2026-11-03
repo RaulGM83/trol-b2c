@@ -26,8 +26,9 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
   const curpSucia = curp.length > 0 && curp.length !== 18;
   const nssSucio = nss.length > 0 && nss.length !== 11;
   const quiereInfonavit = programaInfonavit && f.infonavit;
-  // Para Infonavit hace falta CURP o NSS; para pensión sola, la CURP es opcional.
-  const listo = f.telefono.replace(/\D/g, '').length === 10 && f.nombre.trim().length >= 3 && f.autoriza && !curpSucia && !nssSucio && (!quiereInfonavit || curp || nss);
+  // CURP obligatoria siempre (Raúl, 3-nov): sin ella no hay consulta de pensión. El NSS sólo
+  // aplica a Infonavit y es opcional: con él la precalificación es inmediata; sin él, primero sale del IMSS.
+  const listo = f.telefono.replace(/\D/g, '').length === 10 && f.nombre.trim().length >= 3 && f.autoriza && curp.length === 18 && !nssSucio;
 
   const enviar = () => start(async () => {
     const r = (quiereInfonavit
@@ -51,7 +52,7 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold">Agregar cliente</h2>
-          <p className="text-xs text-muted">Nosotros lo contactamos. Con su CURP revisamos su pensión; con su NSS (o CURP) también su Infonavit.</p>
+          <p className="text-xs text-muted">Nosotros lo contactamos. Con su CURP revisamos su pensión; si marcas Infonavit, también lo precalificamos (su NSS lo hace inmediato).</p>
         </div>
         <button onClick={() => setAbierto(false)} className="text-xs text-muted underline">cancelar</button>
       </div>
@@ -59,15 +60,18 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <input className={inp} placeholder="Nombre completo" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
         <input className={inp} placeholder="Teléfono (10 dígitos)" inputMode="numeric" value={f.telefono} onChange={(e) => setF({ ...f, telefono: e.target.value })} />
-        <input className={`${inp} font-mono uppercase ${curpSucia ? 'border-red-400' : ''}`} maxLength={18} placeholder={quiereInfonavit ? 'CURP (si no tienes el NSS)' : 'CURP (opcional, pero con ella revisamos sus semanas)'} value={f.curp} onChange={(e) => setF({ ...f, curp: e.target.value.toUpperCase() })} />
-        {programaInfonavit ? (
-          <input className={`${inp} font-mono ${nssSucio ? 'border-red-400' : ''}`} inputMode="numeric" placeholder="NSS (11 dígitos) — lo más rápido para Infonavit" value={f.nss} onChange={(e) => setF({ ...f, nss: e.target.value })} />
+        <input className={`${inp} font-mono uppercase ${curpSucia ? 'border-red-400' : ''}`} maxLength={18} placeholder="CURP (18 caracteres)" value={f.curp} onChange={(e) => setF({ ...f, curp: e.target.value.toUpperCase() })} />
+        {quiereInfonavit ? (
+          <div>
+            <input className={`${inp} w-full font-mono ${nssSucio ? 'border-red-400' : ''}`} inputMode="numeric" placeholder="NSS (11 dígitos) — si lo tienes, ponlo" value={f.nss} onChange={(e) => setF({ ...f, nss: e.target.value })} />
+            <p className="mt-1 text-[11px] text-muted">Con el NSS, Infonavit sale al instante y no depende de la consulta del IMSS. Si no lo tienes, lo puedes agregar después desde su tarjeta.</p>
+          </div>
         ) : null}
 
         {programaInfonavit ? (
           <label className="flex items-start gap-2 text-xs sm:col-span-2">
-            <input type="checkbox" checked={f.infonavit} onChange={(e) => setF({ ...f, infonavit: e.target.checked })} className="mt-0.5" />
-            <span>También <b>precalificar su Infonavit</b> (cuánto tiene y qué inmueble le conviene). Necesita NSS o CURP.</span>
+            <input type="checkbox" checked={f.infonavit} onChange={(e) => setF({ ...f, infonavit: e.target.checked, nss: e.target.checked ? f.nss : '' })} className="mt-0.5" />
+            <span>También <b>precalificar su Infonavit</b> (cuánto tiene y qué inmueble le conviene).</span>
           </label>
         ) : null}
 
@@ -75,7 +79,7 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
           <input type="checkbox" checked={f.autoriza} onChange={(e) => setF({ ...f, autoriza: e.target.checked })} className="mt-0.5" />
           <span>
             Confirmo que <b>{f.nombre.trim() || 'esta persona'}</b> me autorizó a compartir sus datos con El Trol Financiero para que lo contacten y revisen su situación de pensión
-            {curp ? ', incluida la consulta de su historial ante el IMSS' : ''}{quiereInfonavit ? ', y su precalificación de crédito Infonavit' : ''}.
+            , incluida la consulta de su historial ante el IMSS{quiereInfonavit ? ', y su precalificación de crédito Infonavit' : ''}.
           </span>
         </label>
 

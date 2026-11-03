@@ -7,6 +7,7 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { subirDocumentoInfonavitPorAliado } from '@/app/aliado/actions';
+import { AgregarNss } from '@/components/trol3/AgregarNss';
 import { DOCS_INFONAVIT, ETAPAS_INFONAVIT } from '@/lib/aliado/infonavit';
 
 export interface FilaInfonavitAliado {
@@ -141,8 +142,8 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
         </>
       ) : r.resultado === 'saldo_bajo' ? (
         <p className="mt-1 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b>: todavía es bajo para esta opción. Vale la pena volver a revisarlo más adelante; mientras, su pensión sí la trabajamos.</p>
-      ) : r.resultado === 'falta_nss' ? (
-        <p className="mt-1 text-xs text-muted">Sin NSS ni CURP no podemos consultar. Mándanos su NSS.</p>
+      ) : r.resultado === 'falta_nss' || r.resultado === 'buscando_nss' ? (
+        <AgregarNss persona={r.persona_id} motivo={r.resultado} />
       ) : null}
     </div>
   );

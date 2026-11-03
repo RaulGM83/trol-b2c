@@ -4,6 +4,7 @@
 -- miembro y sus oportunidades abiertas pasan con él. Una persona que ya era de alguien no se mueve
 -- (esas llegan como `por_revisar`). La tarea de una compra con créditos (291) ya va al cabecera.
 -- Aplicada por MCP el 2-nov-2026. Probada con rollback: persona sin cabecera → Lorena + nota interna.
+-- 294b (3-nov): la nota interna se escribe con nota_interna_sistema (registrar_interaccion rechazaba al aliado); el trigger se redefine ahí.
 alter table trol3.aliados add column if not exists cabecera_id uuid references trol3.miembros(id);
 comment on column trol3.aliados.cabecera_id is 'Asesor al que se asignan los referidos de este aliado al llegar (292). Null = sin asignación automática.';
 

@@ -28,7 +28,7 @@ function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
     const faltan = docsFaltantes(i.docs, !!i.conyugal);
     if (idx <= 1 && faltan > 0) return { texto: `Subir documentos (faltan ${faltan})`, prioridad: 2 };
   }
-  if (i?.resultado === 'falta_nss') return { texto: 'Mandarnos su NSS', prioridad: 2 };
+  if (i?.resultado === 'falta_nss' || i?.resultado === 'buscando_nss') return { texto: 'Pon su NSS para acelerar Infonavit', prioridad: 2 };
   if (p && (p.estado === 'fallida' || p.estado === 'falta_curp')) return { texto: 'Revisar su CURP', prioridad: 2 };
   if (p?.diagnostico_estado === 'listo') return { texto: 'Diagnóstico listo: compártelo', prioridad: 1 };
   if (p && (p.compras ?? []).length) return { texto: 'Trol está haciendo los cálculos', prioridad: 1 };
@@ -155,7 +155,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
                     ) : null}
                     {t === 'pension' || !programaInfonavit ? (
                       c.pension
-                        ? <PensionDetalle r={c.pension} productos={productos} creditos={creditos} tieneWallet={tieneWallet} aliado={aliado} />
+                        ? <PensionDetalle r={c.pension} productos={productos} creditos={creditos} tieneWallet={tieneWallet} aliado={aliado} puedeNss={programaInfonavit} tieneInfonavit={!!c.infonavit && c.infonavit.resultado !== 'buscando_nss' && c.infonavit.resultado !== 'falta_nss'} />
                         : <p className="text-xs text-muted">Esta persona llegó por Infonavit; su pensión la revisa Trol por dentro.</p>
                     ) : (
                       <InfonavitDetalle r={c.infonavit} comision={comisionInfonavit} />
