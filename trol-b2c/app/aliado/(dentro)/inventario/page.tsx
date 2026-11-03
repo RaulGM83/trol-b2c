@@ -83,7 +83,7 @@ export default async function InventarioAliado() {
   const a = await requireAliado();
   const admin = t3admin();
   const [{ data: proys }, { data: sup }] = await Promise.all([
-    admin.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('avaluo'),
+    admin.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('escrituracion'),
     admin.from('infonavit_supuestos').select('*').eq('id', 'default').maybeSingle(),
   ]);
   const proyectos = ((proys ?? []) as Proyecto[]).filter((p) => p.ficha_url);
@@ -155,7 +155,7 @@ function Tarjeta({ p, r }: { p: Proyecto; r: Rango | null }) {
         )}
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-        <div><div className="text-[10px] uppercase tracking-wide text-muted">Precio</div><div className="font-semibold">{money(Number(p.avaluo))}</div></div>
+        <div><div className="text-[10px] uppercase tracking-wide text-muted">Precio (escrituración)</div><div className="font-semibold">{money(Number(p.escrituracion))}</div></div>
         <div><div className="text-[10px] uppercase tracking-wide text-muted">Tamaño</div><div className="font-semibold">{p.m2 ? `${Number(p.m2).toLocaleString('es-MX')} m²` : '—'}</div></div>
         <div><div className="text-[10px] uppercase tracking-wide text-muted">Renta{p.renta_estimada ? ' est.' : ''}</div><div className="font-semibold">{money(Number(p.renta))}/mes</div></div>
       </div>
