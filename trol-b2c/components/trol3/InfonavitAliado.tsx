@@ -33,6 +33,7 @@ export const RES_INFONAVIT: Record<string, [string, string]> = {
   sin_relacion: ['Sin relación laboral vigente', 'bg-red-100 text-red-900'],
   no_califica: ['No precalifica por ahora', 'bg-red-100 text-red-900'],
   saldo_bajo: ['No precalifica: saldo bajo', 'bg-red-100 text-red-900'],
+  en_tramite: ['En trámite', 'bg-ink text-white'],
   ya_cliente: ['Ya era cliente de Trol: lo revisamos', 'bg-amber-100 text-amber-900'],
 };
 
@@ -102,21 +103,22 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
   if (!r) {
     return <p className="text-xs text-muted">Todavía no has pedido su precalificación Infonavit. Agrégalo otra vez con la opción Infonavit marcada (con su NSS es inmediato) y te decimos cuánto tiene y qué inmueble le conviene. Ganas <b>{money(comision)}</b> por inmueble (IVA incluido) cuando firma escrituras.</p>;
   }
-  const [label, cls] = RES_INFONAVIT[r.resultado] ?? [r.resultado, 'bg-cream text-ink'];
+  const enTramite = r.resultado === 'en_tramite';
+  const [label, cls] = enTramite && r.etapa === 'entregado' ? ['Entregado', 'bg-emerald-100 text-emerald-900'] : (RES_INFONAVIT[r.resultado] ?? [r.resultado, 'bg-cream text-ink']);
   return (
     <div>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
-      {r.resultado === 'con_monto' ? (
+      {r.resultado === 'con_monto' || enTramite ? (
         <>
           <Etapas etapa={r.etapa} fechas={r.fechas} />
-          <div className="mt-2 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · crédito hasta <b className="text-ink">{money(r.monto_credito)}</b> · {r.comision_estado === 'pagada' ? <b className="text-emerald-800">comisión {money(comision)} pagada</b> : r.comision_estado === 'devengada' ? <b className="text-emerald-800">comisión {money(comision)} por pagarte</b> : <>ganas <b className="text-ink">{money(comision)}</b> al escriturar</>}</div>
+          <div className="mt-2 text-xs text-muted">{r.saldo != null ? <>Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · </> : null}{r.monto_credito != null ? <>crédito hasta <b className="text-ink">{money(r.monto_credito)}</b> · </> : null}{r.comision_estado === 'pagada' ? <b className="text-emerald-800">comisión {money(comision)} pagada</b> : r.comision_estado === 'devengada' ? <b className="text-emerald-800">comisión {money(comision)} por pagarte</b> : <>ganas <b className="text-ink">{money(comision)}</b> al escriturar</>}</div>
           {r.inmueble || r.conyugal ? (
             <div className="mt-1 text-xs">
               {r.inmueble ? <span><b>Inmueble:</b> {r.inmueble}{r.casa ? ` · ${r.casa}` : ''}{r.inmueble_ubicacion ? <span className="text-muted"> · {r.inmueble_ubicacion}</span> : null}</span> : null}
               {r.conyugal ? <span className="ml-2 rounded-full bg-cream px-2 py-0.5 text-[11px] font-semibold">Crédito conyugal{r.co_titular ? ` con ${r.co_titular}` : ''}</span> : null}
             </div>
           ) : null}
-          {r.cotizacion ? (
+          {!enTramite && r.cotizacion ? (
             <>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {r.cotizacion.opciones.map((o) => (
@@ -133,7 +135,7 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
                 <a className={btn} href={`/aliado/infonavit/${r.persona_id}`} target="_blank" rel="noreferrer">Imagen para WhatsApp</a>
               </div>
             </>
-          ) : <div className="mt-1 text-xs text-muted">{r.sin_cotizacion ?? 'Armando la propuesta…'}</div>}
+          ) : !enTramite ? <div className="mt-1 text-xs text-muted">{r.sin_cotizacion ?? 'Armando la propuesta…'}</div> : null}
           {etapaIndice(r.etapa) <= 1 ? <Documentos personaId={r.persona_id} docs={r.docs ?? []} conyugal={!!r.conyugal} /> : null}
           <div className="mt-2"><a href="/aliado/inventario" className="text-xs underline text-muted">Ver todo el inventario y para qué saldo aplica cada inmueble</a></div>
         </>

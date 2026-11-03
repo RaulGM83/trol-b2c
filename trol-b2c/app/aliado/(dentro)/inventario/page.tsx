@@ -4,9 +4,11 @@
 // recibe) salen de la precalificación de cada persona, no de esta página.
 //
 // Cómo se calcula el rango: se corre `rankearInmuebles` (el motor de la cotización inicial) para un
-// titular tipo —salario $30,000 al mes, 42 años, Ley 97, sigue cotizando 5 años, vende a 60 meses—
-// con una malla de saldos; el inmueble queda "sugerido" en los saldos donde sale viable y con
-// ventaja positiva. Lo que no se enseña a propósito: costo del aliado, comisiones, notas internas.
+// titular tipo —42 años, Ley 97, sigue cotizando 5 años, vende a 60 meses— con tres salarios y una
+// malla de saldos; el inmueble queda "sugerido" desde el saldo donde sale viable y con ventaja
+// positiva. Sólo el mínimo: nada de crédito / pago / lo que recibe de ejemplo (Raúl, 3-nov: varían
+// mucho con el plazo y el objetivo; eso lo da la cotización de cada cliente). Tampoco costo del
+// aliado, comisiones ni notas internas.
 import { requireAliado, t3admin } from '@/lib/trol3/server';
 import { rankearInmuebles, FACTORES_DEFAULT } from '@/lib/infonavit/sugerencia';
 import { supuestosMotor } from '@/lib/infonavit/cotizacion-inicial';
@@ -34,8 +36,6 @@ const miles = (n: number) => '$' + (Math.round(n / 1000) * 1000).toLocaleString(
 interface Rango {
   /** Saldo mínimo con el que sale viable, por salario de referencia (null = no sale ni con $2.5M). */
   minimo: Record<number, number | null>;
-  /** Lo que verían con el saldo mínimo al salario de referencia. */
-  muestra: { saldo: number; credito: number; pone: number; recibe: number } | null;
 }
 
 function rangosPorInmueble(proyectos: Proyecto[], sup: SupuestosGlobales): Map<string, Rango> {
@@ -47,7 +47,7 @@ function rangosPorInmueble(proyectos: Proyecto[], sup: SupuestosGlobales): Map<s
     ...(sup.empate_pct != null ? { empate_pct: Number(sup.empate_pct) } : {}),
   };
   const out = new Map<string, Rango>();
-  for (const p of proyectos) out.set(p.id, { minimo: Object.fromEntries(SALARIOS.map((x) => [x, null])), muestra: null });
+  for (const p of proyectos) out.set(p.id, { minimo: Object.fromEntries(SALARIOS.map((x) => [x, null])) });
 
   for (const salario of SALARIOS) {
     for (const s of SALDOS) {
@@ -70,7 +70,6 @@ function rangosPorInmueble(proyectos: Proyecto[], sup: SupuestosGlobales): Map<s
         const r = out.get(f.id);
         if (!r) continue;
         if (r.minimo[salario] == null) r.minimo[salario] = s;
-        if (salario === SALARIO_REF && !r.muestra) r.muestra = { saldo: s, credito: f.credito, pone: Math.max(0, f.pmt - f.renta_neta), recibe: f.recibe_dia };
       }
     }
   }
@@ -165,11 +164,6 @@ function Tarjeta({ p, r }: { p: Proyecto; r: Rango | null }) {
           <span className="font-semibold text-ink">Saldo mínimo según salario: </span>
           {SALARIOS.map((x, i) => <span key={x}>{i ? ' · ' : ''}{money(x)} → {r.minimo[x] != null ? miles(r.minimo[x]!) : 'no alcanza'}</span>)}
         </div>
-      ) : null}
-      {r?.muestra ? (
-        <p className="mt-1 text-[11px] text-muted">
-          Con saldo de {miles(r.muestra.saldo)} y salario de {money(SALARIO_REF)}: crédito ≈ {miles(r.muestra.credito)}, pone {r.muestra.pone > 0 ? `≈ ${money(r.muestra.pone)} al mes` : '$0 al mes'} y recibiría ≈ <b className="text-ink">{miles(r.muestra.recibe)}</b> si vende a 60 meses.
-        </p>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
         {p.ficha_url ? <a href={p.ficha_url} target="_blank" rel="noreferrer" className="rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream">Ficha técnica (PDF)</a> : null}

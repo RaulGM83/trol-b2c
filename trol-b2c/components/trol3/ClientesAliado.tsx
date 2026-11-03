@@ -22,7 +22,8 @@ const fecha = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateStr
 /** Qué le toca al aliado (prioridad 2), qué está en curso (1) o nada (0). */
 function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
   const p = c.pension, i = c.infonavit;
-  if (i?.resultado === 'con_monto') {
+  const tramite = i?.resultado === 'con_monto' || i?.resultado === 'en_tramite';
+  if (i && tramite) {
     const idx = etapaIndice(i.etapa);
     const faltan = docsFaltantes(i.docs, !!i.conyugal);
     if (idx <= 1 && faltan > 0) return { texto: `Subir documentos (faltan ${faltan})`, prioridad: 2 };
@@ -32,17 +33,20 @@ function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
   if (p?.diagnostico_estado === 'listo') return { texto: 'Diagnóstico listo: compártelo', prioridad: 1 };
   if (p && (p.compras ?? []).length) return { texto: 'Trol está haciendo los cálculos', prioridad: 1 };
   if (p?.estado === 'listo') return { texto: 'Puedes pedir cálculos o asesoría', prioridad: 1 };
-  if (i?.resultado === 'con_monto' && etapaIndice(i.etapa) >= 2) return { texto: 'Trol lleva el trámite', prioridad: 1 };
+  if (i && tramite && i.etapa === 'entregado') return { texto: 'Inmueble entregado', prioridad: 0 };
+  if (i && tramite && etapaIndice(i.etapa) >= 2) return { texto: 'Trol lleva el trámite', prioridad: 1 };
   if (p?.estado === 'consultando' || i?.resultado === 'procesando' || i?.resultado === 'buscando_nss') return { texto: 'Esperando al IMSS', prioridad: 0 };
   return { texto: '', prioridad: 0 };
 }
 
 function chipInfonavit(i: FilaInfonavitAliado | null): [string, string] | null {
   if (!i) return null;
-  if (i.resultado === 'con_monto') {
+  if (i.resultado === 'con_monto' || i.resultado === 'en_tramite') {
     const idx = etapaIndice(i.etapa);
-    const etapa = idx >= 1 ? ` · ${idx + 1}/7 ${etapaNombre(i.etapa)}` : '';
-    return [`Infonavit: hasta ${money(i.monto_credito)}${etapa}`, idx >= 1 ? 'bg-ink text-white' : 'bg-emerald-100 text-emerald-900'];
+    const etapa = idx >= 1 ? `${idx + 1}/7 ${etapaNombre(i.etapa)}` : '';
+    const monto = i.monto_credito != null ? `hasta ${money(i.monto_credito)}` : '';
+    const texto = [monto, etapa].filter(Boolean).join(' · ') || 'En trámite';
+    return [`Infonavit: ${texto}`, i.etapa === 'entregado' ? 'bg-emerald-100 text-emerald-900' : idx >= 1 ? 'bg-ink text-white' : 'bg-emerald-100 text-emerald-900'];
   }
   const [label, cls] = RES_INFONAVIT[i.resultado] ?? [i.resultado, 'bg-cream text-ink'];
   return [`Infonavit: ${label}`, cls];
@@ -66,14 +70,14 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
       if (filtro === 'accion') return sigue.prioridad === 2;
       if (filtro === 'pension') return !!c.pension && (c.pension.estado === 'listo' || (c.pension.compras ?? []).length > 0);
       if (filtro === 'infonavit') return !!c.infonavit;
-      if (filtro === 'tramite') return c.infonavit?.resultado === 'con_monto' && etapaIndice(c.infonavit.etapa) >= 1 && etapaIndice(c.infonavit.etapa) < 6;
+      if (filtro === 'tramite') return !!c.infonavit && (c.infonavit.resultado === 'con_monto' || c.infonavit.resultado === 'en_tramite') && etapaIndice(c.infonavit.etapa) >= 1 && etapaIndice(c.infonavit.etapa) < 6;
       return true;
     });
   }, [clientes, q, filtro]);
 
   const n = clientes.length;
   const precalificados = clientes.filter((c) => c.infonavit?.resultado === 'con_monto').length;
-  const enTramite = clientes.filter((c) => c.infonavit?.resultado === 'con_monto' && etapaIndice(c.infonavit.etapa) >= 1 && etapaIndice(c.infonavit.etapa) < 6).length;
+  const enTramite = clientes.filter((c) => !!c.infonavit && (c.infonavit.resultado === 'con_monto' || c.infonavit.resultado === 'en_tramite') && etapaIndice(c.infonavit.etapa) >= 1 && etapaIndice(c.infonavit.etapa) < 6).length;
   const asesorias = clientes.filter((c) => (c.pension?.compras ?? []).length > 0).length;
   const accion = clientes.filter((c) => queSigue(c).prioridad === 2).length;
 
