@@ -48,9 +48,13 @@ with base as (
 )
 select referido_id, persona_id, estado_ref, pide_infonavit_en, nombre, apellidos,
        case when estado_ref = 'por_revisar' then 'ya_cliente'
+            -- 293c · con trámite abierto (etapa capturada por el equipo) manda el trámite, haya o no Precalix
+            when tramite ->> 'etapa' is not null then 'en_tramite'
             when consulta_estado in ('solicitada','en_proceso') then 'procesando'
             when cred_vig then 'credito_vigente'
             when relacion is false then 'sin_relacion'
+            -- 293b · saldo validado menor al mínimo de cotización ($100,000 = SALDO_MIN_COTIZACION): no precalifica aunque Precalix dé monto
+            when saldo is not null and saldo < 100000 then 'saldo_bajo'
             when monto_credito is not null and saldo is not null then 'con_monto'
             when consulta_estado = 'sin_resultado' then 'no_califica'
             when not tiene_nss and tiene_curp then 'buscando_nss'
@@ -60,7 +64,7 @@ select referido_id, persona_id, estado_ref, pide_infonavit_en, nombre, apellidos
        case when estado_ref = 'por_revisar' then null else monto_credito end as monto_credito,
        precalificado_en,
        case when estado_ref = 'por_revisar' then null
-            else coalesce(tramite ->> 'etapa', case when monto_credito is not null then 'precalificado' end) end as etapa,
+            else coalesce(tramite ->> 'etapa', case when monto_credito is not null and saldo >= 100000 then 'precalificado' end) end as etapa,
        case when estado_ref = 'por_revisar' then null else (tramite ->> 'en')::timestamptz end as etapa_en,
        case when estado_ref = 'por_revisar' then '[]'::jsonb else docs end as docs,
        case when estado_ref = 'por_revisar' then '{}'::jsonb else coalesce(tramite -> 'fechas', '{}'::jsonb) end as fechas,

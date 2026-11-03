@@ -32,6 +32,7 @@ export const RES_INFONAVIT: Record<string, [string, string]> = {
   credito_vigente: ['Ya tiene un crédito Infonavit vigente', 'bg-red-100 text-red-900'],
   sin_relacion: ['Sin relación laboral vigente', 'bg-red-100 text-red-900'],
   no_califica: ['No precalifica por ahora', 'bg-red-100 text-red-900'],
+  saldo_bajo: ['No precalifica: saldo bajo', 'bg-red-100 text-red-900'],
   ya_cliente: ['Ya era cliente de Trol: lo revisamos', 'bg-amber-100 text-amber-900'],
 };
 
@@ -41,8 +42,6 @@ export const etapaNombre = (etapa: string | null | undefined) => ETAPAS_INFONAVI
 export const docsFaltantes = (docs: string[] | null | undefined, conyugal = false) =>
   DOCS_INFONAVIT.filter((d) => !(docs ?? []).includes(d.tipo) && (conyugal || d.tipo !== 'acta_matrimonio')).length;
 const fechaCorta = (d: string | null | undefined) => (d ? new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null);
-/** Tiempos típicos (mediana de los 6 trámites cerrados en Laureles, ago–nov 2026): documentos → escrituras 35 días (18–54); escrituras → entrega ~3 semanas. */
-const TIEMPO_TIPICO = 'Lo normal: de documentos a escrituras unas 5 semanas (hemos visto de 3 a 8) y la entrega unas 3 semanas después.';
 
 const btn = 'rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-semibold hover:bg-cream';
 
@@ -61,7 +60,6 @@ function Etapas({ etapa, fechas }: { etapa: string | null | undefined; fechas?: 
           );
         })}
       </ol>
-      {i >= 0 && i < ETAPAS_INFONAVIT.length - 1 ? <p className="mt-1 text-[11px] text-muted">{TIEMPO_TIPICO}</p> : null}
     </>
   );
 }
@@ -139,6 +137,8 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
           {etapaIndice(r.etapa) <= 1 ? <Documentos personaId={r.persona_id} docs={r.docs ?? []} conyugal={!!r.conyugal} /> : null}
           <div className="mt-2"><a href="/aliado/inventario" className="text-xs underline text-muted">Ver todo el inventario y para qué saldo aplica cada inmueble</a></div>
         </>
+      ) : r.resultado === 'saldo_bajo' ? (
+        <p className="mt-1 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b>: todavía es bajo para esta opción. Vale la pena volver a revisarlo más adelante; mientras, su pensión sí la trabajamos.</p>
       ) : r.resultado === 'falta_nss' ? (
         <p className="mt-1 text-xs text-muted">Sin NSS ni CURP no podemos consultar. Mándanos su NSS.</p>
       ) : null}
