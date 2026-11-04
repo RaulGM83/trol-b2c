@@ -43,6 +43,9 @@ export interface CotizacionInicial {
   credito_max: number | null;
   fecha_saldo: string | null;
   opciones: OpcionCotizacion[];
+  /** 297 · Armada sin historial del IMSS (Jordan caído o aún sin consultar): salario y monto salen de la
+   *  precalificación de Infonavit, la edad de la CURP y se asume Ley 97. Se afina sola cuando llega el historial. */
+  preliminar?: boolean;
 }
 
 export function supuestosMotor(s: SupuestosGlobales): Partial<SupuestosInfonavit> {
@@ -74,6 +77,8 @@ export function armarCotizacionInicial(a: {
   supuestos: SupuestosGlobales;
   creditoMax?: number | null;
   fechaSaldo?: string | null;
+  /** 297 · true cuando el titular se armó sin historial del IMSS. */
+  preliminar?: boolean;
 }): CotizacionInicial | null {
   const sup = supuestosMotor(a.supuestos);
   const creditoMin = Number(a.supuestos.credito_minimo ?? 100000);
@@ -114,7 +119,7 @@ export function armarCotizacionInicial(a: {
     if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial', nombres));
   }
   if (!opciones.length) return null;
-  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones };
+  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones, ...(a.preliminar ? { preliminar: true } : {}) };
 }
 
 const miles = (n: number) => '$' + (Math.round(Math.abs(n) / 1000) * 1000).toLocaleString('es-MX');
@@ -137,6 +142,8 @@ export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null,
   lineas.push('');
   lineas.push((voz === 'aliado' ? 'En Trol no cobran' : 'Nosotros no cobramos') + ' ningún porcentaje de tu saldo (' + (voz === 'aliado' ? 'les paga la constructora), pagan los gastos notariales y, si quieres, administran la renta y lo venden' : 'nos paga la constructora), pagamos los gastos notariales y, si quieres, administramos la renta y lo vendemos') + ' cuando tú decidas.');
   lineas.push('');
-  lineas.push('Son cifras iniciales: asumen que sigues cotizando con tu salario actual y usan renta y plusvalía estimadas. Pueden mejorar si sumas a otra persona al crédito. ¿Te la explico en una llamada de 20 min? Dime qué día y hora te acomodan.');
+  lineas.push((c.preliminar
+    ? 'Son cifras preliminares (todavía sin tu historial del IMSS; las afinamos en cuanto lo tengamos): asumen'
+    : 'Son cifras iniciales: asumen') + ' que sigues cotizando con tu salario actual y usan renta y plusvalía estimadas. Pueden mejorar si sumas a otra persona al crédito. ¿Te la explico en una llamada de 20 min? Dime qué día y hora te acomodan.');
   return lineas.join('\n');
 }

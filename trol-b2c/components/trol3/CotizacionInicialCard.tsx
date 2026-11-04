@@ -44,6 +44,11 @@ export function CotizacionInicialCard({ personaId, cot, texto, motivo }: {
             Saldo validado {money(cot.saldo)}{cot.credito_max ? ` · crédito Infonavit hasta ${money(cot.credito_max)}` : ''}
             {cot.fecha_saldo ? ` · ${new Date(cot.fecha_saldo).toLocaleDateString('es-MX')}` : ''}. Un titular, supuestos globales.
           </p>
+          {cot.preliminar ? (
+            <p className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+              Preliminar: sin historial IMSS (salario y monto de la precalificación, edad de la CURP, Ley 97 asumida). Se recalcula sola cuando llegue.
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <button type="button" className={btn} disabled={pend} onClick={copiar}>Copiar mensaje</button>

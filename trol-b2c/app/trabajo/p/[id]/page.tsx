@@ -731,6 +731,8 @@ export default async function Expediente({ params, searchParams }: { params: { i
                 <div><dt className="text-[11px] text-muted">Nombre</dt><dd className="font-medium">{[e.nombre, e.apellidos].filter(Boolean).join(' ') || '—'}</dd></div>
                 <div><dt className="text-[11px] text-muted">CURP</dt><dd className="font-medium">{e.curp ?? <span className="text-amber-700">falta</span>}</dd></div>
                 <div><dt className="text-[11px] text-muted">NSS</dt><dd className="font-medium">{(datosMap.get('nss')?.valor as string | null) ?? <span className="text-amber-700">falta</span>}</dd></div>
+                {/* 295 · RFC registrado en Infonavit: lo trae Precalix (datos.rfc, capa validada). Sirve para la constancia fiscal del trámite. */}
+                <div><dt className="text-[11px] text-muted">RFC{datosMap.get('rfc')?.proveedor === 'precalix' ? ' (Infonavit)' : ''}</dt><dd className="font-medium">{(datosMap.get('rfc')?.valor as string | null) ?? <span className="text-muted">— sale con la precalificación Infonavit</span>}</dd></div>
                 <div><dt className="text-[11px] text-muted">Nacimiento</dt><dd className="font-medium">{e.fecha_nacimiento ? `${fmtFecha(e.fecha_nacimiento)} · ${edadDecimal} años` : <span className="text-amber-700">falta</span>}</dd></div>
                 <div><dt className="text-[11px] text-muted">Teléfono</dt><dd className="font-medium">{tel?.valor ?? <span className="text-amber-700">falta</span>}{tel?.no_contactar ? <span className="ml-1 text-red-600">NO CONTACTAR</span> : null}</dd></div>
                 <div><dt className="text-[11px] text-muted">Correo</dt><dd className="font-medium"><ContactoEditable personaId={e.persona_id} tipo="email" valor={email?.valor ?? null} /></dd></div>

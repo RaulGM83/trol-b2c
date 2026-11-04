@@ -19,6 +19,8 @@ export interface FilaInfonavitAliado {
   conyugal?: boolean | null; co_titular?: string | null; comision_estado?: 'devengada' | 'pagada' | string | null;
   cotizacion?: {
     texto: string;
+    /** 297 · Sin historial del IMSS: salario y monto de Infonavit, edad de la CURP, Ley 97 asumida. */
+    preliminar?: boolean;
     /** 296 · Mensaje de un solo inmueble, por plazo. */
     textos_por_plazo?: Record<number, string>;
     opciones: {
@@ -130,6 +132,11 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
           ) : null}
           {!enTramite && r.cotizacion ? (
             <>
+              {r.cotizacion.preliminar ? (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+                  <b>Propuesta preliminar.</b> Todavía no tenemos su historial del IMSS; usa su saldo y el monto que Infonavit le autoriza. Si le interesa, Trol la afina con el historial.
+                </div>
+              ) : null}
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {r.cotizacion.opciones.map((o) => (
                   <div key={o.plazo} className="rounded-lg bg-cream p-2 text-xs">

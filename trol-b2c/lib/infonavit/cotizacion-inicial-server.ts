@@ -9,6 +9,17 @@ export type CargaCotizacion =
   | { ok: true; cot: CotizacionInicial; nombre: string; primerNombre: string | null; texto: string }
   | { ok: false; motivo: string };
 
+/** 297 · Fecha de nacimiento codificada en la CURP (YYMMDD en 5-10; siglo por la posición 17). Null si no es válida. */
+export function fechaNacimientoDeCurp(curp: string | null | undefined): string | null {
+  const c = (curp ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{4}\d{6}[HM][A-Z]{5}[0-9A-Z]\d$/.test(c)) return null;
+  const siglo = /\d/.test(c.charAt(16)) ? 1900 : 2000;
+  const y = siglo + Number(c.slice(4, 6)), m = Number(c.slice(6, 8)), d = Number(c.slice(8, 10));
+  const f = new Date(Date.UTC(y, m - 1, d));
+  if (f.getUTCMonth() !== m - 1 || f.getUTCDate() !== d || f.getTime() > Date.now()) return null;
+  return f.toISOString().slice(0, 10);
+}
+
 export async function cargarCotizacionInicial(personaId: string, opts: { db?: Any; voz?: 'trol' | 'aliado' } = {}): Promise<CargaCotizacion> {
   // 281 · Los brokers la piden con la llave de servicio, sólo después de verificar que la persona es suya.
   const db = opts.db ?? t3();
@@ -30,10 +41,17 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
 
   const map = new Map(((datos ?? []) as Any[]).map((d) => [d.campo, d]));
   const num = (c: string) => (map.get(c)?.valor == null ? null : Number(map.get(c)?.valor));
+  // 297 · Preliminar sin historial del IMSS (Raúl, 4-nov): el salario ya sale del pago de la precalificación
+  // (pago ÷ 30%; contra el SBC del IMSS da mediana 1.01 y 3 de 4 dentro de ±15%), el monto es el de Infonavit
+  // y la edad sale de la CURP. Lo único que no sabemos es la ley: se asume 97 (sólo cambia qué pasa con el
+  // saldo que no se use, y en la cotización inicial conserva_valor ya es 1). Al llegar Jordan se recalcula sola.
+  const semilla = parseSemillaV2(map.get('semilla')?.valor);
+  const fnac = e.fecha_nacimiento ?? fechaNacimientoDeCurp(e.curp);
+  const sinHistorial = !semilla && !e.ley;
   const base = titularDesdeExpediente({
-    semilla: parseSemillaV2(map.get('semilla')?.valor),
-    ley: e.ley ?? null,
-    fechaNacimiento: e.fecha_nacimiento ?? null,
+    semilla,
+    ley: e.ley ?? (sinHistorial ? 'Ley97' : null),
+    fechaNacimiento: fnac,
     statusEmpleo: 'empleado',
     salarioDiario: num('salario_diario'),
     saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
@@ -54,6 +72,7 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     supuestos: sup as SupuestosGlobales,
     creditoMax: num('infonavit_monto_credito'),
     fechaSaldo: (map.get('saldo_infonavit')?.obtenido_en as string | undefined) ?? null,
+    preliminar: sinHistorial,
   });
   if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
   if (!cot) {
