@@ -46,7 +46,7 @@ export function CotizacionInicialCard({ personaId, cot, texto, motivo }: {
           </p>
           {cot.preliminar ? (
             <p className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-              Preliminar: sin historial IMSS (salario y monto de la precalificación, edad de la CURP, Ley 97 asumida). Se recalcula sola cuando llegue.
+              Preliminar: sin historial IMSS (salario y monto de la precalificación, {cot.edad_por_nss ? 'edad estimada por el NSS (falta CURP válida)' : 'edad de la CURP'}, Ley 97 asumida). Se recalcula sola cuando llegue.
             </p>
           ) : null}
         </div>

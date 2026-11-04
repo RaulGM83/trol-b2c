@@ -75,6 +75,7 @@ export default async function EspacioAliado() {
       if (c.ok) fila.cotizacion = {
         texto: c.texto,
         preliminar: !!c.cot.preliminar,
+        edad_por_nss: !!c.cot.edad_por_nss,
         // 296 · mensaje de un solo inmueble por plazo
         textos_por_plazo: Object.fromEntries(c.cot.opciones.map((o) => [o.plazo, textoWhatsApp(c.cot, c.primerNombre, 'aliado', o.plazo)])),
         opciones: c.cot.opciones.map((o) => ({

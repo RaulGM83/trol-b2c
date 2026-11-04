@@ -46,6 +46,8 @@ export interface CotizacionInicial {
   /** 297 · Armada sin historial del IMSS (Jordan caído o aún sin consultar): salario y monto salen de la
    *  precalificación de Infonavit, la edad de la CURP y se asume Ley 97. Se afina sola cuando llega el historial. */
   preliminar?: boolean;
+  /** 297b · La edad salió del año del NSS (sin CURP válida): ±6 meses, sexo desconocido (límite 70). */
+  edad_por_nss?: boolean;
 }
 
 export function supuestosMotor(s: SupuestosGlobales): Partial<SupuestosInfonavit> {
@@ -79,6 +81,8 @@ export function armarCotizacionInicial(a: {
   fechaSaldo?: string | null;
   /** 297 · true cuando el titular se armó sin historial del IMSS. */
   preliminar?: boolean;
+  /** 297b · edad estimada por el NSS. */
+  edadPorNss?: boolean;
 }): CotizacionInicial | null {
   const sup = supuestosMotor(a.supuestos);
   const creditoMin = Number(a.supuestos.credito_minimo ?? 100000);
@@ -119,7 +123,7 @@ export function armarCotizacionInicial(a: {
     if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial', nombres));
   }
   if (!opciones.length) return null;
-  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones, ...(a.preliminar ? { preliminar: true } : {}) };
+  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones, ...(a.preliminar ? { preliminar: true } : {}), ...(a.edadPorNss ? { edad_por_nss: true } : {}) };
 }
 
 const miles = (n: number) => '$' + (Math.round(Math.abs(n) / 1000) * 1000).toLocaleString('es-MX');

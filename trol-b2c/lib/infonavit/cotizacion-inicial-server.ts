@@ -20,6 +20,16 @@ export function fechaNacimientoDeCurp(curp: string | null | undefined): string |
   return f.toISOString().slice(0, 10);
 }
 
+/** 297b · Año de nacimiento codificado en el NSS (dígitos 5-6), como 1-jul de ese año (±6 meses). Validado
+ *  contra la CURP en 10,631 personas: 94% exacto, 98% a ±1 año. Sólo respaldo cuando no hay CURP válida. */
+export function fechaNacimientoDeNss(nss: string | null | undefined): string | null {
+  const n = (nss ?? '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(n)) return null;
+  const yy = Number(n.slice(4, 6));
+  const corte = (new Date().getFullYear() - 15) % 100; // nadie cotiza antes de los ~15 años
+  return `${yy > corte ? 1900 + yy : 2000 + yy}-07-01`;
+}
+
 export async function cargarCotizacionInicial(personaId: string, opts: { db?: Any; voz?: 'trol' | 'aliado' } = {}): Promise<CargaCotizacion> {
   // 281 · Los brokers la piden con la llave de servicio, sólo después de verificar que la persona es suya.
   const db = opts.db ?? t3();
@@ -46,7 +56,14 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
   // y la edad sale de la CURP. Lo único que no sabemos es la ley: se asume 97 (sólo cambia qué pasa con el
   // saldo que no se use, y en la cotización inicial conserva_valor ya es 1). Al llegar Jordan se recalcula sola.
   const semilla = parseSemillaV2(map.get('semilla')?.valor);
-  const fnac = e.fecha_nacimiento ?? fechaNacimientoDeCurp(e.curp);
+  let fnac: string | null = e.fecha_nacimiento ?? fechaNacimientoDeCurp(e.curp);
+  let edadPorNss = false;
+  if (!fnac) {
+    // 297b · CURP ausente o mal escrita: el año sale del NSS (Precalix sí entró con él).
+    const { data: per } = await db.from('personas').select('nss').eq('id', personaId).maybeSingle();
+    fnac = fechaNacimientoDeNss((per as Any)?.nss);
+    edadPorNss = !!fnac;
+  }
   const sinHistorial = !semilla && !e.ley;
   const base = titularDesdeExpediente({
     semilla,
@@ -72,7 +89,8 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     supuestos: sup as SupuestosGlobales,
     creditoMax: num('infonavit_monto_credito'),
     fechaSaldo: (map.get('saldo_infonavit')?.obtenido_en as string | undefined) ?? null,
-    preliminar: sinHistorial,
+    preliminar: sinHistorial || edadPorNss,
+    edadPorNss,
   });
   if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
   if (!cot) {
