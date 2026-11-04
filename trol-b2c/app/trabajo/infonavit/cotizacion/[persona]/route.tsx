@@ -8,9 +8,12 @@ import { imagenCotizacion } from '@/lib/infonavit/cotizacion-png';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { persona: string } }) {
+/** 296 · ?plazo=18|60 → formato de un solo inmueble. */
+const plazoDe = (req: Request) => { const v = Number(new URL(req.url).searchParams.get('plazo')); return v === 18 || v === 60 ? v : null; };
+
+export async function GET(req: Request, { params }: { params: { persona: string } }) {
   await requireMiembro();
   const c = await cargarCotizacionInicial(params.persona);
   if (!c.ok) return new Response(c.motivo, { status: 422 });
-  return imagenCotizacion(c);
+  return imagenCotizacion(c, { plazo: plazoDe(req) });
 }

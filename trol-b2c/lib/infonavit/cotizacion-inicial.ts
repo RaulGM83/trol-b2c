@@ -13,7 +13,7 @@
 //    variante del mismo (misma ficha), para que se vean alternativas distintas (ej. Zumpango corto, Playa del
 //    Carmen largo). Si no hay otro con ventaja positiva, el mismo inmueble a 60 meses.
 //  · Se calcula al pintar (sigue al inventario y a los supuestos); al compartir se guarda la foto.
-import { rankearInmuebles, FACTORES_DEFAULT, type FilaSugerencia } from './sugerencia';
+import { rankearInmuebles, FACTORES_DEFAULT, type FilaSugerencia, type DesgloseRecibe } from './sugerencia';
 import type { SupuestosInfonavit, TitularInfonavit } from '@trol/pension-core';
 import type { Proyecto, SupuestosGlobales } from '@/components/trol3/AsesoriaInfonavit';
 
@@ -34,6 +34,8 @@ export interface OpcionCotizacion {
   recibe_al_vender: number;
   ventaja: number;
   criterio: 'menor_pago' | 'mayor_potencial' | 'mismo_inmueble';
+  /** 296 · De dónde sale `recibe_al_vender` (se enseña en la web, no en el PNG). */
+  desglose?: DesgloseRecibe;
 }
 
 export interface CotizacionInicial {
@@ -62,6 +64,7 @@ function opcion(f: FilaSugerencia, plazo: number, criterio: OpcionCotizacion['cr
     credito: f.credito, pago: f.pmt, renta_neta: f.renta_neta,
     pone_al_mes: Math.max(0, f.pmt - f.renta_neta),
     recibe_al_vender: f.recibe_dia, ventaja: f.ventaja, criterio,
+    desglose: f.desglose,
   };
 }
 
@@ -117,13 +120,15 @@ export function armarCotizacionInicial(a: {
 const miles = (n: number) => '$' + (Math.round(Math.abs(n) / 1000) * 1000).toLocaleString('es-MX');
 const cientos = (n: number) => '$' + (Math.round(Math.abs(n) / 100) * 100).toLocaleString('es-MX');
 
-/** El mensaje para copiar (texto aprobado por Raúl, 29-oct). Montos redondeados. */
-export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null, voz: 'trol' | 'aliado' = 'trol'): string {
+/** El mensaje para copiar (texto aprobado por Raúl, 29-oct). Montos redondeados.
+ *  296 · `soloPlazo`: versión de UN solo inmueble (la opción de ese plazo); sin él, la completa con las dos. */
+export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null, voz: 'trol' | 'aliado' = 'trol', soloPlazo?: number | null): string {
   const lineas: string[] = [];
+  const opciones = soloPlazo ? c.opciones.filter((o) => o.plazo === soloPlazo) : c.opciones;
   lineas.push(`Hola${primerNombre ? ' ' + primerNombre : ''}, te comparto tu cotización personalizada con tus datos de Infonavit: tu saldo de vivienda es de ${miles(c.saldo)}.`);
   lineas.push('');
-  lineas.push('Aprovéchalo para comprar un inmueble a precio preferencial en un proyecto con potencial de plusvalía. Dos opciones para ti:');
-  for (const o of c.opciones) {
+  lineas.push(`Aprovéchalo para comprar un inmueble a precio preferencial en un proyecto con potencial de plusvalía. ${opciones.length === 1 ? 'Esta es la opción que te propongo:' : 'Dos opciones para ti:'}`);
+  for (const o of opciones) {
     const pone = o.pone_al_mes > 0 ? `pones ${cientos(o.pone_al_mes)} al mes (crédito menos renta)` : 'la renta cubre el crédito';
     lineas.push(`• *Si vendes en ${o.plazo} meses* — ${o.nombre}${o.ubicacion ? ` (${o.ubicacion})` : ''}: ${pone} y al vender recibes ${miles(o.recibe_al_vender)}.${o.ficha_url ? `\n  Ficha: ${o.ficha_url}` : ''}`);
   }

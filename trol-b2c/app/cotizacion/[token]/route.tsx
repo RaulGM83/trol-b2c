@@ -9,7 +9,10 @@ import { imagenCotizacion } from '@/lib/infonavit/cotizacion-png';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { token: string } }) {
+/** 296 · ?plazo=18|60 → formato de un solo inmueble. */
+const plazoDe = (req: Request) => { const v = Number(new URL(req.url).searchParams.get('plazo')); return v === 18 || v === 60 ? v : null; };
+
+export async function GET(req: Request, { params }: { params: { token: string } }) {
   const token = params.token.replace(/\.png$/i, '');
   if (!/^[a-f0-9]{24}$/.test(token)) return new Response('No encontrado', { status: 404 });
   const db = t3admin();
@@ -17,5 +20,5 @@ export async function GET(_req: Request, { params }: { params: { token: string }
   if (!l || new Date((l as Any).expira_en) < new Date()) return new Response('Esta liga ya no está disponible', { status: 404 });
   const c = await cargarCotizacionInicial((l as Any).persona_id, { db, voz: 'trol' });
   if (!c.ok) return new Response('No disponible', { status: 404 });
-  return imagenCotizacion(c);
+  return imagenCotizacion(c, { plazo: plazoDe(req) });
 }

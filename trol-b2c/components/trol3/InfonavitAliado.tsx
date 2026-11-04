@@ -17,7 +17,16 @@ export interface FilaInfonavitAliado {
   /** 293 · Seguimiento real del trámite (oportunidades.tramite_infonavit). */
   fechas?: Record<string, string> | null; inmueble?: string | null; inmueble_ubicacion?: string | null; casa?: string | null;
   conyugal?: boolean | null; co_titular?: string | null; comision_estado?: 'devengada' | 'pagada' | string | null;
-  cotizacion?: { texto: string; opciones: { plazo: number; nombre: string; ubicacion: string | null; pone_al_mes: number; recibe_al_vender: number; ficha_url: string | null }[] } | null;
+  cotizacion?: {
+    texto: string;
+    /** 296 · Mensaje de un solo inmueble, por plazo. */
+    textos_por_plazo?: Record<number, string>;
+    opciones: {
+      plazo: number; nombre: string; ubicacion: string | null; pone_al_mes: number; recibe_al_vender: number; ficha_url: string | null;
+      /** 296 · De dónde sale lo que recibe. */
+      desglose?: { entra_saldo: number; plusvalia: number; aportaciones: number; capital_pagado: number; comision_venta: number } | null;
+    }[];
+  } | null;
   sin_cotizacion?: string | null;
 }
 
@@ -127,13 +136,30 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
                     <div className="font-bold">{o.nombre}</div>
                     {o.ubicacion ? <div className="text-muted">{o.ubicacion}</div> : null}
                     <div className="mt-1">Si vende en {o.plazo} meses: pone {o.pone_al_mes > 0 ? money(o.pone_al_mes) : '$0'} al mes y recibe <b>{money(o.recibe_al_vender)}</b></div>
-                    {o.ficha_url ? <a href={o.ficha_url} target="_blank" rel="noreferrer" className="underline">Ficha del inmueble</a> : null}
+                    {o.desglose ? (
+                      <details className="mt-1 text-[11px] text-muted">
+                        <summary className="cursor-pointer">De dónde sale lo que recibe</summary>
+                        <ul className="mt-1 space-y-0.5">
+                          <li>Su saldo de vivienda que entra (neto de gastos): <b className="text-ink">{money(o.desglose.entra_saldo)}</b></li>
+                          <li>+ Plusvalía estimada: <b className="text-ink">{money(o.desglose.plusvalia)}</b></li>
+                          <li>+ Aportaciones de su patrón que abonan al crédito: <b className="text-ink">{money(o.desglose.aportaciones)}</b></li>
+                          <li>+ Capital que paga con la mensualidad: <b className="text-ink">{money(o.desglose.capital_pagado)}</b></li>
+                          <li>− Comisión de venta: <b className="text-ink">{money(o.desglose.comision_venta)}</b></li>
+                          <li>= Recibe al vender: <b className="text-ink">{money(o.recibe_al_vender)}</b></li>
+                        </ul>
+                      </details>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {o.ficha_url ? <a href={o.ficha_url} target="_blank" rel="noreferrer" className="underline">Ficha</a> : null}
+                      <a className={btn} href={`/aliado/infonavit/${r.persona_id}?plazo=${o.plazo}`} target="_blank" rel="noreferrer">Imagen sólo este</a>
+                      {r.cotizacion?.textos_por_plazo?.[o.plazo] ? <button className={btn} onClick={() => copiar(r.cotizacion!.textos_por_plazo![o.plazo])}>Mensaje sólo este</button> : null}
+                    </div>
                   </div>
                 ))}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button className={btn} onClick={() => copiar(r.cotizacion!.texto)}>Copiar mensaje para tu cliente</button>
-                <a className={btn} href={`/aliado/infonavit/${r.persona_id}`} target="_blank" rel="noreferrer">Imagen para WhatsApp</a>
+                <button className={btn} onClick={() => copiar(r.cotizacion!.texto)}>Mensaje con las dos opciones</button>
+                <a className={btn} href={`/aliado/infonavit/${r.persona_id}`} target="_blank" rel="noreferrer">Imagen con las dos opciones</a>
               </div>
             </>
           ) : !enTramite ? <div className="mt-1 text-xs text-muted">{r.sin_cotizacion ?? 'Armando la propuesta…'}</div> : null}

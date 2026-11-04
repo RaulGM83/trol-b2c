@@ -36,8 +36,11 @@ function Etiqueta({ t }: { t: string }) {
 }
 
 /** Pinta la cotización. `alianza` = nombre del broker/aliado ("En alianza con …"). */
-export function imagenCotizacion(c: { nombre: string; cot: CotizacionInicial }, opts: { alianza?: string | null } = {}) {
-  const { cot } = c;
+export function imagenCotizacion(c: { nombre: string; cot: CotizacionInicial }, opts: { alianza?: string | null; plazo?: number | null } = {}) {
+  // 296 · `plazo`: formato de UN solo inmueble (la opción de ese plazo). Sin él, las dos.
+  const opciones = opts.plazo ? c.cot.opciones.filter((o) => o.plazo === opts.plazo) : c.cot.opciones;
+  const cot = { ...c.cot, opciones: opciones.length ? opciones : c.cot.opciones };
+  const una = cot.opciones.length === 1;
   const logoW = Math.round(60 * LOGO_TROL_RATIO);
   return new ImageResponse(
     (
@@ -58,26 +61,26 @@ export function imagenCotizacion(c: { nombre: string; cot: CotizacionInicial }, 
             <div style={{ fontSize: 23, color: GRAY, marginLeft: 16 }}>en tu subcuenta del Infonavit</div>
           </div>
           <div style={{ fontSize: 23, color: DARK, marginTop: 10, lineHeight: 1.3 }}>
-            Aprovéchalo para comprar un inmueble a precio preferencial en un proyecto con potencial de plusvalía:
+            {una ? 'Aprovéchalo para comprar este inmueble a precio preferencial en un proyecto con potencial de plusvalía:' : 'Aprovéchalo para comprar un inmueble a precio preferencial en un proyecto con potencial de plusvalía:'}
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-around', padding: '8px 56px 12px' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {cot.opciones.map((o) => (
-            <div key={o.plazo} style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, borderRadius: 18, padding: '20px 28px', marginBottom: 18 }}>
-              <div style={{ fontSize: 32, fontWeight: 700, color: DARK, lineHeight: 1.15 }}>{o.nombre}</div>
-              {o.ubicacion ? <div style={{ fontSize: 21, color: GRAY, marginTop: 4 }}>{o.ubicacion}</div> : null}
-              <div style={{ display: 'flex', alignSelf: 'flex-start', fontSize: 18, fontWeight: 700, color: DARK, backgroundColor: LIME, borderRadius: 6, padding: '4px 10px', letterSpacing: 1.2, marginTop: 12 }}>{`SI VENDES EN ${o.plazo} MESES`}</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
+            <div key={o.plazo} style={{ display: 'flex', flexDirection: 'column', backgroundColor: CREAM, borderRadius: 18, padding: una ? '30px 36px' : '20px 28px', marginBottom: 18 }}>
+              <div style={{ fontSize: una ? 40 : 32, fontWeight: 700, color: DARK, lineHeight: 1.15 }}>{o.nombre}</div>
+              {o.ubicacion ? <div style={{ fontSize: una ? 24 : 21, color: GRAY, marginTop: 4 }}>{o.ubicacion}</div> : null}
+              <div style={{ display: 'flex', alignSelf: 'flex-start', fontSize: una ? 20 : 18, fontWeight: 700, color: DARK, backgroundColor: LIME, borderRadius: 6, padding: '4px 10px', letterSpacing: 1.2, marginTop: una ? 18 : 12 }}>{`SI VENDES EN ${o.plazo} MESES`}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: una ? 22 : 12 }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ fontSize: 19, color: GRAY }}>Pones al mes</div>
-                  <div style={{ fontSize: 38, fontWeight: 700, color: DARK }}>{o.pone_al_mes > 0 ? cientos(o.pone_al_mes) : '$0'}</div>
-                  <div style={{ fontSize: 16, color: GRAY }}>{o.pone_al_mes > 0 ? 'crédito menos renta' : 'la renta cubre el crédito'}</div>
+                  <div style={{ fontSize: una ? 22 : 19, color: GRAY }}>Pones al mes</div>
+                  <div style={{ fontSize: una ? 46 : 38, fontWeight: 700, color: DARK }}>{o.pone_al_mes > 0 ? cientos(o.pone_al_mes) : '$0'}</div>
+                  <div style={{ fontSize: una ? 18 : 16, color: GRAY }}>{o.pone_al_mes > 0 ? 'crédito menos renta' : 'la renta cubre el crédito'}</div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', backgroundColor: DARK, borderRadius: 14, padding: '10px 22px' }}>
-                  <div style={{ fontSize: 19, color: '#C9CCD0' }}>Al vender recibes</div>
-                  <div style={{ fontSize: 50, fontWeight: 700, color: LIME }}>{miles(o.recibe_al_vender)}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', backgroundColor: DARK, borderRadius: 14, padding: una ? '14px 28px' : '10px 22px' }}>
+                  <div style={{ fontSize: una ? 22 : 19, color: '#C9CCD0' }}>Al vender recibes</div>
+                  <div style={{ fontSize: una ? 64 : 50, fontWeight: 700, color: LIME }}>{miles(o.recibe_al_vender)}</div>
                 </div>
               </div>
             </div>

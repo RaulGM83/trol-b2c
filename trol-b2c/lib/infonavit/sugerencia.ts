@@ -53,6 +53,10 @@ export interface FilaSugerencia {
   /** Meses de aportación que NO tendrían dónde caer porque el crédito ya se liquidó. */
   aportaciones_sin_cabida_meses: number;
   horizonte: number; ventaja: number; recibe_dia: number; flujo_neto_acum: number;
+  /** 296 · De dónde sale lo que recibe al vender (suma = recibe_dia):
+   *  lo que entra de su saldo (valor − crédito, neto de gastos financiados) + plusvalía + aportaciones del
+   *  patrón aplicadas + capital pagado con la mensualidad − comisión de venta. */
+  desglose: DesgloseRecibe;
   /** Crédito / saldo aplicado. */
   apalancamiento: number;
   /** true = supera apalancamiento_max: se ofrece a saldos mayores, va al final. */
@@ -60,6 +64,11 @@ export interface FilaSugerencia {
   /** true = quedó en el grupo de empate técnico y su lugar lo decidió el pago mensual. */
   empate: boolean;
   semaforo: Semaforo; motivos: string[];
+}
+
+export interface DesgloseRecibe {
+  entra_saldo: number; plusvalia: number; aportaciones: number; capital_pagado: number; comision_venta: number;
+  venta_estimada: number; saldo_credito: number;
 }
 
 export interface Sugerencia {
@@ -170,6 +179,14 @@ export function rankearInmuebles(args: {
       reserva_sin_renta: op.pmt * factores.meses_sin_renta,
       mes_liquida: r.mes_liquida_credito, meses_cotizando: mesesCot, aport_mensual: aport, aportaciones_sin_cabida_meses: sinCabida,
       horizonte: fila.horizonte, ventaja: fila.ventaja_corte, recibe_dia: fila.recibe_dia, flujo_neto_acum: fila.flujo_neto_acum,
+      desglose: {
+        entra_saldo: op.base - op.credito,
+        plusvalia: fila.venta_estimada - op.base,
+        aportaciones: fila.aportaciones_aplicadas,
+        capital_pagado: (op.credito - fila.saldo_credito) - fila.aportaciones_aplicadas,
+        comision_venta: fila.comision_venta_total,
+        venta_estimada: fila.venta_estimada, saldo_credito: fila.saldo_credito,
+      },
       apalancamiento, para_saldos_mayores: paraSaldosMayores, empate: false,
       semaforo: sem, motivos,
     });

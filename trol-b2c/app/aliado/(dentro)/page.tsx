@@ -23,6 +23,7 @@ import type { FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
 import type { FilaResultadoAliado, ProductoAliado } from '@/components/trol3/ResultadoAliado';
 import { ClientesAliado, type ClienteAliado } from '@/components/trol3/ClientesAliado';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
+import { textoWhatsApp } from '@/lib/infonavit/cotizacion-inicial';
 import { LinkAliado } from '@/components/trol3/LinkAliado';
 
 export const runtime = 'nodejs';
@@ -71,7 +72,15 @@ export default async function EspacioAliado() {
     const fila: FilaInfonavitAliado = { ...r, nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ') || null };
     if (r.resultado === 'con_monto') {
       const c = await cargarCotizacionInicial(r.persona_id, { db: admin, voz: 'aliado' });
-      if (c.ok) fila.cotizacion = { texto: c.texto, opciones: c.cot.opciones.map((o) => ({ plazo: o.plazo, nombre: o.nombre, ubicacion: o.ubicacion, pone_al_mes: o.pone_al_mes, recibe_al_vender: o.recibe_al_vender, ficha_url: o.ficha_url })) };
+      if (c.ok) fila.cotizacion = {
+        texto: c.texto,
+        // 296 · mensaje de un solo inmueble por plazo
+        textos_por_plazo: Object.fromEntries(c.cot.opciones.map((o) => [o.plazo, textoWhatsApp(c.cot, c.primerNombre, 'aliado', o.plazo)])),
+        opciones: c.cot.opciones.map((o) => ({
+          plazo: o.plazo, nombre: o.nombre, ubicacion: o.ubicacion, pone_al_mes: o.pone_al_mes, recibe_al_vender: o.recibe_al_vender, ficha_url: o.ficha_url,
+          desglose: o.desglose ? { entra_saldo: o.desglose.entra_saldo, plusvalia: o.desglose.plusvalia, aportaciones: o.desglose.aportaciones, capital_pagado: o.desglose.capital_pagado, comision_venta: o.desglose.comision_venta } : null,
+        })),
+      };
       else fila.sin_cotizacion = c.motivo;
     }
     return fila;

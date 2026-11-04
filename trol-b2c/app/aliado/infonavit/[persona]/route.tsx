@@ -10,11 +10,14 @@ import { imagenCotizacion } from '@/lib/infonavit/cotizacion-png';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: { persona: string } }) {
+/** 296 · ?plazo=18|60 → formato de un solo inmueble. */
+const plazoDe = (req: Request) => { const v = Number(new URL(req.url).searchParams.get('plazo')); return v === 18 || v === 60 ? v : null; };
+
+export async function GET(req: Request, { params }: { params: { persona: string } }) {
   const a = await requireAliado();
   const { data: fila } = await t3().from('v_infonavit_aliado').select('persona_id,resultado').eq('persona_id', params.persona).maybeSingle();
   if (!fila || (fila as { resultado: string }).resultado !== 'con_monto') return new Response('No disponible', { status: 404 });
   const c = await cargarCotizacionInicial(params.persona, { db: t3admin(), voz: 'aliado' });
   if (!c.ok) return new Response(c.motivo, { status: 422 });
-  return imagenCotizacion(c, { alianza: a.empresa || a.nombre });
+  return imagenCotizacion(c, { alianza: a.empresa || a.nombre, plazo: plazoDe(req) });
 }
