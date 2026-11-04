@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { comprarAsesoriaPorAliado } from '@/app/aliado/actions';
 import { AgregarNss } from '@/components/trol3/AgregarNss';
+import { CopiarMensaje } from '@/components/trol3/CopiarMensaje';
 
 export interface OportunidadAliado { codigo: string; nombre: string | null; frase: string | null; estado: string }
 export interface CompraAliado { producto: string; nombre: string; en: string | null }
@@ -121,7 +122,6 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
   /** 294 · El aliado tiene el programa Infonavit: si la CURP falló, con el NSS se puede seguir por ahí. */
   puedeNss?: boolean; tieneInfonavit?: boolean;
 }) {
-  const copiar = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.success('Mensaje copiado'); } catch { toast.error('No pude copiar'); } };
   const [label, cls] = estadoPension(r);
   const ops = r.oportunidades ?? [];
   const compras = r.compras ?? [];
@@ -203,7 +203,7 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
           <Comprar persona={r.persona_id} productos={productos} creditos={creditos} tieneWallet={tieneWallet} compras={compras} />
           {r.estado === 'listo' ? (
             <div className="mt-2">
-              <button className={btn} onClick={() => copiar(mensajeParaCliente(r, aliado))}>Copiar mensaje para tu cliente</button>
+              <CopiarMensaje texto={mensajeParaCliente(r, aliado)} etiqueta="Copiar mensaje para tu cliente" className={btn} />
             </div>
           ) : null}
         </>

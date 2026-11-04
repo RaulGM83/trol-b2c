@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { subirDocumentoInfonavitPorAliado } from '@/app/aliado/actions';
 import { AgregarNss } from '@/components/trol3/AgregarNss';
+import { CopiarMensaje } from '@/components/trol3/CopiarMensaje';
 import { DOCS_INFONAVIT, ETAPAS_INFONAVIT } from '@/lib/aliado/infonavit';
 
 export interface FilaInfonavitAliado {
@@ -112,7 +113,6 @@ function Documentos({ personaId, docs, conyugal }: { personaId: string; docs: st
 
 /** La pestaña Infonavit de un cliente. `r` es null cuando nunca se pidió precalificación. */
 export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | null; comision: number }) {
-  const copiar = async (t: string) => { try { await navigator.clipboard.writeText(t); toast.success('Mensaje copiado'); } catch { toast.error('No pude copiar'); } };
   if (!r) {
     return <p className="text-xs text-muted">Todavía no has pedido su precalificación Infonavit. Agrégalo otra vez con la opción Infonavit marcada (con su NSS es inmediato) y te decimos cuánto tiene y qué inmueble le conviene. Ganas <b>{money(comision)}</b> por inmueble (IVA incluido) cuando firma escrituras.</p>;
   }
@@ -160,13 +160,13 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {o.ficha_url ? <a href={o.ficha_url} target="_blank" rel="noreferrer" className="underline">Ficha</a> : null}
                       <a className={btn} href={`/aliado/infonavit/${r.persona_id}?plazo=${o.plazo}`} target="_blank" rel="noreferrer">Imagen sólo este</a>
-                      {r.cotizacion?.textos_por_plazo?.[o.plazo] ? <button className={btn} onClick={() => copiar(r.cotizacion!.textos_por_plazo![o.plazo])}>Mensaje sólo este</button> : null}
+                      {r.cotizacion?.textos_por_plazo?.[o.plazo] ? <CopiarMensaje texto={r.cotizacion.textos_por_plazo[o.plazo]} etiqueta="Mensaje sólo este" className={btn} /> : null}
                     </div>
                   </div>
                 ))}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button className={btn} onClick={() => copiar(r.cotizacion!.texto)}>Mensaje con las dos opciones</button>
+                <CopiarMensaje texto={r.cotizacion.texto} etiqueta="Mensaje con las dos opciones" className={btn} />
                 <a className={btn} href={`/aliado/infonavit/${r.persona_id}`} target="_blank" rel="noreferrer">Imagen con las dos opciones</a>
               </div>
             </>
