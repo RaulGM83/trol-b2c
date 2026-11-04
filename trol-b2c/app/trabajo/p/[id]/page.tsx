@@ -30,7 +30,7 @@ import type { OrigenPersona } from '@/app/trabajo/actions';
 import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
-import { titularDesdeExpediente, extrasInfonavit } from '@/lib/infonavit/prefill';
+import { titularDesdeExpediente, extrasInfonavit, cotizaParaInfonavit } from '@/lib/infonavit/prefill';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { CotizacionInicialCard } from '@/components/trol3/CotizacionInicialCard';
 import { EtapaInfonavit } from '@/components/trol3/EtapaInfonavit';
@@ -236,7 +236,12 @@ export default async function Expediente({ params, searchParams }: { params: { i
         costoPct: Number((supRow as Any).rescate_costo_pct),
       }
     : null;
-  const aplicaInfonavit = e.status_empleo === 'empleado' && Number(e.saldo_infonavit ?? 0) > umbralInfonavit;
+  // 298 · Cotiza según Infonavit (Precalix) y, sin ese dato, según el IMSS. Carlos Almazán (4-nov): SISEC
+  // 'desempleado' del 22-oct, Precalix 'relación vigente' del 30-oct → la pestaña no abría y no había propuesta.
+  const relInf = datosMap.get('relacion_laboral_vigente');
+  const relacionInfonavit: boolean | null = relInf?.capa === 'validado' && typeof relInf?.valor === 'boolean' ? relInf.valor : null;
+  const cotizaInf = cotizaParaInfonavit(relacionInfonavit, e.status_empleo ?? null);
+  const aplicaInfonavit = cotizaInf && Number(e.saldo_infonavit ?? 0) > umbralInfonavit;
   let proyectosInf: Proyecto[] = [];
   let historialInf: AsesoriaGuardada[] = [];
   let baseInfonavit: ReturnType<typeof titularDesdeExpediente> | null = null;
@@ -290,6 +295,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
       saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
       saldoEsReportado: e.saldo_infonavit_capa === 'declarado' || e.saldo_infonavit_capa === 'validado',
       creditoVigente: e.credito_infonavit ?? null,
+      relacionLaboralVigente: relacionInfonavit,
       mesesCotizandoDefault: Number(supInfonavit.meses_cotizando_default ?? 60),
       ingresoRealMensual: datosMap.get('ingreso_mensual')?.valor == null ? null : Number(datosMap.get('ingreso_mensual')?.valor),
       deduccionesUsadas: datosMap.get('deducciones_personales_anuales')?.valor == null ? null : Number(datosMap.get('deducciones_personales_anuales')?.valor),
@@ -489,7 +495,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
               nombre: [e.nombre, e.apellidos].filter(Boolean).join(' ') || '(sin nombre)',
               ley: e.ley ?? '—',
               edad: e.edad ?? null,
-              cotiza: e.status_empleo === 'empleado',
+              cotiza: cotizaInf,
               creditoVigente: e.credito_infonavit ?? null,
             }}
             base={baseInfonavit.titular}

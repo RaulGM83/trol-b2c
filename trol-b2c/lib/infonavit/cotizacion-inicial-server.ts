@@ -69,7 +69,9 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     semilla,
     ley: e.ley ?? (sinHistorial ? 'Ley97' : null),
     fechaNacimiento: fnac,
-    statusEmpleo: 'empleado',
+    statusEmpleo: e.status_empleo ?? null,
+    // 298 · Infonavit manda sobre el status del SISEC (antes la semilla con 'desempleado' dejaba meses_cotizando en 0).
+    relacionLaboralVigente: relacion === true ? true : relacion === false ? false : null,
     salarioDiario: num('salario_diario'),
     saldoInfonavit: e.saldo_infonavit == null ? null : Number(e.saldo_infonavit),
     saldoEsReportado: true,

@@ -64,6 +64,16 @@ export interface EntradaPrefill {
   sexo?: 'H' | 'M' | null;
   /** 290 · Crédito que Infonavit le autoriza (precalificación). */
   creditoMax?: number | null;
+  /** 298 · Lo que Infonavit reporta (Precalix, `relacion_laboral_vigente` validado). Manda sobre el status del
+   *  SISEC: Infonavit es quien presta, y su foto suele ser más nueva que la semilla. Null = no se ha consultado. */
+  relacionLaboralVigente?: boolean | null;
+}
+
+/** 298 · ¿Cotiza para efectos de Infonavit? Infonavit manda; sin su dato, el status del IMSS. */
+export function cotizaParaInfonavit(relacionLaboralVigente: boolean | null | undefined, statusEmpleo: string | null | undefined): boolean {
+  if (relacionLaboralVigente === true) return true;
+  if (relacionLaboralVigente === false) return false;
+  return statusEmpleo === 'empleado';
 }
 
 function palancasLey97(semilla: SemillaV2, creditoVigente: boolean): Palancas {
@@ -137,7 +147,9 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
   if (salInf) { const i = faltantes.indexOf('salario_diario'); if (i >= 0) faltantes.splice(i, 1); }
 
   const ssv = e.saldoInfonavit ?? e.semilla?.saldos.infonavit ?? 0;
-  const cotiza = (p?.status_empleo ?? e.statusEmpleo) === 'empleado';
+  const statusImss = p?.status_empleo ?? e.statusEmpleo;
+  const cotiza = cotizaParaInfonavit(e.relacionLaboralVigente, statusImss);
+  const discrepa = e.relacionLaboralVigente != null && statusImss != null && cotiza !== (statusImss === 'empleado');
   const meses = cotiza ? e.mesesCotizandoDefault : 0;
 
   const cv = conservaValor(e, ley, ssv);
@@ -167,9 +179,12 @@ export function titularDesdeExpediente(e: EntradaPrefill): BaseInfonavit {
       ssv: e.saldoEsReportado
         ? 'Saldo reportado de su cuenta Infonavit'
         : 'Estimado nuestro a partir de su historial de salarios: para formalizar hace falta el saldo real',
-      meses_cotizando: cotiza
+      meses_cotizando: (cotiza
         ? `Supuesto: sigue cotizando ${meses} meses más. Sólo mientras cotiza, la aportación patronal del 5% amortiza el crédito`
-        : 'No está cotizando: no hay aportación patronal que amortice',
+        : 'No está cotizando: no hay aportación patronal que amortice')
+        + (discrepa ? (cotiza
+          ? '. OJO: el IMSS lo reportaba sin empleo y la precalificación de Infonavit lo ve con relación laboral vigente (dato más nuevo): confírmalo con el cliente'
+          : '. OJO: el IMSS lo reportaba cotizando pero Infonavit no le ve relación laboral vigente') : ''),
       conserva_valor: cv.origen,
       ingreso_real: e.ingresoRealMensual
         ? 'Ingreso real declarado en el expediente'
