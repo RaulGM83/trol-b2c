@@ -705,6 +705,9 @@ export async function altaPersona(telefono: string, nombre: string, canal: strin
   if (origen) {
     const r = await db.rpc('fijar_origen', { p_persona: pid, p_tipo: origen.tipo, p_ref: origen.ref || null, p_canal: origen.canal || canal || null, p_texto: origen.texto?.trim() || null });
     if (r.error) aviso = (aviso ? aviso + ' ' : '') + `No se guardó quién lo trajo: ${r.error.message}`;
+  } else {
+    // 300 · Sin origen elegido, el alta cuenta como de quien la hace ("Traídos por mí" = alta o liga).
+    await db.from('personas').update({ miembro_origen_id: m.id }).eq('id', pid).is('miembro_origen_id', null).is('referidor_persona_id', null);
   }
   // Alta desde plataforma = cliente cálido: se pide la información pensional de una vez (Jordan).
   // Sin CURP la consulta queda pendiente y se dispara sola en cuanto alguien la capture.
@@ -2177,8 +2180,42 @@ export async function registrarCotizacionInicial(personaId: string, medio: 'text
   if (error) return fail(error);
   await t3().from('tareas').update({ estado: 'hecha', hecha_en: new Date().toISOString(), hecha_por: m.id, nota_cierre: `Compartida (${medio})` })
     .eq('persona_id', personaId).eq('origen', 'cotizacion_infonavit').eq('estado', 'pendiente');
+  // 299 · La propuesta guardada queda como enviada (con la huella de las cifras que vio el cliente).
+  const { data: g } = await t3().from('cotizaciones_infonavit').select('huella').eq('persona_id', personaId).maybeSingle();
+  if (g) await t3().from('cotizaciones_infonavit').update({ estado: 'enviada', enviada_en: new Date().toISOString(), enviada_por: m.id, enviada_huella: (g as Any).huella, medio }).eq('persona_id', personaId);
+  revalidatePath(`/trabajo/p/${personaId}`);
+  revalidatePath('/trabajo/infonavit');
+  return ok();
+}
+
+/** 299 · El asesor mandó la propuesta guardada desde /trabajo/infonavit (texto, imagen o WhatsApp). */
+export async function marcarPropuestaEnviada(personaId: string, medio: 'texto' | 'imagen' | 'whatsapp') {
+  const m = await requireMiembro();
+  const { data: g } = await t3().from('cotizaciones_infonavit').select('huella,opciones,estado').eq('persona_id', personaId).maybeSingle();
+  if (!g) return fail('No hay propuesta guardada');
+  const ops = ((g as Any).opciones ?? []) as { plazo: number; desarrollo: string; pone_al_mes: number; recibe_al_vender: number }[];
+  const resumen = ops.map((o) => `${o.plazo} m ${o.desarrollo}: pone $${Math.round(o.pone_al_mes).toLocaleString('es-MX')}/mes, recibe $${Math.round(o.recibe_al_vender).toLocaleString('es-MX')}`).join(' · ');
+  const { error } = await t3().rpc('registrar_interaccion', {
+    p_persona: personaId, p_canal: medio === 'whatsapp' ? 'wa' : 'nota', p_actor: 'asesor', p_actor_id: m.id, p_direccion: medio === 'whatsapp' ? 'saliente' : 'interna',
+    p_contenido: `Propuesta Infonavit enviada (${medio}): ${resumen}`, p_visible_cliente: false,
+    p_meta: { tipo: 'cotizacion_infonavit_inicial', medio, via: 'propuesta_guardada' },
+  });
+  if (error) return fail(error);
+  await t3().from('cotizaciones_infonavit').update({ estado: 'enviada', enviada_en: new Date().toISOString(), enviada_por: m.id, enviada_huella: (g as Any).huella, medio }).eq('persona_id', personaId);
+  await t3().from('tareas').update({ estado: 'hecha', hecha_en: new Date().toISOString(), hecha_por: m.id, nota_cierre: `Enviada (${medio})` })
+    .eq('persona_id', personaId).eq('origen', 'cotizacion_infonavit').eq('estado', 'pendiente');
+  revalidatePath('/trabajo/infonavit');
   revalidatePath(`/trabajo/p/${personaId}`);
   return ok();
+}
+
+/** 299 · Genera las propuestas que faltan (hasta 60 por click; el cron horario hace el resto). */
+export async function generarPropuestasPendientes() {
+  await requireMiembro();
+  const { generarCotizacionesPendientes } = await import('@/lib/infonavit/cotizacion-guardada');
+  const r = await generarCotizacionesPendientes(60);
+  revalidatePath('/trabajo/infonavit');
+  return ok({ pendientes: r.pendientes, generadas: r.hechas.filter((h) => h.estado === 'lista').length, sin_cotizacion: r.hechas.filter((h) => h.estado === 'sin_cotizacion').length });
 }
 
 /** 282 · El equipo mueve la etapa de la operación Infonavit (la ve el broker; en escrituras se le devenga). */

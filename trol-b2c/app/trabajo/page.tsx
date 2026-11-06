@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3, type Any } from '@/lib/trol3/server';
 import { AltaPersonaBoton } from '@/components/trol3/AltaPersonaForm';
+import { FiltrosPersonas, type OpcionOrigen } from '@/components/trol3/FiltrosPersonas';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,15 +13,29 @@ const fmtTel = (t?: string | null) => (t && t.length === 10 ? `${t.slice(0, 2)} 
 // Dirección por defecto de cada columna (texto asc, números/fechas desc)
 const DIR_DEFAULT: Record<string, 'asc' | 'desc'> = { nombre: 'asc', curp: 'asc', telefono: 'asc', ley: 'asc', edad: 'desc', semanas: 'desc', creado: 'desc' };
 
-export default async function TrabajoHome({ searchParams }: { searchParams: { q?: string; orden?: string; dir?: string } }) {
+const POR_PAGINA = 50;
+
+export default async function TrabajoHome({ searchParams }: { searchParams: { q?: string; orden?: string; dir?: string; origen?: string; asignado?: string; pag?: string } }) {
   const m = await requireMiembro();
   const q = (searchParams.q ?? '').trim();
   const orden = searchParams.orden ?? 'actividad';
   const dir = (searchParams.dir === 'asc' || searchParams.dir === 'desc') ? searchParams.dir : (DIR_DEFAULT[orden] ?? 'desc');
   const db = t3();
-  // Una sola RPC: con búsqueda (>=4 chars o teléfono) filtra; sin búsqueda trae la actividad reciente (u ordenado por la columna elegida).
-  const r = await db.rpc('buscar_personas', { p_q: q, p_limit: q.length >= 4 ? 40 : 30, p_orden: orden, p_dir: dir });
+  // 300 · Filtros por origen y asignado; con filtro se ve todo lo que coincide, paginado.
+  const origen = searchParams.origen || '';
+  const asignado = searchParams.asignado || '';
+  const filtrando = !!(origen || asignado);
+  const pag = Math.max(1, Number(searchParams.pag) || 1);
+  const limite = filtrando ? POR_PAGINA : q.length >= 4 ? 40 : 30;
+  const [r, { data: opcionesRaw }] = await Promise.all([
+    db.rpc('buscar_personas_filtro', { p_q: q, p_limit: limite, p_offset: filtrando ? (pag - 1) * POR_PAGINA : 0, p_orden: orden, p_dir: dir, p_origen: origen || null, p_asignado: asignado || null }),
+    db.rpc('opciones_origen'),
+  ]);
   const rows: Any[] = r.data ?? [];
+  const total = Number(rows[0]?.total ?? 0);
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const opciones = ((opcionesRaw ?? []) as Any[]).map((o) => ({ grupo: o.grupo, clave: o.clave, etiqueta: o.etiqueta, n: Number(o.n) })) as OpcionOrigen[];
+  const hrefPag = (n: number) => { const sp = new URLSearchParams(); if (q) sp.set('q', q); if (origen) sp.set('origen', origen); if (asignado) sp.set('asignado', asignado); if (orden !== 'actividad') { sp.set('orden', orden); sp.set('dir', dir); } if (n > 1) sp.set('pag', String(n)); return `/trabajo?${sp.toString()}`; };
   // 210 · para "¿quién lo trajo?" en el alta.
   const [{ data: aliadosAlta }, { data: miembrosAlta }] = await Promise.all([db.from('aliados').select('id,nombre').eq('activo', true).order('nombre'), db.from('miembros').select('id,nombre').eq('activo', true).order('nombre')]);
   const error: string | null = r.error?.message ?? null;
@@ -28,7 +43,7 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
   const Th = ({ col, children, right }: { col: string; children: React.ReactNode; right?: boolean }) => {
     const activo = orden === col;
     const sig = activo && dir === (DIR_DEFAULT[col] ?? 'desc') ? (dir === 'asc' ? 'desc' : 'asc') : (DIR_DEFAULT[col] ?? 'desc');
-    const sp = new URLSearchParams(); if (q) sp.set('q', q); sp.set('orden', col); sp.set('dir', activo ? sig : (DIR_DEFAULT[col] ?? 'desc'));
+    const sp = new URLSearchParams(); if (q) sp.set('q', q); if (origen) sp.set('origen', origen); if (asignado) sp.set('asignado', asignado); sp.set('orden', col); sp.set('dir', activo ? sig : (DIR_DEFAULT[col] ?? 'desc'));
     return (
       <th className={`px-3 py-2 ${right ? 'text-right' : ''}`}>
         <Link href={`/trabajo?${sp.toString()}`} className={`inline-flex items-center gap-1 hover:text-ink ${activo ? 'text-ink' : ''}`}>
@@ -41,12 +56,13 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h1 className="text-xl font-extrabold">Personas {q ? <span className="text-sm font-normal text-muted">· resultados para “{q}”</span> : <span className="text-sm font-normal text-muted">{orden === 'actividad' ? '· actividad reciente' : '· ordenado'}</span>}</h1>
+        <h1 className="text-xl font-extrabold">Personas {q ? <span className="text-sm font-normal text-muted">· resultados para “{q}”</span> : <span className="text-sm font-normal text-muted">{filtrando ? `· ${total.toLocaleString('es-MX')} con este filtro` : orden === 'actividad' ? '· actividad reciente' : '· ordenado'}</span>}</h1>
         <div className="flex items-center gap-2">
           {orden !== 'actividad' && <Link href={q ? `/trabajo?q=${encodeURIComponent(q)}` : '/trabajo'} className="text-xs text-muted underline">Quitar orden</Link>}
           <AltaPersonaBoton aliados={(aliadosAlta ?? []) as { id: string; nombre: string }[]} miembros={(miembrosAlta ?? []) as { id: string; nombre: string | null }[]} />
         </div>
       </div>
+      <FiltrosPersonas opciones={opciones} miembros={(miembrosAlta ?? []) as { id: string; nombre: string | null }[]} yo={m.id} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="overflow-hidden rounded-2xl border border-line bg-white">
         <table className="w-full text-sm">
@@ -73,6 +89,7 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
                         de nadie y no vale ensanchar la tabla para todos. La
                         referencia sin decidir se ve distinta porque es un
                         pendiente, no un dato. */}
+                    {p.origen_etiqueta ? <span className="ml-1 rounded bg-cream px-1.5 py-0.5 text-[10px] font-semibold text-muted">{p.origen_etiqueta}</span> : null}
                     {p.aliado_nombre ? (
                       <span
                         title={p.referido_estado === 'por_revisar' ? `${p.aliado_nombre} lo refirió — falta decidir si se le atribuye` : `Referido por ${p.aliado_nombre}`}
@@ -99,6 +116,15 @@ export default async function TrabajoHome({ searchParams }: { searchParams: { q?
           </tbody>
         </table>
       </div>
+      {filtrando && paginas > 1 ? (
+        <div className="mt-3 flex items-center justify-between text-xs">
+          <span className="text-muted">{(pag - 1) * POR_PAGINA + 1}–{Math.min(total, pag * POR_PAGINA)} de {total.toLocaleString('es-MX')} · página {pag} de {paginas}</span>
+          <div className="flex gap-1.5">
+            {pag > 1 ? <Link href={hrefPag(pag - 1)} className="rounded-lg border border-line bg-white px-3 py-1.5 font-bold">← Anterior</Link> : null}
+            {pag < paginas ? <Link href={hrefPag(pag + 1)} className="rounded-lg bg-ink px-3 py-1.5 font-bold text-white">Siguiente →</Link> : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
