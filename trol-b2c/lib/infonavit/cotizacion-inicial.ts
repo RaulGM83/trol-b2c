@@ -48,6 +48,9 @@ export interface CotizacionInicial {
   preliminar?: boolean;
   /** 297b · La edad salió del año del NSS (sin CURP válida): ±6 meses, sexo desconocido (límite 70). */
   edad_por_nss?: boolean;
+  /** 301 · Saldo y salario los capturó el aliado a mano porque Precalix no respondió; sin monto autorizado por
+   *  Infonavit. Precalix la pisa al llegar. Trae el nombre del aliado. */
+  capturado_por?: string;
 }
 
 export function supuestosMotor(s: SupuestosGlobales): Partial<SupuestosInfonavit> {
@@ -83,6 +86,8 @@ export function armarCotizacionInicial(a: {
   preliminar?: boolean;
   /** 297b · edad estimada por el NSS. */
   edadPorNss?: boolean;
+  /** 301 · datos capturados a mano por este aliado. */
+  capturadoPor?: string | null;
 }): CotizacionInicial | null {
   const sup = supuestosMotor(a.supuestos);
   const creditoMin = Number(a.supuestos.credito_minimo ?? 100000);
@@ -123,7 +128,7 @@ export function armarCotizacionInicial(a: {
     if (mismo) opciones.push(opcion(mismo, PLAZO_LARGO, corto ? 'mismo_inmueble' : 'mayor_potencial', nombres));
   }
   if (!opciones.length) return null;
-  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones, ...(a.preliminar ? { preliminar: true } : {}), ...(a.edadPorNss ? { edad_por_nss: true } : {}) };
+  return { saldo: a.titular.ssv, credito_max: a.creditoMax ?? null, fecha_saldo: a.fechaSaldo ?? null, opciones, ...(a.preliminar ? { preliminar: true } : {}), ...(a.edadPorNss ? { edad_por_nss: true } : {}), ...(a.capturadoPor ? { capturado_por: a.capturadoPor } : {}) };
 }
 
 const miles = (n: number) => '$' + (Math.round(Math.abs(n) / 1000) * 1000).toLocaleString('es-MX');
@@ -146,7 +151,9 @@ export function textoWhatsApp(c: CotizacionInicial, primerNombre: string | null,
   lineas.push('');
   lineas.push((voz === 'aliado' ? 'En Trol no cobran' : 'Nosotros no cobramos') + ' ningún porcentaje de tu saldo (' + (voz === 'aliado' ? 'les paga la constructora), pagan los gastos notariales y, si quieres, administran la renta y lo venden' : 'nos paga la constructora), pagamos los gastos notariales y, si quieres, administramos la renta y lo vendemos') + ' cuando tú decidas.');
   lineas.push('');
-  lineas.push((c.preliminar
+  lineas.push((c.capturado_por
+    ? 'Son cifras preliminares con el saldo y salario que nos compartiste (las confirmamos con tu precalificación de Infonavit): asumen'
+    : c.preliminar
     ? 'Son cifras preliminares (todavía sin tu historial del IMSS; las afinamos en cuanto lo tengamos): asumen'
     : 'Son cifras iniciales: asumen') + ' que sigues cotizando con tu salario actual y usan renta y plusvalía estimadas. Pueden mejorar si sumas a otra persona al crédito. ¿Te la explico en una llamada de 20 min? Dime qué día y hora te acomodan.');
   return lineas.join('\n');

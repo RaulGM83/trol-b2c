@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { PensionDetalle, estadoPension, type FilaResultadoAliado, type ProductoAliado } from '@/components/trol3/ResultadoAliado';
 import { InfonavitDetalle, RES_INFONAVIT, docsFaltantes, etapaIndice, etapaNombre, money, type FilaInfonavitAliado } from '@/components/trol3/InfonavitAliado';
 import { AgregarCliente } from '@/components/trol3/AgregarCliente';
+import { AgregarTelefono } from '@/components/trol3/AgregarTelefono';
 
 export interface ClienteAliado {
   persona_id: string;
@@ -23,6 +24,11 @@ const fecha = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateStr
 function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
   const p = c.pension, i = c.infonavit;
   const tramite = i?.resultado === 'con_monto' || i?.resultado === 'en_tramite';
+  // 301 · Sin teléfono Trol no lo contacta: lo primero es conseguirlo.
+  if ((p?.precliente || i?.precliente) && !(p?.tiene_telefono || i?.tiene_telefono)) return { texto: 'Agrega su teléfono para que Trol lo contacte', prioridad: 2 };
+  if (i?.resultado === 'capturado') return { texto: 'Propuesta preliminar lista: compártela', prioridad: 1 };
+  if (i?.puede_capturar && (i.resultado === 'procesando' || i.resultado === 'buscando_nss')) return { texto: 'Infonavit no responde: puedes capturar sus datos', prioridad: 2 };
+  if (p?.sugerir_sisec) return { texto: 'Si tienes su SISEC, súbelo', prioridad: 2 };
   if (i && tramite) {
     const idx = etapaIndice(i.etapa);
     const faltan = docsFaltantes(i.docs, !!i.conyugal);
@@ -52,9 +58,11 @@ function chipInfonavit(i: FilaInfonavitAliado | null): [string, string] | null {
   return [`Infonavit: ${label}`, cls];
 }
 
-export function ClientesAliado({ clientes, productos, creditos, tieneWallet, aliado, comisionInfonavit, programaInfonavit }: {
+export function ClientesAliado({ clientes, productos, creditos, tieneWallet, aliado, comisionInfonavit, programaInfonavit, creditosDisponibles = null }: {
   clientes: ClienteAliado[]; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean;
   aliado: string; comisionInfonavit: number; programaInfonavit: boolean;
+  /** 301 · saldo del wallet menos altas pendientes de cobrar. */
+  creditosDisponibles?: number | null;
 }) {
   const [q, setQ] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -99,7 +107,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {programaInfonavit ? <a href="/aliado/inventario" className="rounded-xl border border-ink px-3 py-2 text-sm font-bold text-ink hover:bg-cream">Inventario Infonavit</a> : null}
-          <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} abiertoInicial={n === 0} />
+          <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} abiertoInicial={n === 0} creditosDisponibles={creditosDisponibles} />
         </div>
       </div>
 
@@ -135,6 +143,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
                     <span className="ml-2 text-[11px] text-muted">{fecha(c.fecha)}</span>
                   </span>
                   <span className="flex flex-wrap gap-1">
+                    {(c.pension?.precliente || c.infonavit?.precliente) && !(c.pension?.tiene_telefono || c.infonavit?.tiene_telefono) ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">Sin teléfono</span> : null}
                     {chipP ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${chipP[1]}`}>Pensión: {chipP[0]}</span> : null}
                     {chipI ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${chipI[1]}`}>{chipI[0]}</span> : null}
                   </span>
@@ -144,6 +153,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
 
                 {open ? (
                   <div className="mb-3 rounded-xl border border-line bg-cream/40 p-3">
+                    {(c.pension?.precliente || c.infonavit?.precliente) && !(c.pension?.tiene_telefono || c.infonavit?.tiene_telefono) ? <AgregarTelefono persona={c.persona_id} nombre={c.nombre} /> : null}
                     {programaInfonavit ? (
                       <div className="mb-3 flex gap-1 border-b border-line">
                         {(['pension', 'infonavit'] as const).map((k) => (

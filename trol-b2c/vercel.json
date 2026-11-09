@@ -1,6 +1,16 @@
 {
   "crons": [
-    { "path": "/api/jordan/reconciliar", "schedule": "0 * * * *" },
-    { "path": "/api/granola/reconciliar", "schedule": "30 13 * * *" }
+    {
+      "path": "/api/jordan/reconciliar",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/granola/reconciliar",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/cotizaciones",
+      "schedule": "15 * * * *"
+    }
   ]
 }

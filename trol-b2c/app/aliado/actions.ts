@@ -12,7 +12,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAliado, t3, t3admin, type Any } from '@/lib/trol3/server';
-import { subirDocumentoExpediente } from '@/lib/trol3/documentos';
+import { subirDocumentoExpediente, extraerCurpDePdf, notificarSisecPdf, CURP_RE as CURP_DOC_RE } from '@/lib/trol3/documentos';
 import { DOCS_INFONAVIT } from '@/lib/aliado/infonavit';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
@@ -41,6 +41,14 @@ const EXPLICACION: Record<string, string> = {
   referido_ajeno: 'No encontramos a esa persona en tus referidos.',
   producto_invalido: 'Ese producto no se compra desde aquí.',
   nss_invalido_11: 'El NSS debe traer 11 dígitos.',
+  // 301
+  falta_nombre: 'Escribe el nombre de la persona.',
+  sin_creditos: 'No te quedan créditos disponibles para dar de alta a alguien más. Cada persona usa 1 crédito cuando llega su primer resultado. Escríbenos para recargar.',
+  todavia_no: 'Espera 2 minutos desde que lo registraste: Infonavit suele responder en ese tiempo.',
+  ya_hay_resultado: 'Infonavit ya respondió con su saldo; no hace falta capturarlo.',
+  sin_solicitud_infonavit: 'A esta persona no se le pidió precalificación Infonavit.',
+  saldo_invalido: 'Revisa el saldo de vivienda.',
+  salario_invalido: 'Revisa el salario mensual.',
 };
 const explicar = (e: Any) => {
   const raw = String(e?.message ?? e ?? '');
@@ -254,4 +262,138 @@ export async function agregarNssPorAliado(personaId: string, nss: string) {
   revalidatePath('/aliado');
   revalidatePath('/trabajo/aliados/referidores');
   return ok({ estado: r?.estado ?? 'guardado' });
+}
+
+// ---------------------------------------------------------------------------
+// 301 · Modelo Resag (claude/118): alta con teléfono opcional, 1 crédito por persona, camino mínimo y SISEC.
+// ---------------------------------------------------------------------------
+
+/** Pide a Trol (llave de servicio) las dos consultas que apliquen: IMSS con CURP, Infonavit con NSS. */
+async function dispararConsultas(personaId: string, curp: string | null, nss: string | null, yaCliente: boolean) {
+  const admin = t3admin();
+  if (curp) {
+    const d = await admin.rpc('declarar', { p_persona: personaId, p_campo: 'curp', p_valor: curp, p_actor: 'aliado', p_actor_id: null, p_capa: 'declarado' });
+    if (!d.error) {
+      await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'imss_historial', p_actor: 'aliado', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'alta_aliado', p_forzar: false, p_proveedor: 'jordan' });
+    }
+  }
+  if (!yaCliente && nss) {
+    await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'infonavit', p_actor: 'sistema', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'aliado_infonavit', p_forzar: false, p_proveedor: null });
+  }
+}
+
+/**
+ * 301 · Alta v2: nombre + CURP y/o NSS + autorización; el teléfono es opcional. Sin teléfono la persona
+ * entra como precliente (Trol no la contacta hasta que el aliado agregue el número). Las dos consultas salen
+ * solas y se cobra 1 crédito por persona cuando llega el primer resultado (la base lo descuenta).
+ */
+export async function altaV2PorAliado(x: { nombre: string; curp?: string | null; nss?: string | null; telefono?: string | null; autoriza: boolean }) {
+  const a = await requireAliado();
+  if (!a.programa_infonavit) return fail(new Error(EXPLICACION.sin_programa_infonavit));
+  const nombre = (x.nombre ?? '').trim();
+  const curp = (x.curp ?? '').trim().toUpperCase();
+  const nss = (x.nss ?? '').replace(/\D/g, '');
+  const tel = (x.telefono ?? '').replace(/\D/g, '').slice(-10);
+  if (nombre.length < 3) return fail(new Error(EXPLICACION.falta_nombre));
+  if (!curp && !nss) return fail(new Error(EXPLICACION.falta_curp_o_nss));
+  if (curp && !CURP_RE.test(curp)) return fail(new Error(EXPLICACION.curp_invalida));
+  if (nss && nss.length !== 11) return fail(new Error(EXPLICACION.nss_invalido));
+  if (tel && tel.length !== 10) return fail(new Error(EXPLICACION.telefono_invalido));
+  if (!x.autoriza) return fail(new Error('Necesitamos que confirmes que la persona te autorizó.'));
+
+  const consentimiento =
+    `${a.nombre} declara que ${nombre} lo autorizó a compartir su nombre${tel ? ', teléfono' : ''}` +
+    `${curp ? ', CURP' : ''}${nss ? ', NSS' : ''} con El Trol Financiero para consultar su precalificación ` +
+    `de crédito Infonavit${curp ? ' y su historial ante el IMSS' : ''}, y para que lo contacten con una propuesta.`;
+
+  const { data, error } = await t3().rpc('alta_por_aliado_v2', {
+    p_nombre: nombre, p_curp: curp || null, p_nss: nss || null, p_tel: tel || null, p_consentimiento: consentimiento,
+  });
+  if (error) return fail(new Error(explicar(error)));
+  const r = data as Any;
+  const personaId = r?.persona_id as string;
+  const yaCliente = r?.estado === 'por_revisar';
+  await dispararConsultas(personaId, (r?.curp as string | null) ?? null, (r?.nss as string | null) ?? null, yaCliente);
+
+  let aviso: string | null = null;
+  if (yaCliente) aviso = 'Registrado. Esa persona ya estaba con nosotros; lo revisamos y te confirmamos.';
+  else if (r?.precliente) aviso = 'Listo. Estamos consultando IMSS e Infonavit. Como no tiene teléfono, Trol no lo contacta hasta que lo agregues.';
+  else if (nss) aviso = 'Listo. Infonavit suele responder en un par de minutos; el IMSS tarda un poco más.';
+  else aviso = 'Listo. Con la CURP primero sacamos su NSS del IMSS; la precalificación Infonavit sale después.';
+
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo/aliados/referidores');
+  revalidatePath('/trabajo');
+  return ok({ persona_id: personaId, por_revisar: yaCliente, precliente: !!r?.precliente, creditos_disponibles: r?.creditos_disponibles ?? null, aviso });
+}
+
+/** 301 · El aliado agrega el teléfono a un precliente: pasa a cartera y Trol lo contacta. */
+export async function agregarTelefonoPorAliado(personaId: string, telefono: string) {
+  await requireAliado();
+  const tel = (telefono ?? '').replace(/\D/g, '').slice(-10);
+  if (tel.length !== 10) return fail(new Error(EXPLICACION.telefono_invalido));
+  const { error } = await t3().rpc('agregar_telefono_por_aliado', { p_persona: personaId, p_tel: tel });
+  if (error) return fail(new Error(explicar(error)));
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo');
+  return ok();
+}
+
+/** 301 · Camino mínimo: Precalix no respondió en 2 minutos y el aliado captura saldo, salario y si cotiza. */
+export async function capturarInfonavitPorAliado(x: { personaId: string; saldo: number; salarioMensual: number; cotiza: boolean }) {
+  await requireAliado();
+  const saldo = Number(x.saldo), salario = Number(x.salarioMensual);
+  if (!Number.isFinite(saldo) || saldo < 0) return fail(new Error(EXPLICACION.saldo_invalido));
+  if (!Number.isFinite(salario) || salario < 0) return fail(new Error(EXPLICACION.salario_invalido));
+  const { error } = await t3().rpc('capturar_infonavit_por_aliado', { p_persona: x.personaId, p_saldo: Math.round(saldo), p_salario_mensual: Math.round(salario), p_cotiza: !!x.cotiza });
+  if (error) return fail(new Error(explicar(error)));
+  revalidatePath('/aliado');
+  return ok();
+}
+
+/**
+ * 301 · El aliado sube la constancia de semanas (SISEC) del cliente, de cualquier origen, siempre que sea el PDF
+ * original con texto (no foto ni escaneo), se lea como constancia del IMSS y la CURP coincida con la persona.
+ * Entra al mismo pipeline que cuando la sube el asesor; el resultado cobra el mismo crédito de la persona.
+ */
+export async function subirSisecPorAliado(form: FormData) {
+  await requireAliado();
+  const personaId = String(form.get('persona_id') ?? '');
+  const file = form.get('archivo');
+  if (!(file instanceof File)) return fail(new Error('Elige el PDF.'));
+  if (file.type !== 'application/pdf') return fail(new Error('Debe ser el PDF original de la constancia (no foto ni captura de pantalla).'));
+  const { data: fila } = await t3().from('v_resultado_aliado').select('persona_id,estado_ref,tiene_curp').eq('persona_id', personaId).maybeSingle();
+  if (!fila || (fila as Any).estado_ref !== 'atribuido') return fail(new Error(EXPLICACION.referido_ajeno));
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  let texto = '';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (b: Buffer, o?: unknown) => Promise<{ text: string }>;
+    texto = ((await pdfParse(buf, { max: 3 })).text || '').toUpperCase();
+  } catch { texto = ''; }
+  if (texto.replace(/\s+/g, '').length < 200) return fail(new Error('Ese PDF no trae texto: parece escaneo o foto. Necesitamos el archivo original que descarga el IMSS.'));
+  const pareceImss = /SEMANAS\s+COTIZADAS|INSTITUTO MEXICANO DEL SEGURO SOCIAL|\bIMSS\b|CONSTANCIA/.test(texto);
+  if (!pareceImss) return fail(new Error('Ese PDF no se lee como la constancia de semanas cotizadas del IMSS.'));
+  const curpPdf = await extraerCurpDePdf(buf);
+  if (!curpPdf || !CURP_DOC_RE.test(curpPdf)) return fail(new Error('No encontramos la CURP dentro del PDF; revisa que sea la constancia completa.'));
+  const admin = t3admin();
+  const { data: per } = await admin.from('personas').select('curp,nss').eq('id', personaId).maybeSingle();
+  const curpPersona = ((per as Any)?.curp as string | null) ?? null;
+  if (curpPersona && curpPersona !== curpPdf) return fail(new Error(`La CURP del PDF (${curpPdf}) no es la de esta persona (${curpPersona}). Revisa que sea su constancia.`));
+
+  try {
+    const r = await subirDocumentoExpediente({ personaId, tipo: 'constancia_semanas', file, actor: 'aliado', actorId: null });
+    if (!curpPersona) {
+      // La persona entró sólo con NSS: la CURP sale del PDF y se declara (como la declararía Trol).
+      const d = await admin.rpc('declarar', { p_persona: personaId, p_campo: 'curp', p_valor: curpPdf, p_actor: 'aliado', p_actor_id: null, p_capa: 'declarado' });
+      if (d.error) return fail(new Error(explicar(d.error)));
+    }
+    await admin.rpc('enlazar_legacy', { p_persona: personaId });
+    const n = await notificarSisecPdf(personaId, r.documentoId, r.path);
+    revalidatePath('/aliado');
+    revalidatePath('/trabajo');
+    if (!n.enviado) return ok({ aviso: 'Recibimos el PDF, pero el cálculo no arrancó solo; lo revisa Trol.' });
+    return ok({ aviso: 'Recibimos su constancia. Los cálculos salen en unos minutos.' });
+  } catch (e) { return fail(e); }
 }

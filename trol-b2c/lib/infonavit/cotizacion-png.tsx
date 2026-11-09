@@ -110,7 +110,7 @@ export function imagenCotizacion(c: { nombre: string; cot: CotizacionInicial }, 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 56px', borderTop: `1px solid ${LINEA}` }}>
           <div style={{ fontSize: 15, color: GRAY, width: 820 }}>
             {/* satori: un solo hijo de texto (varios nodos sin flex truenan el render) */}
-            {`*${c.cot.preliminar ? 'Cifras preliminares (sin tu historial del IMSS; se afinan al tenerlo)' : 'Cifras iniciales'}: asume que sigues cotizando con tu salario actual; renta y plusvalía estimadas por zona (supuestos, no promesas). Al vender recibes la venta estimada menos el crédito restante y la comisión.`}
+            {`*${c.cot.capturado_por ? 'Cifras preliminares (con el saldo y salario que nos compartiste; se confirman con Infonavit)' : c.cot.preliminar ? 'Cifras preliminares (sin tu historial del IMSS; se afinan al tenerlo)' : 'Cifras iniciales'}: asume que sigues cotizando con tu salario actual; renta y plusvalía estimadas por zona (supuestos, no promesas). Al vender recibes la venta estimada menos el crédito restante y la comisión.`}
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: DARK, width: 160, textAlign: 'right' }}>Vigencia 30 días</div>
         </div>

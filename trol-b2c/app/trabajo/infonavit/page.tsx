@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireMiembro, t3, fmtMXN, fmtFecha, type Any } from '@/lib/trol3/server';
 import { ETAPAS_INFONAVIT } from '@/lib/aliado/infonavit';
+import { PropuestaInfonavit, GenerarPropuestas, type PropuestaGuardada } from '@/components/trol3/PropuestaInfonavit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +24,11 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
   const rango = RANGOS.some(([k]) => k === searchParams.rango) ? searchParams.rango : undefined;
   const pag = Math.max(1, Number(searchParams.pag) || 1);
 
-  const [{ data: todas }, { data: miembros }] = await Promise.all([
+  const [{ data: todas }, { data: miembros }, { count: nPendientes }] = await Promise.all([
     db.from('v_tramites_infonavit').select('oportunidad_id,persona_id,nombre,apellidos,fase,fase_en,cabecera_id,asesor,saldo,monto_credito,inmueble,broker,docs,tramite_infonavit,rango,solo_cotitular,efectivo_minimo').limit(5000),
     db.from('miembros').select('id,nombre').eq('activo', true).order('nombre'),
+    // 299 · propuestas que faltan por generar (el cron horario también las hace).
+    db.from('v_cotizaciones_pendientes').select('persona_id', { count: 'exact', head: true }),
   ]);
   const porAsesor = ((todas ?? []) as Any[]).filter((r) => !asesor || (asesor === 'sin' ? !r.cabecera_id : r.cabecera_id === asesor));
   const nRango = new Map<string, number>();
@@ -43,6 +46,14 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
   const total = filas.length;
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   const vista = filas.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
+  // 299 · Propuesta guardada y teléfono (para WhatsApp) sólo de la página visible.
+  const ids = vista.map((r) => r.persona_id as string);
+  const [{ data: props }, { data: tels }] = ids.length ? await Promise.all([
+    db.from('cotizaciones_infonavit').select('persona_id,estado,motivo,texto,token,preliminar,enviada_en,huella,enviada_huella,generada_en').in('persona_id', ids),
+    db.from('personas').select('id,telefono').in('id', ids),
+  ]) : [{ data: [] }, { data: [] }];
+  const propuesta = new Map(((props ?? []) as Any[]).map((x) => [x.persona_id as string, x as PropuestaGuardada]));
+  const telefono = new Map(((tels ?? []) as Any[]).map((x) => [x.id as string, (x.telefono as string | null) ?? null]));
   const nombreFase = new Map(FASES.map((f) => [f.clave, f.nombre]));
   const href = (patch: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
@@ -57,6 +68,7 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
     <main className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="text-xl font-bold">Trámites Infonavit</h1>
       <p className="mt-1 text-sm text-muted">Clientes con oportunidad de compra de inmueble validada y en qué fase va cada uno. Las etapas del trámite son las mismas que ve el broker; se mueven en el expediente, pestaña Infonavit.</p>
+      <div className="mt-2 text-xs text-muted">A quien Infonavit ve con empleo y saldo se le deja la <b>propuesta lista</b> (texto e imagen) para mandarla de aquí. <GenerarPropuestas pendientes={nPendientes ?? 0} /></div>
 
       <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px]">
         <span className="font-semibold text-muted">Asesor:</span>
@@ -90,7 +102,7 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
             <tr className="border-b border-line">
               <th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Fase</th><th className="px-3 py-2">En la fase</th>
               <th className="px-3 py-2">Asesor</th><th className="px-3 py-2 text-right">Saldo</th><th className="px-3 py-2 text-right">Crédito</th>
-              <th className="px-3 py-2">Inmueble</th><th className="px-3 py-2">Broker</th><th className="px-3 py-2 text-right">Docs</th>
+              <th className="px-3 py-2">Propuesta</th><th className="px-3 py-2">Inmueble</th><th className="px-3 py-2">Broker</th><th className="px-3 py-2 text-right">Docs</th>
             </tr>
           </thead>
           <tbody>
@@ -104,13 +116,14 @@ export default async function TramitesInfonavit({ searchParams }: { searchParams
                   <td className="px-3 py-2 text-muted">{r.asesor ? String(r.asesor).split(' ')[0] : 'Sin dueño'}</td>
                   <td className="px-3 py-2 text-right">{r.saldo != null ? fmtMXN(Number(r.saldo)) : '—'}</td>
                   <td className="px-3 py-2 text-right">{r.monto_credito != null ? fmtMXN(Number(r.monto_credito)) : '—'}</td>
+                  <td className="px-3 py-2"><PropuestaInfonavit personaId={r.persona_id} telefono={telefono.get(r.persona_id) ?? null} p={propuesta.get(r.persona_id) ?? null} /></td>
                   <td className="px-3 py-2 text-muted">{r.inmueble ?? '—'}</td>
                   <td className="px-3 py-2 text-muted">{r.broker ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-muted">{r.docs}/7</td>
                 </tr>
               );
             })}
-            {vista.length === 0 ? <tr><td colSpan={9} className="px-3 py-6 text-center text-muted">Nada en esta fase.</td></tr> : null}
+            {vista.length === 0 ? <tr><td colSpan={10} className="px-3 py-6 text-center text-muted">Nada en esta fase.</td></tr> : null}
           </tbody>
         </table>
       </div>

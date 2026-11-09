@@ -31,6 +31,8 @@ export async function POST(req: Request) {
   }
 
   const cot = await cargarCotizacionInicial(pid, { db, voz: 'trol' });
+  // 299 · Se deja guardada para el asesor aunque el bot no la mande.
+  try { const { guardarCotizacionInfonavit } = await import('@/lib/infonavit/cotizacion-guardada'); await guardarCotizacionInfonavit(pid); } catch { /* no bloquea al bot */ }
   let resultado: Resultado;
   const payload: Record<string, unknown> = {};
   if (cot.ok) {

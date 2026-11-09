@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { subirDocumentoInfonavitPorAliado } from '@/app/aliado/actions';
 import { AgregarNss } from '@/components/trol3/AgregarNss';
+import { CapturaInfonavit } from '@/components/trol3/CapturaInfonavit';
 import { CopiarMensaje } from '@/components/trol3/CopiarMensaje';
 import { DOCS_INFONAVIT, ETAPAS_INFONAVIT } from '@/lib/aliado/infonavit';
 
@@ -18,11 +19,17 @@ export interface FilaInfonavitAliado {
   /** 293 · Seguimiento real del trámite (oportunidades.tramite_infonavit). */
   fechas?: Record<string, string> | null; inmueble?: string | null; inmueble_ubicacion?: string | null; casa?: string | null;
   conyugal?: boolean | null; co_titular?: string | null; comision_estado?: 'devengada' | 'pagada' | string | null;
+  /** 301 · Camino mínimo: 'declarado' = saldo capturado por el aliado; `puede_capturar` a los 2 min sin Precalix. */
+  saldo_capa?: 'validado' | 'declarado' | null; salario_mensual_declarado?: number | null; relacion_declarada?: boolean | null;
+  manual_desde?: string | null; manual_capturado_en?: string | null; puede_capturar?: boolean | null;
+  precliente?: boolean | null; tiene_telefono?: boolean | null; tiene_nss?: boolean | null; tiene_curp?: boolean | null; cobrado_en?: string | null;
   cotizacion?: {
     texto: string;
     /** 297 · Sin historial del IMSS: salario y monto de Infonavit, edad de la CURP, Ley 97 asumida. */
     preliminar?: boolean;
     edad_por_nss?: boolean;
+    /** 301 · armada con saldo y salario capturados por el aliado. */
+    capturado_por?: string | null;
     /** 296 · Mensaje de un solo inmueble, por plazo. */
     textos_por_plazo?: Record<number, string>;
     opciones: {
@@ -43,6 +50,7 @@ export const RES_INFONAVIT: Record<string, [string, string]> = {
   buscando_nss: ['Buscando su NSS en el IMSS…', 'bg-cream text-ink'],
   falta_nss: ['Falta el NSS', 'bg-amber-100 text-amber-900'],
   con_monto: ['Precalifica', 'bg-emerald-100 text-emerald-900'],
+  capturado: ['Propuesta con tus datos (Infonavit sin responder)', 'bg-amber-100 text-amber-900'],
   credito_vigente: ['Ya tiene un crédito Infonavit vigente', 'bg-red-100 text-red-900'],
   sin_relacion: ['Sin relación laboral vigente', 'bg-red-100 text-red-900'],
   no_califica: ['No precalifica por ahora', 'bg-red-100 text-red-900'],
@@ -117,11 +125,12 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
     return <p className="text-xs text-muted">Todavía no has pedido su precalificación Infonavit. Agrégalo otra vez con la opción Infonavit marcada (con su NSS es inmediato) y te decimos cuánto tiene y qué inmueble le conviene. Ganas <b>{money(comision)}</b> por inmueble (IVA incluido) cuando firma escrituras.</p>;
   }
   const enTramite = r.resultado === 'en_tramite';
+  const capturado = r.resultado === 'capturado';
   const [label, cls] = enTramite && r.etapa === 'entregado' ? ['Entregado', 'bg-emerald-100 text-emerald-900'] : (RES_INFONAVIT[r.resultado] ?? [r.resultado, 'bg-cream text-ink']);
   return (
     <div>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
-      {r.resultado === 'con_monto' || enTramite ? (
+      {r.resultado === 'con_monto' || enTramite || capturado ? (
         <>
           <Etapas etapa={r.etapa} fechas={r.fechas} />
           <div className="mt-2 text-xs text-muted">{r.saldo != null ? <>Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b> · </> : null}{r.monto_credito != null ? <>crédito hasta <b className="text-ink">{money(r.monto_credito)}</b> · </> : null}{r.comision_estado === 'pagada' ? <b className="text-emerald-800">comisión {money(comision)} pagada</b> : r.comision_estado === 'devengada' ? <b className="text-emerald-800">comisión {money(comision)} por pagarte</b> : <>ganas <b className="text-ink">{money(comision)}</b> al escriturar</>}</div>
@@ -133,7 +142,11 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
           ) : null}
           {!enTramite && r.cotizacion ? (
             <>
-              {r.cotizacion.preliminar ? (
+              {r.cotizacion.capturado_por ? (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+                  <b>Propuesta preliminar con los datos que capturaste</b> (saldo {money(r.saldo)}{r.salario_mensual_declarado ? `, salario ${money(r.salario_mensual_declarado)} al mes` : ''}). Sin el monto que Infonavit autoriza; en cuanto Infonavit responda, sus cifras mandan y la propuesta se actualiza sola.
+                </div>
+              ) : r.cotizacion.preliminar ? (
                 <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
                   <b>Propuesta preliminar.</b> Todavía no tenemos su historial del IMSS; usa su saldo y el monto que Infonavit le autoriza{r.cotizacion.edad_por_nss ? ' y su edad estimada por el NSS (pídele la CURP)' : ''}. Si le interesa, Trol la afina con el historial.
                 </div>
@@ -177,7 +190,12 @@ export function InfonavitDetalle({ r, comision }: { r: FilaInfonavitAliado | nul
       ) : r.resultado === 'saldo_bajo' ? (
         <p className="mt-1 text-xs text-muted">Saldo de vivienda <b className="text-ink">{money(r.saldo)}</b>: todavía es bajo para esta opción. Vale la pena volver a revisarlo más adelante; mientras, su pensión sí la trabajamos.</p>
       ) : r.resultado === 'falta_nss' || r.resultado === 'buscando_nss' ? (
-        <AgregarNss persona={r.persona_id} motivo={r.resultado} />
+        <>
+          <AgregarNss persona={r.persona_id} motivo={r.resultado} />
+          {r.resultado === 'buscando_nss' ? <CapturaInfonavit persona={r.persona_id} desde={r.manual_desde ?? null} /> : null}
+        </>
+      ) : r.resultado === 'procesando' ? (
+        <CapturaInfonavit persona={r.persona_id} desde={r.manual_desde ?? null} />
       ) : null}
     </div>
   );

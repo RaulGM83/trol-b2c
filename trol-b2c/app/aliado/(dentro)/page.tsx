@@ -42,7 +42,7 @@ export default async function EspacioAliado() {
   const [{ data: resultado }, { data: comisiones }, { data: prods }, { data: inf }] = await Promise.all([
     db
       .from('v_resultado_aliado')
-      .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion')
+      .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion,precliente,tiene_telefono,tiene_curp,consulta_en,cobrado_en,sugerir_sisec')
       .order('referido_en', { ascending: false }),
     db.from('v_comisiones_aliado').select('id,cliente,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
     // El catálogo es público para el aliado: nombre y precio en créditos, nada más.
@@ -50,7 +50,7 @@ export default async function EspacioAliado() {
     // 281 · Broker Infonavit: sus precalificaciones (la vista ya filtra por current_aliado_id()).
     a.programa_infonavit
       ? db.from('v_infonavit_aliado')
-          .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs,fechas,inmueble,inmueble_ubicacion,casa,conyugal,co_titular,comision_estado')
+          .select('persona_id,nombre,apellidos,resultado,saldo,monto_credito,pide_infonavit_en,precalificado_en,etapa,etapa_en,docs,fechas,inmueble,inmueble_ubicacion,casa,conyugal,co_titular,comision_estado,saldo_capa,salario_mensual_declarado,relacion_declarada,manual_desde,manual_capturado_en,puede_capturar,precliente,tiene_telefono,tiene_nss,tiene_curp,cobrado_en')
           .order('pide_infonavit_en', { ascending: false }).limit(100)
       : Promise.resolve({ data: [] as Any[] }),
   ]);
@@ -66,16 +66,21 @@ export default async function EspacioAliado() {
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
 
+  // 301 · Créditos disponibles = saldo del wallet − altas pendientes de cobrar (1 crédito por persona).
+  const { data: disp } = a.programa_infonavit && a.tiene_wallet ? await db.rpc('creditos_disponibles_aliado', { p_aliado: a.id }) : { data: null };
+  const creditosDisponibles = disp == null ? null : Number(disp);
+
   // La cotización se arma con la llave de servicio SÓLO para filas que la vista le devolvió.
   const admin = t3admin();
   const infonavit: FilaInfonavitAliado[] = await Promise.all(((inf ?? []) as Any[]).map(async (r) => {
     const fila: FilaInfonavitAliado = { ...r, nombre: [r.nombre, r.apellidos].filter(Boolean).join(' ') || null };
-    if (r.resultado === 'con_monto') {
+    if (r.resultado === 'con_monto' || r.resultado === 'capturado') {
       const c = await cargarCotizacionInicial(r.persona_id, { db: admin, voz: 'aliado' });
       if (c.ok) fila.cotizacion = {
         texto: c.texto,
         preliminar: !!c.cot.preliminar,
         edad_por_nss: !!c.cot.edad_por_nss,
+        capturado_por: c.cot.capturado_por ?? null,
         // 296 · mensaje de un solo inmueble por plazo
         textos_por_plazo: Object.fromEntries(c.cot.opciones.map((o) => [o.plazo, textoWhatsApp(c.cot, c.primerNombre, 'aliado', o.plazo)])),
         opciones: c.cot.opciones.map((o) => ({
@@ -128,7 +133,7 @@ export default async function EspacioAliado() {
         <div className="rounded-2xl border-2 border-ink bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Tus créditos</div>
           <div className="text-2xl font-extrabold">{a.tiene_wallet ? (a.creditos ?? 0) : '—'}</div>
-          <div className="text-[11px] text-muted">{a.tiene_wallet ? 'Escríbenos para recargar' : 'Escríbenos para activarlos'}</div>
+          <div className="text-[11px] text-muted">{a.tiene_wallet ? (creditosDisponibles != null && creditosDisponibles !== (a.creditos ?? 0) ? `${creditosDisponibles} disponibles (${(a.creditos ?? 0) - creditosDisponibles} apartados por consultas en curso)` : 'Escríbenos para recargar') : 'Escríbenos para activarlos'}</div>
         </div>
         <div className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Por pagarte</div>
@@ -148,6 +153,7 @@ export default async function EspacioAliado() {
         aliado={a.nombre}
         comisionInfonavit={Number(a.comision_infonavit ?? 25000)}
         programaInfonavit={!!a.programa_infonavit}
+        creditosDisponibles={creditosDisponibles}
       />
 
       {link ? (

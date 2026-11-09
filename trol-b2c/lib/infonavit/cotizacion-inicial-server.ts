@@ -38,13 +38,23 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     db.from('v_mejor_dato').select('*').eq('persona_id', personaId),
     db.from('infonavit_supuestos').select('*').eq('id', 'default').maybeSingle(),
     db.from('proyectos_inmobiliarios').select('*').eq('disponible', true).order('clave'),
-    db.from('datos').select('valor,obtenido_en').eq('persona_id', personaId).eq('campo', 'relacion_laboral_vigente')
-      .eq('capa', 'validado').order('obtenido_en', { ascending: false }).limit(1),
+    // 301 · validado (Precalix) manda; si no hay, vale lo que capturó el aliado a mano (capa declarado, origen aliado).
+    db.from('datos').select('valor,obtenido_en,capa,origen_tipo').eq('persona_id', personaId).eq('campo', 'relacion_laboral_vigente')
+      .in('capa', ['validado', 'declarado']).order('obtenido_en', { ascending: false }).limit(6),
   ]);
   if (!e) return { ok: false, motivo: 'Sin expediente' };
-  if (e.saldo_infonavit_capa !== 'validado') return { ok: false, motivo: 'Falta la precalificación Infonavit (saldo validado)' };
+  // 301 · Camino mínimo del aliado: saldo capturado a mano (capa declarado, origen aliado) cuando Precalix no respondió.
+  const capturadoPorAliado = e.saldo_infonavit_capa === 'declarado' && e.saldo_infonavit_origen === 'aliado';
+  if (e.saldo_infonavit_capa !== 'validado' && !capturadoPorAliado) return { ok: false, motivo: 'Falta la precalificación Infonavit (saldo validado)' };
   if (e.credito_infonavit === true) return { ok: false, motivo: 'Tiene crédito Infonavit vigente' };
-  const relacion = ((rel ?? []) as Any[])[0]?.valor;
+  const relRows = ((rel ?? []) as Any[]);
+  const relacion = (relRows.find((r) => r.capa === 'validado') ?? (capturadoPorAliado ? relRows.find((r) => r.capa === 'declarado' && r.origen_tipo === 'aliado') : null))?.valor;
+  let capturadoPor: string | null = null;
+  if (capturadoPorAliado) {
+    const { data: d } = await db.from('datos').select('origen_id').eq('persona_id', personaId).eq('campo', 'saldo_infonavit').eq('capa', 'declarado').eq('origen_tipo', 'aliado').order('obtenido_en', { ascending: false }).limit(1).maybeSingle();
+    const { data: al } = (d as Any)?.origen_id ? await db.from('aliados').select('nombre').eq('id', (d as Any).origen_id).maybeSingle() : { data: null };
+    capturadoPor = ((al as Any)?.nombre as string | undefined) ?? 'el aliado';
+  }
   const cotiza = relacion === true || (relacion !== false && e.status_empleo === 'empleado');
   if (!cotiza) return { ok: false, motivo: 'Infonavit no lo reporta con relación laboral vigente' };
   if (!sup) return { ok: false, motivo: 'Faltan los supuestos globales de Infonavit' };
@@ -91,8 +101,9 @@ export async function cargarCotizacionInicial(personaId: string, opts: { db?: An
     supuestos: sup as SupuestosGlobales,
     creditoMax: num('infonavit_monto_credito'),
     fechaSaldo: (map.get('saldo_infonavit')?.obtenido_en as string | undefined) ?? null,
-    preliminar: sinHistorial || edadPorNss,
+    preliminar: sinHistorial || edadPorNss || !!capturadoPor,
     edadPorNss,
+    capturadoPor,
   });
   if (Number(e.saldo_infonavit ?? 0) < SALDO_MIN_COTIZACION) return { ok: false, motivo: `Saldo menor a $${SALDO_MIN_COTIZACION.toLocaleString('es-MX')}` };
   if (!cot) {

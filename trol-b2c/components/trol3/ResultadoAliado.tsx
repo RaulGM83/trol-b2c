@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { comprarAsesoriaPorAliado } from '@/app/aliado/actions';
 import { AgregarNss } from '@/components/trol3/AgregarNss';
+import { SubirSisec } from '@/components/trol3/SubirSisec';
 import { CopiarMensaje } from '@/components/trol3/CopiarMensaje';
 
 export interface OportunidadAliado { codigo: string; nombre: string | null; frase: string | null; estado: string }
@@ -20,6 +21,8 @@ export interface FilaResultadoAliado {
   saldo_infonavit: number | null; infonavit_monto_credito: number | null; credito_infonavit_vigente: boolean | null; inconsistencia_imss: string | null;
   oportunidades: OportunidadAliado[] | null; compras: CompraAliado[] | null;
   diagnostico_estado: 'en_elaboracion' | 'listo' | null; diagnostico_doc_id: string | null; proxima_sesion: string | null;
+  /** 301 · precliente (sin teléfono), si ya se cobró el crédito y si conviene que suba el SISEC. */
+  precliente?: boolean | null; tiene_telefono?: boolean | null; tiene_curp?: boolean | null; consulta_en?: string | null; cobrado_en?: string | null; sugerir_sisec?: boolean | null;
 }
 export interface ProductoAliado { codigo: 'diagnostico_avanzado' | 'diagnostico_avanzado_sesion'; nombre: string; creditos: number; mxn: number }
 
@@ -36,7 +39,7 @@ export function estadoPension(r: FilaResultadoAliado): [string, string] {
   if ((r.compras ?? []).length) return [r.diagnostico_estado === 'en_elaboracion' ? 'Diagnóstico en elaboración' : 'Cálculos pedidos', 'bg-ink text-white'];
   if (r.estado === 'listo') return ['Listo', 'bg-emerald-100 text-emerald-900'];
   if (r.estado === 'fallida') return ['No se pudo consultar', 'bg-amber-100 text-amber-900'];
-  if (r.estado === 'falta_curp') return ['Falta la CURP', 'bg-amber-100 text-amber-900'];
+  if (r.estado === 'falta_curp') return [r.tiene_curp === false && r.sugerir_sisec ? 'Sin CURP: sube su SISEC' : 'Falta la CURP', 'bg-amber-100 text-amber-900'];
   return ['Consultando al IMSS…', 'bg-cream text-ink'];
 }
 
@@ -138,8 +141,10 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
         </>
       ) : null}
       {r.estado === 'falta_curp' ? (
-        <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información. Mándanosla o agrégalo otra vez con ella.</p>
+        <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información al IMSS. {puedeNss ? 'Si entró con NSS, Infonavit sigue su curso y, al llegar su historial, la CURP se completa sola. ' : ''}Mándanosla o agrégalo otra vez con ella.</p>
       ) : null}
+      {/* 301 · SISEC subido por el aliado: siempre disponible; destacado cuando Trol no lo consigue. */}
+      {r.estado !== 'ya_cliente' && r.estado !== 'listo' && puedeNss ? <SubirSisec persona={r.persona_id} destacado={!!r.sugerir_sisec} /> : null}
 
       {r.estado === 'listo' ? (
         <>
