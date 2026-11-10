@@ -150,8 +150,8 @@ begin
   insert into trol3.diagnosticos (persona_id, escenario_ids, contenido, motor_version, creado_por, actualizado_por, autor_tipo, autor_aliado_id, elaborado_por)
   values (p_persona, p_escenarios, jsonb_build_object('hechos', coalesce(p_hechos, '{}'::jsonb), 'narrativa', '{}'::jsonb, 'acuerdos', ''), p_motor_version, null, null, 'aliado', v_al.id, v_nombre)
   returning id into v_id;
-  perform trol3.registrar_interaccion(p_persona, 'nota', 'aliado', v_al.id, 'interna',
-    'El aliado abrió un diagnóstico en su calculadora (elaborado por ' || v_nombre || ')', false, jsonb_build_object('diagnostico_id', v_id, 'aliado_id', v_al.id));
+  perform trol3.nota_interna_sistema(p_persona, 'El aliado ' || v_al.nombre || ' abrió un diagnóstico en su calculadora (elaborado por ' || v_nombre || ')',
+    jsonb_build_object('diagnostico_id', v_id, 'aliado_id', v_al.id, 'via', 'abrir_diagnostico_aliado'));
   return v_id;
 end $$;
 grant execute on function trol3.abrir_diagnostico_aliado(uuid, uuid[], jsonb, text, text) to authenticated;
@@ -172,7 +172,8 @@ begin
    where id = p_diagnostico and autor_aliado_id = v_al and autor_tipo = 'aliado'
   returning persona_id into v_persona;
   if v_persona is null then raise exception 'diagnostico_no_encontrado'; end if;
-  perform trol3.registrar_interaccion(v_persona, 'nota', 'aliado', v_al, 'interna', 'El aliado generó su diagnóstico (no revisado por Trol)', false, jsonb_build_object('diagnostico_id', p_diagnostico));
+  perform trol3.nota_interna_sistema(v_persona, 'El aliado generó su diagnóstico con la calculadora (no revisado por Trol)',
+    jsonb_build_object('diagnostico_id', p_diagnostico, 'aliado_id', v_al, 'via', 'entregar_diagnostico_aliado'));
   return jsonb_build_object('ok', true, 'persona_id', v_persona);
 end $$;
 grant execute on function trol3.entregar_diagnostico_aliado(uuid, jsonb, text, text, int) to authenticated;
@@ -375,3 +376,48 @@ select b.referido_id, b.persona_id, b.estado_ref, b.referido_en, b.nombre, b.ape
 from base b
 left join lateral trol3.expediente_aliado(b.persona_id) e(edad, ley, semanas, status_empleo, conserva_derechos, fin_conservacion, afore_actual,
   pension_base, pension_maxima, saldo_rcv97, saldo_infonavit, infonavit_monto_credito, credito_infonavit_vigente, inconsistencia_imss, consultas_fallidas, cabecera_id) on true;
+
+-- ───────────────────────── 302b2/302b3 (aplicadas 10-nov tras probar en producción) ─────────────────────────
+-- · v_escenarios_cerrados: + autor_tipo, autor_aliado_id, autor_aliado_nombre (security_invoker).
+-- · registrar_interaccion rechaza al aliado autenticado (auth.uid no miembro) y pone etapa 'conversando': las notas del
+--   aliado en cerrar_escenario / abrir_diagnostico_aliado / entregar_diagnostico_aliado van por nota_interna_sistema.
+create or replace view trol3.v_escenarios_cerrados with (security_invoker = true) as
+select e.id, e.tipo, e.persona_id, e.consulta_aliado_id, e.creado_en, e.creado_por,
+       m.nombre as creado_por_nombre,
+       e.inputs ->> 'motor_version' as motor_version,
+       (e.inputs ->> 'motor_version') = trol3.motor_version_actual() as motor_actual,
+       e.inputs -> 'resumen' as resumen,
+       (e.inputs ->> 'partio_de')::uuid as partio_de,
+       e.autor_tipo, e.autor_aliado_id,
+       (select a.nombre from trol3.aliados a where a.id = e.autor_aliado_id) as autor_aliado_nombre
+  from trol3.escenarios e left join trol3.miembros m on m.id = e.creado_por
+ where e.tipo like 'calc\_%';
+grant select on trol3.v_escenarios_cerrados to authenticated;
+
+create or replace function trol3.cerrar_escenario(p_persona uuid, p_consulta_aliado uuid, p_tipo text, p_inputs jsonb, p_resultado jsonb, p_ventana jsonb default '{}'::jsonb)
+returns uuid language plpgsql security definer set search_path to 'trol3', 'public' as $function$
+declare v_id uuid; v_m uuid; v_al uuid;
+begin
+  if p_tipo not in ('calc_ley73', 'calc_ley97', 'calc_mod40') then
+    raise exception 'tipo_invalido' using hint = 'Los tipos de la calculadora son calc_ley73, calc_ley97 y calc_mod40. Para la Mesa Viraal usa autorizar_escenario.';
+  end if;
+  if not (p_inputs ? 'resumen') then
+    raise exception 'falta_resumen' using hint = 'inputs.resumen debe traer al menos etiqueta y pension_mensual.';
+  end if;
+  v_id := trol3.autorizar_escenario(p_persona, p_consulta_aliado, p_inputs, p_resultado, coalesce(p_ventana, '{}'::jsonb), p_tipo);
+  v_m := trol3.current_miembro_id();
+  if p_persona is not null then
+    if v_m is not null then
+      perform trol3.registrar_interaccion(p_persona, 'nota', 'asesor', v_m, 'interna',
+        'Cerró un escenario: ' || coalesce(p_inputs->'resumen'->>'etiqueta', p_tipo), false, jsonb_build_object('escenario_id', v_id, 'tipo', p_tipo));
+    else
+      v_al := trol3.current_aliado_id();
+      perform trol3.nota_interna_sistema(p_persona,
+        'El aliado ' || coalesce((select a.nombre from trol3.aliados a where a.id = v_al), '') || ' cerró un escenario en su calculadora: ' || coalesce(p_inputs->'resumen'->>'etiqueta', p_tipo),
+        jsonb_build_object('escenario_id', v_id, 'tipo', p_tipo, 'aliado_id', v_al, 'via', 'cerrar_escenario'));
+    end if;
+  end if;
+  return v_id;
+end $function$;
+-- abrir_diagnostico_aliado y entregar_diagnostico_aliado: idénticas a las de arriba salvo que la nota va por
+-- nota_interna_sistema(persona, texto, meta) en vez de registrar_interaccion(..., 'aliado', ...).
