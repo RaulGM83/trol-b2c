@@ -42,7 +42,7 @@ export default async function EspacioAliado() {
   const [{ data: resultado }, { data: comisiones }, { data: prods }, { data: inf }] = await Promise.all([
     db
       .from('v_resultado_aliado')
-      .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion,precliente,tiene_telefono,tiene_curp,consulta_en,cobrado_en,sugerir_sisec')
+      .select('referido_id,persona_id,nombre,apellidos,referido_en,estado,edad,ley,semanas,status_empleo,conserva_derechos,fin_conservacion,afore_actual,pension_base,pension_maxima,saldo_rcv97,saldo_infonavit,infonavit_monto_credito,credito_infonavit_vigente,inconsistencia_imss,oportunidades,compras,diagnostico_estado,diagnostico_doc_id,proxima_sesion,precliente,tiene_telefono,tiene_curp,consulta_en,cobrado_en,sugerir_sisec,calculadora_desbloqueada,diagnostico_id,diagnostico_autor,elaborado_por,revision_pedida_en,revisado_en')
       .order('referido_en', { ascending: false }),
     db.from('v_comisiones_aliado').select('id,cliente,monto,estado,creado_en,pagada_en').order('creado_en', { ascending: false }),
     // El catálogo es público para el aliado: nombre y precio en créditos, nada más.
@@ -66,6 +66,9 @@ export default async function EspacioAliado() {
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
 
+  // 302a · Semáforo: si el IMSS o Infonavit no responden (o los apagamos), se le dice al aliado qué hacer.
+  const { data: sem } = await db.rpc('semaforo_proveedores');
+  const rojos = ((sem ?? []) as Any[]).filter((f) => f.salud?.estado === 'rojo' && f.codigo !== 'bdi');
   // 301 · Créditos disponibles = saldo del wallet − altas pendientes de cobrar (1 crédito por persona).
   const { data: disp } = a.programa_infonavit && a.tiene_wallet ? await db.rpc('creditos_disponibles_aliado', { p_aliado: a.id }) : { data: null };
   const creditosDisponibles = disp == null ? null : Number(disp);
@@ -144,6 +147,15 @@ export default async function EspacioAliado() {
           <div className="text-2xl font-extrabold">{fmtMXN(pagado)}</div>
         </div>
       </div>
+
+      {rojos.length ? (
+        <section className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+          <b>{rojos.map((f) => (f.codigo === 'jordan' ? 'El IMSS' : 'Infonavit')).join(' y ')} no {rojos.length > 1 ? 'están respondiendo' : 'está respondiendo'} hoy.</b>{' '}
+          {rojos.some((f) => f.codigo === 'precalix') ? 'En la pestaña Infonavit puedes capturar saldo y salario a mano sin esperar. ' : ''}
+          {rojos.some((f) => f.codigo === 'jordan') ? 'Si tienes la constancia de semanas (SISEC) de tu cliente, súbela en la pestaña Pensión y sacamos sus cálculos. ' : ''}
+          Las consultas quedan en espera y salen solas cuando el servicio regrese.
+        </section>
+      ) : null}
 
       <ClientesAliado
         clientes={clientes}

@@ -28,6 +28,7 @@ const ITEMS_NEGOCIO: [string, string][] = [
   ['/trabajo/evento', 'Evento (pasillo)'],
   ['/trabajo/evento/panel', 'Panel del evento'],
   ['/trabajo/millas', 'Por depositar a Millas'],
+  ['/trabajo/proveedores', 'Proveedores'],
 ];
 
 export function NavNegocio({ aviso = 0 }: { aviso?: number }) {

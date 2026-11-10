@@ -24,15 +24,22 @@ const slugDe = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-export async function construirPdfDiagnostico(diagnosticoId: string): Promise<PdfDiagnostico | null> {
-  const db = t3();
+export async function construirPdfDiagnostico(diagnosticoId: string, dbParam?: Any): Promise<PdfDiagnostico | null> {
+  // 302d · El aliado lo arma con la llave de servicio después de verificar que el diagnóstico es suyo.
+  const db = dbParam ?? t3();
 
   const { data: d } = await db
     .from('diagnosticos')
-    .select('id,persona_id,estado,contenido,creado_en,entregado_en,creado_por')
+    .select('id,persona_id,estado,contenido,creado_en,entregado_en,creado_por,autor_tipo,autor_aliado_id,elaborado_por')
     .eq('id', diagnosticoId)
     .maybeSingle();
   if (!d) return null;
+  // 302d · Autoría: quién lo elaboró y si Trol lo revisó. Va en portada y pie para que nadie nos atribuya un reporte ajeno.
+  let autoria: { elaborado_por: string; empresa: string | null; revisado: boolean } | null = null;
+  if ((d as Any).autor_tipo === 'aliado' || (d as Any).autor_tipo === 'aliado_revisado') {
+    const { data: al } = (d as Any).autor_aliado_id ? await db.from('aliados').select('nombre,empresa').eq('id', (d as Any).autor_aliado_id).maybeSingle() : { data: null };
+    autoria = { elaborado_por: (d as Any).elaborado_por ?? (al as Any)?.nombre ?? 'el aliado', empresa: (al as Any)?.empresa ?? null, revisado: (d as Any).autor_tipo === 'aliado_revisado' };
+  }
 
   const [{ data: p }, { data: m }, { data: tareas }, { data: datos }] = await Promise.all([
     db.from('personas').select('nombre,apellidos,curp').eq('id', (d as Any).persona_id).maybeSingle(),
@@ -62,6 +69,7 @@ export async function construirPdfDiagnostico(diagnosticoId: string): Promise<Pd
       cliente,
       curp: (p as Any)?.curp ?? null,
       asesor: (m as Any)?.firma ?? (m as Any)?.nombre ?? null,
+      autoria,
       estado: (d as Any).estado,
       // La fecha del documento es el día en que se entregó, no la de hoy: es
       // cuando estas cifras fueron ciertas.

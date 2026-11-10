@@ -37,6 +37,7 @@ function queSigue(c: ClienteAliado): { texto: string; prioridad: 0 | 1 | 2 } {
   if (i?.resultado === 'falta_nss' || i?.resultado === 'buscando_nss') return { texto: 'Pon su NSS para acelerar Infonavit', prioridad: 2 };
   if (p && (p.estado === 'fallida' || p.estado === 'falta_curp')) return { texto: 'Revisar su CURP', prioridad: 2 };
   if (p?.diagnostico_estado === 'listo') return { texto: 'Diagnóstico listo: compártelo', prioridad: 1 };
+  if (p?.calculadora_desbloqueada && p.estado === 'listo') return { texto: 'Haz su asesoría en la calculadora', prioridad: 2 };
   if (p && (p.compras ?? []).length) return { texto: 'Trol está haciendo los cálculos', prioridad: 1 };
   if (p?.estado === 'listo') return { texto: 'Puedes pedir cálculos o asesoría', prioridad: 1 };
   if (i && tramite && i.etapa === 'entregado') return { texto: 'Inmueble entregado', prioridad: 0 };

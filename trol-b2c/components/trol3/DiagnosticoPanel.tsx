@@ -55,6 +55,8 @@ export type EscenarioCerradoOpcion = {
   tipo: string;
   creado_en: string;
   creado_por_nombre: string | null;
+  autor_tipo?: string | null;
+  autor_aliado_nombre?: string | null;
   motor_actual: boolean | null;
   resumen: Record<string, any> | null;
 };
@@ -85,6 +87,12 @@ export type DiagnosticoRow = {
   actualizado_en: string;
   entregado_en: string | null;
   creado_por_nombre: string | null;
+  /** 302d · Lo hizo un aliado con su calculadora (y si Trol ya lo revisó). */
+  autor_tipo?: 'trol' | 'aliado' | 'aliado_revisado' | null;
+  autor_aliado_nombre?: string | null;
+  elaborado_por?: string | null;
+  revision_pedida_en?: string | null;
+  revisado_en?: string | null;
   contenido: {
     hechos?: any;
     narrativa?: Narrativa;
@@ -384,7 +392,7 @@ export function DiagnosticoPanel({
                       </div>
                       <div className="text-xs text-muted">
                         {fechaHora(e.creado_en)}
-                        {e.creado_por_nombre ? ` · ${e.creado_por_nombre}` : ''}
+                        {e.creado_por_nombre ? ` · ${e.creado_por_nombre}` : e.autor_aliado_nombre ? ` · aliado ${e.autor_aliado_nombre}` : ''}
                         {e.resumen?.pension_mensual
                           ? ` · ${mxn.format(Number(e.resumen.pension_mensual))} al mes`
                           : ''}
@@ -492,6 +500,16 @@ export function DiagnosticoPanel({
             )}
           </div>
         </div>
+        {diagnostico.autor_tipo === 'aliado' || diagnostico.autor_tipo === 'aliado_revisado' ? (
+          <p className={`mt-2 rounded-lg px-3 py-1.5 text-xs ${diagnostico.autor_tipo === 'aliado_revisado' ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-900'}`}>
+            <b>Hecho por {diagnostico.autor_aliado_nombre ?? 'un aliado'}</b>{diagnostico.elaborado_por ? ` (elaborado por ${diagnostico.elaborado_por})` : ''} con su calculadora.
+            {diagnostico.autor_tipo === 'aliado_revisado'
+              ? ` Revisado por Trol${diagnostico.revisado_en ? ` el ${fechaHora(diagnostico.revisado_en)}` : ''}: ya va firmado como revisado.`
+              : diagnostico.revision_pedida_en
+                ? ` Pidió revisión de Trol (${fechaHora(diagnostico.revision_pedida_en)}): regrésalo a borrador, corrige y vuelve a entregar; queda firmado como revisado por Trol.`
+                : ' No lo revisó Trol; el PDF lo dice. Si el aliado pide revisión, llega una tarea.'}
+          </p>
+        ) : null}
         <p className="mt-1 text-xs text-muted">
           Abierto {fechaHora(diagnostico.creado_en)}
           {diagnostico.creado_por_nombre ? ` por ${diagnostico.creado_por_nombre}` : ''} · editado{' '}

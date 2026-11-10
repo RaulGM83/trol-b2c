@@ -14,6 +14,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAliado, t3, t3admin, type Any } from '@/lib/trol3/server';
 import { subirDocumentoExpediente, extraerCurpDePdf, notificarSisecPdf, CURP_RE as CURP_DOC_RE } from '@/lib/trol3/documentos';
 import { DOCS_INFONAVIT } from '@/lib/aliado/infonavit';
+import { hechosDeDiagnostico } from '@/lib/diagnostico/hechos-persona';
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 const fail = (e: unknown) => ({
@@ -49,6 +50,11 @@ const EXPLICACION: Record<string, string> = {
   sin_solicitud_infonavit: 'A esta persona no se le pidió precalificación Infonavit.',
   saldo_invalido: 'Revisa el saldo de vivienda.',
   salario_invalido: 'Revisa el salario mensual.',
+  // 302
+  sin_escenarios: 'Cierra al menos un escenario en la calculadora antes de generar el diagnóstico.',
+  escenario_ajeno: 'Sólo puedes usar tus escenarios cerrados de esta persona.',
+  diagnostico_no_encontrado: 'No encontramos ese diagnóstico entre los tuyos.',
+  diagnostico_sin_entregar: 'Primero genera el diagnóstico.',
 };
 const explicar = (e: Any) => {
   const raw = String(e?.message ?? e ?? '');
@@ -396,4 +402,66 @@ export async function subirSisecPorAliado(form: FormData) {
     if (!n.enviado) return ok({ aviso: 'Recibimos el PDF, pero el cálculo no arrancó solo; lo revisa Trol.' });
     return ok({ aviso: 'Recibimos su constancia. Los cálculos salen en unos minutos.' });
   } catch (e) { return fail(e); }
+}
+
+// ---------------------------------------------------------------------------
+// 302 · Calculadora del aliado (claude/120): su diagnóstico "Elaborado por" y la revisión de Trol.
+// ---------------------------------------------------------------------------
+
+/**
+ * Genera el diagnóstico del aliado sobre SUS escenarios cerrados: hechos del expediente (llave de servicio;
+ * las RPC con la sesión del aliado verifican que la persona es suya y pagó), narrativa del mismo redactor que
+ * usa el equipo, entrega y PDF firmado "Elaborado por {nombre}". Trol no lo revisa salvo que lo pida (10 cr).
+ */
+export async function generarDiagnosticoAliado(x: { personaId: string; escenarioIds: string[]; elaboradoPor: string }) {
+  const a = await requireAliado();
+  const escenarioIds = (x.escenarioIds ?? []).filter(Boolean);
+  if (!escenarioIds.length) return fail(new Error(EXPLICACION.sin_escenarios));
+  const elaboradoPor = (x.elaboradoPor ?? '').trim() || a.nombre;
+  try {
+    const admin = t3admin();
+    const { MOTOR_VERSION } = await import('@trol/pension-core/version');
+    const { redactarDiagnostico } = await import('@/lib/diagnostico/redactar');
+    const hechos = await hechosDeDiagnostico(x.personaId, escenarioIds, [], admin);
+    const { data: id, error } = await t3().rpc('abrir_diagnostico_aliado', {
+      p_persona: x.personaId, p_escenarios: escenarioIds, p_hechos: hechos, p_motor_version: MOTOR_VERSION, p_elaborado_por: elaboradoPor,
+    });
+    if (error) return fail(new Error(explicar(error)));
+
+    const { data: vig } = await admin.from('redactor_instrucciones').select('version,texto').eq('activa', true).maybeSingle();
+    const { data: fichas } = await admin.rpc('fichas_para_redactor', { p_persona: x.personaId });
+    const r = await redactarDiagnostico(hechos, { ajustes: { vigentes: (vig as Any)?.texto, fichas: (fichas as string | null) ?? null } });
+    if (!r.ok) return fail(new Error(`No se pudo escribir el diagnóstico (${r.error}). Vuelve a intentar en un momento.`));
+
+    const { error: e2 } = await t3().rpc('entregar_diagnostico_aliado', {
+      p_diagnostico: id, p_narrativa: r.narrativa, p_redactor: r.modelo, p_prompt_version: r.promptVersion, p_instrucciones_version: (vig as Any)?.version ?? null,
+    });
+    if (e2) return fail(new Error(explicar(e2)));
+
+    let aviso: string | null = null;
+    try {
+      const { construirPdfDiagnostico } = await import('@/lib/diagnostico/pdf');
+      const { guardarPdfGenerado } = await import('@/lib/trol3/documentos');
+      const pdf = await construirPdfDiagnostico(String(id), admin);
+      if (!pdf) throw new Error('No se encontró el diagnóstico.');
+      await guardarPdfGenerado({ personaId: x.personaId, tipo: 'diagnostico_avanzado', buffer: pdf.buf, nombreArchivo: `diagnostico-${pdf.slug}-aliado.pdf`, actorId: null });
+    } catch (e) {
+      aviso = `El diagnóstico quedó generado, pero el PDF no se pudo guardar: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    revalidatePath('/aliado');
+    revalidatePath(`/aliado/asesoria/${x.personaId}`);
+    revalidatePath(`/trabajo/p/${x.personaId}`);
+    return ok({ id, aviso });
+  } catch (e) { return fail(e); }
+}
+
+/** 302 · El aliado paga 10 créditos para que Trol revise su diagnóstico y lo re-firme. */
+export async function pedirRevisionTrol(diagnosticoId: string, nota?: string | null) {
+  await requireAliado();
+  const { data, error } = await t3().rpc('pedir_revision_trol', { p_diagnostico: diagnosticoId, p_nota: nota ?? null });
+  if (error) return fail(new Error(explicar(error)));
+  revalidatePath('/aliado');
+  revalidatePath('/trabajo/tareas');
+  const r = data as Any;
+  return ok({ repetida: !!r?.repetida, creditos_restantes: r?.creditos_restantes ?? null });
 }

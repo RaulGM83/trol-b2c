@@ -23,6 +23,9 @@ export interface FilaResultadoAliado {
   diagnostico_estado: 'en_elaboracion' | 'listo' | null; diagnostico_doc_id: string | null; proxima_sesion: string | null;
   /** 301 · precliente (sin teléfono), si ya se cobró el crédito y si conviene que suba el SISEC. */
   precliente?: boolean | null; tiene_telefono?: boolean | null; tiene_curp?: boolean | null; consulta_en?: string | null; cobrado_en?: string | null; sugerir_sisec?: boolean | null;
+  /** 302 · Calculadora del aliado: desbloqueada con cálculos o asesoría completa pagados; autoría del diagnóstico. */
+  calculadora_desbloqueada?: boolean | null; diagnostico_id?: string | null; diagnostico_autor?: 'trol' | 'aliado' | 'aliado_revisado' | string | null;
+  elaborado_por?: string | null; revision_pedida_en?: string | null; revisado_en?: string | null;
 }
 export interface ProductoAliado { codigo: 'diagnostico_avanzado' | 'diagnostico_avanzado_sesion'; nombre: string; creditos: number; mxn: number }
 
@@ -35,7 +38,8 @@ export const leyLabel = (l: string | null) => (l ? `Ley ${l.replace(/^Ley\s*/i, 
 /** Estado de pensión dicho para el aliado (chip de la lista y encabezado de la pestaña). */
 export function estadoPension(r: FilaResultadoAliado): [string, string] {
   if (r.estado === 'ya_cliente') return ['Ya era cliente de Trol', 'bg-amber-100 text-amber-900'];
-  if (r.diagnostico_estado === 'listo') return ['Diagnóstico listo', 'bg-emerald-100 text-emerald-900'];
+  if (r.diagnostico_estado === 'listo') return [r.diagnostico_autor === 'aliado' ? 'Diagnóstico hecho por ti' : r.diagnostico_autor === 'aliado_revisado' ? 'Diagnóstico revisado por Trol' : 'Diagnóstico listo', 'bg-emerald-100 text-emerald-900'];
+  if (r.calculadora_desbloqueada && r.estado === 'listo') return ['Calculadora lista', 'bg-ink text-white'];
   if ((r.compras ?? []).length) return [r.diagnostico_estado === 'en_elaboracion' ? 'Diagnóstico en elaboración' : 'Cálculos pedidos', 'bg-ink text-white'];
   if (r.estado === 'listo') return ['Listo', 'bg-emerald-100 text-emerald-900'];
   if (r.estado === 'fallida') return ['No se pudo consultar', 'bg-amber-100 text-amber-900'];
@@ -196,13 +200,22 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
                 <span key={c.producto} className="rounded-full bg-cream px-2 py-0.5 font-semibold">{c.nombre} · {fecha(c.en)}</span>
               ))}
               {r.diagnostico_estado === 'listo' && r.diagnostico_doc_id ? (
-                <a className={btn} href={`/aliado/diagnostico/${r.persona_id}`} target="_blank" rel="noreferrer">Ver diagnóstico (PDF)</a>
+                <a className={btn} href={`/aliado/diagnostico/${r.persona_id}`} target="_blank" rel="noreferrer">Ver diagnóstico (PDF){r.diagnostico_autor === 'aliado' ? ' · elaborado por ti' : r.diagnostico_autor === 'aliado_revisado' ? ' · revisado por Trol' : ''}</a>
               ) : r.diagnostico_estado === 'en_elaboracion' ? (
                 <span className="text-muted">Diagnóstico en elaboración</span>
+              ) : r.calculadora_desbloqueada ? (
+                <span className="text-muted">Calculadora desbloqueada: haz la asesoría y genera el diagnóstico</span>
               ) : (
                 <span className="text-muted">Pedido: estamos haciendo los cálculos</span>
               )}
               {r.proxima_sesion ? <span className="text-muted">· Sesión {fechaHora(r.proxima_sesion)}</span> : null}
+            </div>
+          ) : null}
+          {/* 302 · Con cálculos o asesoría pagados, el aliado hace la asesoría él mismo. */}
+          {r.calculadora_desbloqueada ? (
+            <div className="mt-2">
+              <a className="inline-block rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white hover:opacity-90" href={`/aliado/asesoria/${r.persona_id}`}>Abrir calculadora y hacer el diagnóstico →</a>
+              <span className="ml-2 text-[11px] text-muted">Ves todo su historial del IMSS, cierras escenarios y generas el documento firmado por ti.</span>
             </div>
           ) : null}
           <Comprar persona={r.persona_id} productos={productos} creditos={creditos} tieneWallet={tieneWallet} compras={compras} />

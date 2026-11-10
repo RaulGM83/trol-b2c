@@ -199,10 +199,10 @@ const Encabezado = ({ cliente }: { cliente: string }) => (
   />
 );
 
-const Pie = ({ cliente }: { cliente: string }) => (
+const Pie = ({ cliente, autoria }: { cliente: string; autoria?: DiagnosticoPdfInput['autoria'] }) => (
   <View style={s.foot} fixed>
-    <Text style={s.pieMarca}>El Trol financiero</Text>
-    <Text style={s.footTxt}>Diagnóstico Avanzado · {cliente}</Text>
+    <Text style={s.pieMarca}>{autoria ? `Elaborado por ${autoria.elaborado_por}${autoria.empresa ? ` · ${autoria.empresa}` : ''}` : 'El Trol financiero'}</Text>
+    <Text style={s.footTxt}>{autoria ? (autoria.revisado ? 'Con la calculadora de El Trol Financiero · revisado por Trol' : 'Con la calculadora de El Trol Financiero · no revisado por Trol') : `Diagnóstico Avanzado · ${cliente}`}</Text>
     <Text style={s.footTxt} render={({ pageNumber, totalPages }) => `${pageNumber} de ${totalPages}`} />
   </View>
 );
@@ -233,6 +233,8 @@ export type DiagnosticoPdfInput = {
   cliente: string;
   curp?: string | null;
   asesor?: string | null;
+  /** 302d · Lo elaboró un aliado con la calculadora de Trol: así se firma, en portada y pie. */
+  autoria?: { elaborado_por: string; empresa: string | null; revisado: boolean } | null;
   estado: 'borrador' | 'revisado' | 'entregado';
   fecha: string;
   hechos: any;
@@ -337,11 +339,15 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
           <Text style={s.sub}>{d.cliente}</Text>
           <Text style={s.sub}>
             {fecha(d.fecha)}
-            {d.asesor ? ` · preparado por ${d.asesor}` : ''}
+            {d.autoria ? ` · elaborado por ${d.autoria.elaborado_por}${d.autoria.empresa ? ` (${d.autoria.empresa})` : ''}` : d.asesor ? ` · preparado por ${d.asesor}` : ''}
             {d.curp ? ` · CURP ${d.curp}` : ''}
           </Text>
           <Text style={s.subLime}>
-            Este documento recoge lo que revisamos juntos en tu asesoría.
+            {d.autoria
+              ? d.autoria.revisado
+                ? `Elaborado por ${d.autoria.elaborado_por} con la calculadora de El Trol Financiero y revisado por Trol.`
+                : `Elaborado por ${d.autoria.elaborado_por} con la calculadora de El Trol Financiero. Este reporte no fue revisado por Trol.`
+              : 'Este documento recoge lo que revisamos juntos en tu asesoría.'}
           </Text>
         </View>
         {borrador ? <Aviso /> : null}
@@ -772,7 +778,7 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
             </>
           ) : null}
         </View>
-        <Pie cliente={d.cliente} />
+        <Pie cliente={d.cliente} autoria={d.autoria} />
       </Page>
 
       {/* -------- Cómo funciona tu pensión -------- */}
@@ -800,7 +806,7 @@ export function diagnosticoDoc(d: DiagnosticoPdfInput) {
               </Sec>
             ))}
           </View>
-          <Pie cliente={d.cliente} />
+          <Pie cliente={d.cliente} autoria={d.autoria} />
         </Page>
       ) : null}
     </Document>

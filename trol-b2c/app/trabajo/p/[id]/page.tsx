@@ -356,17 +356,24 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // porque la pestaña lo edita; la vista sólo sirve para listar.
   const [{ data: diagRow }, { data: escsCerrados }] = await Promise.all([
     db.from('diagnosticos')
-      .select('id,estado,escenario_ids,asesoria_ids,redactor,motor_version,prompt_version,instrucciones_version,ensayo,creado_en,actualizado_en,entregado_en,contenido,creado_por')
+      .select('id,estado,escenario_ids,asesoria_ids,redactor,motor_version,prompt_version,instrucciones_version,ensayo,creado_en,actualizado_en,entregado_en,contenido,creado_por,autor_tipo,autor_aliado_id,elaborado_por,revision_pedida_en,revisado_en')
       .eq('persona_id', params.id)
       .order('creado_en', { ascending: false })
       .limit(1)
       .maybeSingle(),
     db.from('v_escenarios_cerrados')
-      .select('id,tipo,creado_en,creado_por_nombre,motor_actual,resumen')
+      .select('id,tipo,creado_en,creado_por_nombre,motor_actual,resumen,autor_tipo,autor_aliado_nombre')
       .eq('persona_id', params.id)
       .order('creado_en', { ascending: false })
       .limit(20),
   ]);
+
+  // 302d · Si el diagnóstico lo hizo un aliado, se dice quién (etiqueta "Hecho por …").
+  const aliadosNombre = new Map<string, string>();
+  if ((diagRow as Any)?.autor_aliado_id) {
+    const { data: al } = await db.from('aliados').select('id,nombre').eq('id', (diagRow as Any).autor_aliado_id).maybeSingle();
+    if (al) aliadosNombre.set((al as Any).id, (al as Any).nombre);
+  }
 
   // Afinar el redactor (117) es de quien responde por el producto. El RLS ya lo
   // impide de todos modos: esto sólo evita enseñar una puerta que no abre.
@@ -531,7 +538,7 @@ export default async function Expediente({ params, searchParams }: { params: { i
   const diagPanel = (
         <DiagnosticoPanel
           personaId={e.persona_id}
-          diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por) } as DiagnosticoRow) : null}
+          diagnostico={diagRow ? ({ ...(diagRow as Any), creado_por_nombre: miembroNombre((diagRow as Any).creado_por), autor_aliado_nombre: (diagRow as Any).autor_aliado_id ? ((aliadosNombre.get((diagRow as Any).autor_aliado_id) as string | undefined) ?? 'aliado') : null } as DiagnosticoRow) : null}
           escenarios={(escsCerrados ?? []) as EscenarioCerradoOpcion[]}
           asesorias={historialInf.map((a) => ({
             id: a.id, nombre: a.nombre ?? null, desarrollo: a.desarrollo ?? null,
