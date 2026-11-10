@@ -73,7 +73,7 @@ export function DiagnosticoAliado({ persona, nombreAliado, empresa, creditos }: 
             {entregado.autor_tipo === 'aliado' && !entregado.revision_pedida_en ? (
               confirmarRev === entregado.id ? (
                 <span className="flex flex-wrap items-center gap-2 rounded-lg border border-ink bg-white px-2 py-1">
-                  Se descuentan <b>10 créditos</b> ($200){creditos != null ? ` de tus ${creditos}` : ''}. Trol lo revisa, lo corrige y lo re-firma.
+                  Se descuentan <b>10 créditos</b>{creditos != null ? ` de tus ${creditos}` : ''}. Trol lo revisa, lo corrige y lo re-firma.
                   <button className="rounded-lg bg-ink px-3 py-1 text-xs font-bold text-white disabled:opacity-40" disabled={pending || (creditos != null && creditos < 10)} onClick={() => revisar(entregado.id)}>{pending ? 'Pidiendo…' : 'Confirmar'}</button>
                   <button className={btn} onClick={() => setConfirmarRev(null)}>Cancelar</button>
                 </span>

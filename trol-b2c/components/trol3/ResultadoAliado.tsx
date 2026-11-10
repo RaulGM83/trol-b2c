@@ -27,7 +27,8 @@ export interface FilaResultadoAliado {
   calculadora_desbloqueada?: boolean | null; diagnostico_id?: string | null; diagnostico_autor?: 'trol' | 'aliado' | 'aliado_revisado' | string | null;
   elaborado_por?: string | null; revision_pedida_en?: string | null; revisado_en?: string | null;
 }
-export interface ProductoAliado { codigo: 'diagnostico_avanzado' | 'diagnostico_avanzado_sesion'; nombre: string; creditos: number; mxn: number }
+// 302e · Nunca se muestra el equivalente en pesos: el aliado puede revender los créditos con su propio margen (Raúl, 10-nov).
+export interface ProductoAliado { codigo: 'diagnostico_avanzado' | 'diagnostico_avanzado_sesion'; nombre: string; creditos: number }
 
 const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const money = (n: number | null | undefined) => (n == null ? '—' : mxn0.format(n));
@@ -103,7 +104,7 @@ function Comprar({ persona, productos, creditos, tieneWallet, compras }: {
     const alcanza = (creditos ?? 0) >= confirmando.creditos;
     return (
       <div className="mt-2 rounded-lg border border-ink bg-cream p-3 text-xs">
-        <b>{confirmando.nombre}</b> · se descuentan <b>{confirmando.creditos} créditos</b> ({money(confirmando.mxn)}) de tus {creditos ?? 0}.
+        <b>{confirmando.nombre}</b> · se descuentan <b>{confirmando.creditos} créditos</b> de tus {creditos ?? 0}.
         {!alcanza ? <div className="mt-1 text-amber-900">No te alcanzan. Escríbenos para recargar.</div> : null}
         <div className="mt-2 flex gap-2">
           <button className="rounded-lg bg-ink px-3 py-1 text-xs font-bold text-white disabled:opacity-40" disabled={pending || !alcanza} onClick={() => confirmar(confirmando)}>{pending ? 'Pidiendo…' : 'Confirmar'}</button>

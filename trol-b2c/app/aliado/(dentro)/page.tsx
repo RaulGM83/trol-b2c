@@ -30,7 +30,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Tus clientes · Trol' };
 
-/** 291 · Lo que el aliado puede comprar con créditos. 1 crédito = $20 (decisión de Raúl, 2-nov). */
+/** 291 · Lo que el aliado puede comprar con créditos. El equivalente en pesos NO se enseña en el portal (302e, Raúl 10-nov): el aliado fija su precio. */
 const PRODUCTOS_ALIADO: ProductoAliado['codigo'][] = ['diagnostico_avanzado', 'diagnostico_avanzado_sesion'];
 
 export default async function EspacioAliado() {
@@ -61,7 +61,7 @@ export default async function EspacioAliado() {
   const pagado = coms.filter((c) => c.estado === 'pagada').reduce((s, c) => s + Number(c.monto), 0);
   const productos: ProductoAliado[] = PRODUCTOS_ALIADO.flatMap((codigo) => {
     const p = ((prods ?? []) as Any[]).find((x) => x.codigo === codigo);
-    return p && p.precio_creditos ? [{ codigo, nombre: p.nombre as string, creditos: Number(p.precio_creditos), mxn: Number(p.precio_creditos) * 20 }] : [];
+    return p && p.precio_creditos ? [{ codigo, nombre: p.nombre as string, creditos: Number(p.precio_creditos) }] : [];
   });
 
   const qr = link ? await QRCode.toDataURL(link, { margin: 1, width: 320 }) : null;
