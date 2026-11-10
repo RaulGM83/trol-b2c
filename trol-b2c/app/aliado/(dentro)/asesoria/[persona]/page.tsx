@@ -12,7 +12,6 @@ import { leerSerieINPC } from '@/lib/trol3/inpc';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { HistorialLaboral } from '@/components/trol3/HistorialLaboral';
 import { DiagnosticoAliado } from '@/components/trol3/DiagnosticoAliado';
-import { leyLabel } from '@/components/trol3/ResultadoAliado';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +19,8 @@ export const metadata = { title: 'Calculadora · Aliados Trol' };
 
 const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const money = (n: unknown) => (n == null || n === '' ? '—' : mxn0.format(Number(n)));
+// (no se importa de ResultadoAliado: es un módulo 'use client' y llamarlo en el servidor revienta la página)
+const leyLabel = (l: string | null) => (l ? `Ley ${l.replace(/^Ley\s*/i, '')}` : null);
 const EMPLEO: Record<string, string> = { empleado: 'Sí, cotiza hoy', desempleado: 'No cotiza hoy', pensionado: 'Ya está pensionado' };
 
 function Dato({ k, v }: { k: string; v: React.ReactNode }) {
