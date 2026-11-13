@@ -132,6 +132,10 @@ export interface Aliado {
   /** 291 · Wallet de créditos (aliados.partner_id → public.partners). null = sin wallet. */
   creditos?: number | null;
   tiene_wallet?: boolean;
+  /** 305 · Alta v2 y calculadora, pero sin nada de Infonavit. */
+  solo_pension?: boolean;
+  /** 305 · false = el cliente es del aliado: sin teléfono, sin asesor de Trol. */
+  trol_contacta?: boolean;
 }
 
 /** Aliado referidor autenticado, o null. */

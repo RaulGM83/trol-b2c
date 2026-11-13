@@ -90,7 +90,7 @@ export default async function CalculadoraAliado({ params }: { params: { persona:
           <Dato k="AFORE" v={e.afore_actual} />
           <Dato k="Salario diario registrado" v={val('salario_diario') != null ? money(val('salario_diario')) : null} />
           <Dato k="Saldo RCV 97" v={e.saldo_rcv97 != null ? money(e.saldo_rcv97) : null} />
-          <Dato k="Saldo Infonavit" v={e.saldo_infonavit != null ? money(e.saldo_infonavit) : null} />
+          {a.solo_pension ? null : <Dato k="Saldo Infonavit" v={e.saldo_infonavit != null ? money(e.saldo_infonavit) : null} />}
           <Dato k="Última cotización" v={val('ultima_cotizacion') ? fmtFecha(String(val('ultima_cotizacion'))) : null} />
           <Dato k="Mod 40" v={e.mod40_retro_aplica == null ? null : e.mod40_retro_aplica ? 'Aplica' : 'No aplica'} />
           <Dato k="Pensión estimada hoy" v={e.pension_base != null && Number(e.pension_base) > 0 ? `${money(e.pension_base)} / mes` : null} />

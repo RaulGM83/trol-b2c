@@ -275,7 +275,7 @@ export async function agregarNssPorAliado(personaId: string, nss: string) {
 // ---------------------------------------------------------------------------
 
 /** Pide a Trol (llave de servicio) las dos consultas que apliquen: IMSS con CURP, Infonavit con NSS. */
-async function dispararConsultas(personaId: string, curp: string | null, nss: string | null, yaCliente: boolean) {
+async function dispararConsultas(personaId: string, curp: string | null, nss: string | null, yaCliente: boolean, conInfonavit = true) {
   const admin = t3admin();
   if (curp) {
     const d = await admin.rpc('declarar', { p_persona: personaId, p_campo: 'curp', p_valor: curp, p_actor: 'aliado', p_actor_id: null, p_capa: 'declarado' });
@@ -283,7 +283,7 @@ async function dispararConsultas(personaId: string, curp: string | null, nss: st
       await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'imss_historial', p_actor: 'aliado', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'alta_aliado', p_forzar: false, p_proveedor: 'jordan' });
     }
   }
-  if (!yaCliente && nss) {
+  if (conInfonavit && !yaCliente && nss) {
     await admin.rpc('pedir_consulta', { p_persona: personaId, p_tipo: 'infonavit', p_actor: 'sistema', p_actor_id: null, p_pagador: 'trol', p_notificar: false, p_motivo: 'aliado_infonavit', p_forzar: false, p_proveedor: null });
   }
 }
@@ -295,22 +295,28 @@ async function dispararConsultas(personaId: string, curp: string | null, nss: st
  */
 export async function altaV2PorAliado(x: { nombre: string; curp?: string | null; nss?: string | null; telefono?: string | null; autoriza: boolean }) {
   const a = await requireAliado();
-  if (!a.programa_infonavit) return fail(new Error(EXPLICACION.sin_programa_infonavit));
+  // 305 · solo pensión (Resolut): mismo alta v2 sin Infonavit; si Trol no contacta, el teléfono ni se captura.
+  const soloPension = !!a.solo_pension;
+  const contacta = a.trol_contacta !== false;
+  if (!a.programa_infonavit && !soloPension) return fail(new Error(EXPLICACION.sin_programa_infonavit));
   const nombre = (x.nombre ?? '').trim();
   const curp = (x.curp ?? '').trim().toUpperCase();
-  const nss = (x.nss ?? '').replace(/\D/g, '');
-  const tel = (x.telefono ?? '').replace(/\D/g, '').slice(-10);
+  const nss = soloPension ? '' : (x.nss ?? '').replace(/\D/g, '');
+  const tel = contacta ? (x.telefono ?? '').replace(/\D/g, '').slice(-10) : '';
   if (nombre.length < 3) return fail(new Error(EXPLICACION.falta_nombre));
+  if (soloPension && !curp) return fail(new Error(EXPLICACION.curp_invalida));
   if (!curp && !nss) return fail(new Error(EXPLICACION.falta_curp_o_nss));
   if (curp && !CURP_RE.test(curp)) return fail(new Error(EXPLICACION.curp_invalida));
   if (nss && nss.length !== 11) return fail(new Error(EXPLICACION.nss_invalido));
   if (tel && tel.length !== 10) return fail(new Error(EXPLICACION.telefono_invalido));
   if (!x.autoriza) return fail(new Error('Necesitamos que confirmes que la persona te autorizó.'));
 
-  const consentimiento =
-    `${a.nombre} declara que ${nombre} lo autorizó a compartir su nombre${tel ? ', teléfono' : ''}` +
-    `${curp ? ', CURP' : ''}${nss ? ', NSS' : ''} con El Trol Financiero para consultar su precalificación ` +
-    `de crédito Infonavit${curp ? ' y su historial ante el IMSS' : ''}, y para que lo contacten con una propuesta.`;
+  const consentimiento = soloPension
+    ? `${a.nombre} declara que ${nombre} lo autorizó a compartir su nombre y CURP con El Trol Financiero para consultar ` +
+      `su historial ante el IMSS y calcular su situación de pensión${contacta ? ', y para que lo contacten con una propuesta' : ''}.`
+    : `${a.nombre} declara que ${nombre} lo autorizó a compartir su nombre${tel ? ', teléfono' : ''}` +
+      `${curp ? ', CURP' : ''}${nss ? ', NSS' : ''} con El Trol Financiero para consultar su precalificación ` +
+      `de crédito Infonavit${curp ? ' y su historial ante el IMSS' : ''}, y para que lo contacten con una propuesta.`;
 
   const { data, error } = await t3().rpc('alta_por_aliado_v2', {
     p_nombre: nombre, p_curp: curp || null, p_nss: nss || null, p_tel: tel || null, p_consentimiento: consentimiento,
@@ -319,10 +325,11 @@ export async function altaV2PorAliado(x: { nombre: string; curp?: string | null;
   const r = data as Any;
   const personaId = r?.persona_id as string;
   const yaCliente = r?.estado === 'por_revisar';
-  await dispararConsultas(personaId, (r?.curp as string | null) ?? null, (r?.nss as string | null) ?? null, yaCliente);
+  await dispararConsultas(personaId, (r?.curp as string | null) ?? null, (r?.nss as string | null) ?? null, yaCliente, !soloPension);
 
   let aviso: string | null = null;
   if (yaCliente) aviso = 'Registrado. Esa persona ya estaba con nosotros; lo revisamos y te confirmamos.';
+  else if (soloPension) aviso = 'Listo. Estamos consultando su historial en el IMSS; el resultado suele tardar unos minutos.';
   else if (r?.precliente) aviso = 'Listo. Estamos consultando IMSS e Infonavit. Como no tiene teléfono, Trol no lo contacta hasta que lo agregues.';
   else if (nss) aviso = 'Listo. Infonavit suele responder en un par de minutos; el IMSS tarda un poco más.';
   else aviso = 'Listo. Con la CURP primero sacamos su NSS del IMSS; la precalificación Infonavit sale después.';

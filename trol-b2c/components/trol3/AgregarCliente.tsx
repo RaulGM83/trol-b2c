@@ -15,7 +15,7 @@ type R = { ok: boolean; error?: string; nueva?: boolean; por_revisar?: boolean; 
 const VACIO = { nombre: '', telefono: '', curp: '', nss: '', infonavit: false, autoriza: false };
 const inp = 'rounded-lg border border-line px-3 py-2 text-sm';
 
-export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = false, creditosDisponibles = null }: { aliado: string; programaInfonavit: boolean; abiertoInicial?: boolean; creditosDisponibles?: number | null }) {
+export function AgregarCliente({ aliado, programaInfonavit, soloPension = false, trolContacta = true, abiertoInicial = false, creditosDisponibles = null }: { aliado: string; programaInfonavit: boolean; soloPension?: boolean; trolContacta?: boolean; abiertoInicial?: boolean; creditosDisponibles?: number | null }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(abiertoInicial);
   const [f, setF] = useState({ ...VACIO, infonavit: programaInfonavit });
@@ -27,18 +27,19 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
   const nssSucio = nss.length > 0 && nss.length !== 11;
   // 301 · Con el programa Infonavit (modelo Resag) el alta es v2: nombre + CURP y/o NSS; teléfono opcional
   // (sin él entra como precliente); las dos consultas salen solas y cuestan 1 crédito por persona.
-  const v2 = programaInfonavit;
+  // 305 · solo pensión (Resolut): mismo alta v2, con CURP obligatoria, sin NSS ni Infonavit; sin teléfono si Trol no contacta.
+  const v2 = programaInfonavit || soloPension;
   const tel10 = f.telefono.replace(/\D/g, '');
   const telSucio = tel10.length > 0 && tel10.length !== 10;
   const quiereInfonavit = programaInfonavit && f.infonavit;
   // Sin programa: CURP obligatoria (Raúl, 3-nov) y teléfono obligatorio.
   const listo = v2
-    ? f.nombre.trim().length >= 3 && f.autoriza && (curp.length === 18 || nss.length === 11) && !curpSucia && !nssSucio && !telSucio && (creditosDisponibles == null || creditosDisponibles >= 1)
+    ? f.nombre.trim().length >= 3 && f.autoriza && (curp.length === 18 || (!soloPension && nss.length === 11)) && !curpSucia && !nssSucio && !telSucio && (creditosDisponibles == null || creditosDisponibles >= 1)
     : tel10.length === 10 && f.nombre.trim().length >= 3 && f.autoriza && curp.length === 18 && !nssSucio;
 
   const enviar = () => start(async () => {
     const r = (v2
-      ? await altaV2PorAliado({ nombre: f.nombre, curp: curp || null, nss: nss || null, telefono: tel10 || null, autoriza: f.autoriza })
+      ? await altaV2PorAliado({ nombre: f.nombre, curp: curp || null, nss: soloPension ? null : nss || null, telefono: trolContacta ? tel10 || null : null, autoriza: f.autoriza })
       : await altaClientePorAliado({ telefono: f.telefono, nombre: f.nombre, curp: curp || null, autoriza: f.autoriza })) as R;
     if (!r.ok) { toast.error(r.error ?? 'No se pudo'); return; }
     setF({ ...VACIO, infonavit: programaInfonavit });
@@ -58,7 +59,9 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold">Agregar cliente</h2>
-          {v2 ? (
+          {soloPension ? (
+            <p className="text-xs text-muted">Con su CURP consultamos su historial en el IMSS y calculamos su pensión. Cuesta <b>1 crédito por persona</b>, que se descuenta cuando llega el resultado{creditosDisponibles != null ? <> (tienes <b>{creditosDisponibles}</b> disponibles)</> : null}.{trolContacta ? ' El teléfono es opcional: sin él, Trol no lo contacta.' : ' El cliente es tuyo: Trol no lo contacta.'}</p>
+          ) : v2 ? (
             <p className="text-xs text-muted">Con su CURP o su NSS consultamos IMSS e Infonavit al mismo tiempo. Cuesta <b>1 crédito por persona</b>, que se descuenta cuando llega el primer resultado{creditosDisponibles != null ? <> (tienes <b>{creditosDisponibles}</b> disponibles)</> : null}. El teléfono es opcional: sin él, Trol no lo contacta hasta que lo agregues.</p>
           ) : (
             <p className="text-xs text-muted">Nosotros lo contactamos. Con su CURP revisamos su pensión; si marcas Infonavit, también lo precalificamos (su NSS lo hace inmediato).</p>
@@ -69,9 +72,9 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <input className={inp} placeholder="Nombre completo" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
-        <input className={`${inp} ${telSucio ? 'border-red-400' : ''}`} placeholder={v2 ? 'Teléfono (opcional, 10 dígitos)' : 'Teléfono (10 dígitos)'} inputMode="numeric" value={f.telefono} onChange={(e) => setF({ ...f, telefono: e.target.value })} />
+        {trolContacta ? <input className={`${inp} ${telSucio ? 'border-red-400' : ''}`} placeholder={v2 ? 'Teléfono (opcional, 10 dígitos)' : 'Teléfono (10 dígitos)'} inputMode="numeric" value={f.telefono} onChange={(e) => setF({ ...f, telefono: e.target.value })} /> : null}
         <input className={`${inp} font-mono uppercase ${curpSucia ? 'border-red-400' : ''}`} maxLength={18} placeholder={v2 ? 'CURP (18 caracteres)' : 'CURP (18 caracteres)'} value={f.curp} onChange={(e) => setF({ ...f, curp: e.target.value.toUpperCase() })} />
-        {v2 ? (
+        {soloPension ? null : v2 ? (
           <div>
             <input className={`${inp} w-full font-mono ${nssSucio ? 'border-red-400' : ''}`} inputMode="numeric" placeholder="NSS (11 dígitos)" value={f.nss} onChange={(e) => setF({ ...f, nss: e.target.value })} />
             <p className="mt-1 text-[11px] text-muted">Con uno basta: la CURP trae la pensión y, por el IMSS, el NSS para Infonavit; el NSS hace Infonavit inmediato y, con el historial, la CURP. Con los dos, todo a la vez.</p>
@@ -93,8 +96,8 @@ export function AgregarCliente({ aliado, programaInfonavit, abiertoInicial = fal
         <label className="flex items-start gap-2 rounded-xl bg-cream px-3 py-2 text-xs sm:col-span-2">
           <input type="checkbox" checked={f.autoriza} onChange={(e) => setF({ ...f, autoriza: e.target.checked })} className="mt-0.5" />
           <span>
-            Confirmo que <b>{f.nombre.trim() || 'esta persona'}</b> me autorizó a compartir sus datos con El Trol Financiero para que lo contacten y revisen su situación de pensión
-            , incluida la consulta de su historial ante el IMSS{quiereInfonavit || v2 ? ', y su precalificación de crédito Infonavit' : ''}.
+            Confirmo que <b>{f.nombre.trim() || 'esta persona'}</b> me autorizó a compartir sus datos con El Trol Financiero para {trolContacta ? 'que lo contacten y revisen' : 'revisar'} su situación de pensión
+            , incluida la consulta de su historial ante el IMSS{!soloPension && (quiereInfonavit || v2) ? ', y su precalificación de crédito Infonavit' : ''}.
           </span>
         </label>
 

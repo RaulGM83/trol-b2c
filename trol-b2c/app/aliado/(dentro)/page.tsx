@@ -55,7 +55,15 @@ export default async function EspacioAliado() {
       : Promise.resolve({ data: [] as Any[] }),
   ]);
 
-  const refs = (resultado ?? []) as FilaResultadoAliado[];
+  // 305 · solo pensión (Resolut): nada de Infonavit llega a la pantalla; cliente del aliado: sin avisos de teléfono.
+  const soloPension = !!a.solo_pension;
+  const trolContacta = a.trol_contacta !== false;
+  const esInfonavit = (o: Any) => /infonavit|inmueble|mejoravit|vivienda/i.test(`${o?.codigo ?? ''} ${o?.nombre ?? ''}`);
+  const refs = ((resultado ?? []) as FilaResultadoAliado[]).map((r) => ({
+    ...r,
+    ...(soloPension ? { saldo_infonavit: null, infonavit_monto_credito: null, credito_infonavit_vigente: null, oportunidades: (r.oportunidades ?? []).filter((o) => !esInfonavit(o)) } : {}),
+    ...(trolContacta ? {} : { precliente: false }),
+  })) as FilaResultadoAliado[];
   const coms = (comisiones ?? []) as Any[];
   const porPagar = coms.filter((c) => c.estado === 'devengada').reduce((s, c) => s + Number(c.monto), 0);
   const pagado = coms.filter((c) => c.estado === 'pagada').reduce((s, c) => s + Number(c.monto), 0);
@@ -68,9 +76,9 @@ export default async function EspacioAliado() {
 
   // 302a · Semáforo: si el IMSS o Infonavit no responden (o los apagamos), se le dice al aliado qué hacer.
   const { data: sem } = await db.rpc('semaforo_proveedores');
-  const rojos = ((sem ?? []) as Any[]).filter((f) => f.salud?.estado === 'rojo' && f.codigo !== 'bdi');
+  const rojos = ((sem ?? []) as Any[]).filter((f) => f.salud?.estado === 'rojo' && f.codigo !== 'bdi' && !(soloPension && f.codigo === 'precalix'));
   // 301 · Créditos disponibles = saldo del wallet − altas pendientes de cobrar (1 crédito por persona).
-  const { data: disp } = a.programa_infonavit && a.tiene_wallet ? await db.rpc('creditos_disponibles_aliado', { p_aliado: a.id }) : { data: null };
+  const { data: disp } = (a.programa_infonavit || soloPension) && a.tiene_wallet ? await db.rpc('creditos_disponibles_aliado', { p_aliado: a.id }) : { data: null };
   const creditosDisponibles = disp == null ? null : Number(disp);
 
   // La cotización se arma con la llave de servicio SÓLO para filas que la vista le devolvió.
@@ -124,11 +132,11 @@ export default async function EspacioAliado() {
       <div>
         <h1 className="text-xl font-extrabold">Tus clientes</h1>
         <p className="text-xs text-muted">
-          Son clientes de Trol: nosotros los contactamos y los atendemos. Aquí ves cómo van.
+          {trolContacta ? 'Son clientes de Trol: nosotros los contactamos y los atendemos. Aquí ves cómo van.' : 'Son tus clientes: Trol no los contacta. Aquí consultas su información del IMSS y haces su asesoría de pensión.'}
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className={`grid gap-3 ${trolContacta ? 'sm:grid-cols-4' : 'sm:grid-cols-2'}`}>
         <div className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Clientes</div>
           <div className="text-2xl font-extrabold">{clientes.length}</div>
@@ -138,6 +146,7 @@ export default async function EspacioAliado() {
           <div className="text-2xl font-extrabold">{a.tiene_wallet ? (a.creditos ?? 0) : '—'}</div>
           <div className="text-[11px] text-muted">{a.tiene_wallet ? (creditosDisponibles != null && creditosDisponibles !== (a.creditos ?? 0) ? `${creditosDisponibles} disponibles (${(a.creditos ?? 0) - creditosDisponibles} apartados por consultas en curso)` : 'Escríbenos para recargar') : 'Escríbenos para activarlos'}</div>
         </div>
+        {trolContacta ? (<>
         <div className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] uppercase tracking-wide text-muted">Por pagarte</div>
           <div className="text-2xl font-extrabold">{fmtMXN(porPagar)}</div>
@@ -146,6 +155,7 @@ export default async function EspacioAliado() {
           <div className="text-[11px] uppercase tracking-wide text-muted">Ya pagado</div>
           <div className="text-2xl font-extrabold">{fmtMXN(pagado)}</div>
         </div>
+        </>) : null}
       </div>
 
       {rojos.length ? (
@@ -165,10 +175,12 @@ export default async function EspacioAliado() {
         aliado={a.nombre}
         comisionInfonavit={Number(a.comision_infonavit ?? 25000)}
         programaInfonavit={!!a.programa_infonavit}
+        soloPension={soloPension}
+        trolContacta={trolContacta}
         creditosDisponibles={creditosDisponibles}
       />
 
-      {link ? (
+      {!trolContacta ? null : link ? (
         <LinkAliado link={link} qr={qr} infonavit={!!a.programa_infonavit} />
       ) : (
         <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">

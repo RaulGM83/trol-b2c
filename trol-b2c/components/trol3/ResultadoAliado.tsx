@@ -60,7 +60,7 @@ function Dato({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
-export function mensajeParaCliente(r: FilaResultadoAliado, aliado: string) {
+export function mensajeParaCliente(r: FilaResultadoAliado, aliado: string, trolContacta = true) {
   const nombre = r.nombre || 'Hola';
   const partes = [`${nombre}, ya revisamos tu información del IMSS con El Trol Financiero.`];
   const datos: string[] = [];
@@ -75,7 +75,7 @@ export function mensajeParaCliente(r: FilaResultadoAliado, aliado: string) {
   }
   const ops = (r.oportunidades ?? []).map((o) => o.nombre).filter(Boolean);
   if (ops.length) partes.push(`Vemos estas oportunidades: ${ops.join(', ')}.`);
-  partes.push(`Te van a contactar de Trol para explicarte con calma. Cualquier duda, aquí estoy. — ${aliado}`);
+  partes.push(trolContacta ? `Te van a contactar de Trol para explicarte con calma. Cualquier duda, aquí estoy. — ${aliado}` : `Te busco para explicártelo con calma. Cualquier duda, aquí estoy. — ${aliado}`);
   return partes.join('\n');
 }
 
@@ -125,10 +125,12 @@ function Comprar({ persona, productos, creditos, tieneWallet, compras }: {
 }
 
 /** La pestaña Pensión de un cliente. */
-export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, puedeNss = false, tieneInfonavit = false }: {
+export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, puedeNss = false, puedeSisec, trolContacta = true, tieneInfonavit = false }: {
   r: FilaResultadoAliado; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean; aliado: string;
   /** 294 · El aliado tiene el programa Infonavit: si la CURP falló, con el NSS se puede seguir por ahí. */
   puedeNss?: boolean; tieneInfonavit?: boolean;
+  /** 305 · puede subir el SISEC aunque no tenga Infonavit; y si Trol contacta al cliente. */
+  puedeSisec?: boolean; trolContacta?: boolean;
 }) {
   const [label, cls] = estadoPension(r);
   const ops = r.oportunidades ?? [];
@@ -149,7 +151,7 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
         <p className="mt-2 text-xs text-amber-900">Sin CURP no podemos consultar su información al IMSS. {puedeNss ? 'Si entró con NSS, Infonavit sigue su curso y, al llegar su historial, la CURP se completa sola. ' : ''}Mándanosla o agrégalo otra vez con ella.</p>
       ) : null}
       {/* 301 · SISEC subido por el aliado: siempre disponible; destacado cuando Trol no lo consigue. */}
-      {r.estado !== 'ya_cliente' && r.estado !== 'listo' && puedeNss ? <SubirSisec persona={r.persona_id} destacado={!!r.sugerir_sisec} /> : null}
+      {r.estado !== 'ya_cliente' && r.estado !== 'listo' && (puedeSisec ?? puedeNss) ? <SubirSisec persona={r.persona_id} destacado={!!r.sugerir_sisec} /> : null}
 
       {r.estado === 'listo' ? (
         <>
@@ -222,7 +224,7 @@ export function PensionDetalle({ r, productos, creditos, tieneWallet, aliado, pu
           <Comprar persona={r.persona_id} productos={productos} creditos={creditos} tieneWallet={tieneWallet} compras={compras} />
           {r.estado === 'listo' ? (
             <div className="mt-2">
-              <CopiarMensaje texto={mensajeParaCliente(r, aliado)} etiqueta="Copiar mensaje para tu cliente" className={btn} />
+              <CopiarMensaje texto={mensajeParaCliente(r, aliado, trolContacta)} etiqueta="Copiar mensaje para tu cliente" className={btn} />
             </div>
           ) : null}
         </>

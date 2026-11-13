@@ -59,9 +59,11 @@ function chipInfonavit(i: FilaInfonavitAliado | null): [string, string] | null {
   return [`Infonavit: ${label}`, cls];
 }
 
-export function ClientesAliado({ clientes, productos, creditos, tieneWallet, aliado, comisionInfonavit, programaInfonavit, creditosDisponibles = null }: {
+export function ClientesAliado({ clientes, productos, creditos, tieneWallet, aliado, comisionInfonavit, programaInfonavit, soloPension = false, trolContacta = true, creditosDisponibles = null }: {
   clientes: ClienteAliado[]; productos: ProductoAliado[]; creditos: number | null; tieneWallet: boolean;
   aliado: string; comisionInfonavit: number; programaInfonavit: boolean;
+  /** 305 · solo pensión / cliente del aliado (Trol no contacta). */
+  soloPension?: boolean; trolContacta?: boolean;
   /** 301 · saldo del wallet menos altas pendientes de cobrar. */
   creditosDisponibles?: number | null;
 }) {
@@ -108,7 +110,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {programaInfonavit ? <a href="/aliado/inventario" className="rounded-xl border border-ink px-3 py-2 text-sm font-bold text-ink hover:bg-cream">Inventario Infonavit</a> : null}
-          <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} abiertoInicial={n === 0} creditosDisponibles={creditosDisponibles} />
+          <AgregarCliente aliado={aliado} programaInfonavit={programaInfonavit} soloPension={soloPension} trolContacta={trolContacta} abiertoInicial={n === 0} creditosDisponibles={creditosDisponibles} />
         </div>
       </div>
 
@@ -126,7 +128,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
       ) : null}
 
       {n === 0 ? (
-        <p className="mt-4 text-sm text-muted">Todavía no llega nadie por tu liga. Agrega a alguien aquí o comparte tu liga; en cuanto escriba, aparece en esta lista.</p>
+        <p className="mt-4 text-sm text-muted">{trolContacta ? 'Todavía no llega nadie por tu liga. Agrega a alguien aquí o comparte tu liga; en cuanto escriba, aparece en esta lista.' : 'Todavía no tienes clientes. Agrega al primero con su CURP.'}</p>
       ) : filas.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Nadie con ese filtro.</p>
       ) : (
@@ -166,7 +168,7 @@ export function ClientesAliado({ clientes, productos, creditos, tieneWallet, ali
                     ) : null}
                     {t === 'pension' || !programaInfonavit ? (
                       c.pension
-                        ? <PensionDetalle r={c.pension} productos={productos} creditos={creditos} tieneWallet={tieneWallet} aliado={aliado} puedeNss={programaInfonavit} tieneInfonavit={!!c.infonavit && c.infonavit.resultado !== 'buscando_nss' && c.infonavit.resultado !== 'falta_nss'} />
+                        ? <PensionDetalle r={c.pension} productos={productos} creditos={creditos} tieneWallet={tieneWallet} aliado={aliado} puedeNss={programaInfonavit} puedeSisec={programaInfonavit || soloPension} trolContacta={trolContacta} tieneInfonavit={!!c.infonavit && c.infonavit.resultado !== 'buscando_nss' && c.infonavit.resultado !== 'falta_nss'} />
                         : <p className="text-xs text-muted">Esta persona llegó por Infonavit; su pensión la revisa Trol por dentro.</p>
                     ) : (
                       <InfonavitDetalle r={c.infonavit} comision={comisionInfonavit} />
