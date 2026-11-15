@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CarrilAcciones, type FilaCarril, type Miembro, MOTIVOS_FRIO } from '@/components/trol3/CarrilAcciones';
 
@@ -102,13 +103,23 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
   conCarril?: boolean;
 }) {
   const [txt, cls] = etiqueta(f, miembros);
+  // Cartera B · el gesto se ve al instante: la fila se atenúa con su mensaje mientras el servidor guarda y la
+  // lista se refresca atrás. Se limpia cuando la fila cambia (llegó el refresco) o a los 8 s de confirmado.
+  const [gesto, setGesto] = useState<{ estado: 'enviando' | 'ok'; texto?: string } | null>(null);
+  const firma = [f.carril, f.origen, f.marca?.id, f.ultimo_toque, f.ultimo_gesto, f.oportunidad_estado, f.cabecera_id].join('|');
+  useEffect(() => { setGesto(null); }, [firma]);
+  useEffect(() => {
+    if (gesto?.estado !== 'ok') return;
+    const t = setTimeout(() => setGesto(null), 8000);
+    return () => clearTimeout(t);
+  }, [gesto]);
   const uc = f.ultimo_contacto;
   const quien = uc ? (uc.actor === 'cliente' ? 'él/ella' : uc.actor === 'bot' ? 'Lukas' : 'nosotros') : null;
   const pot = f.potencial;
   const urg = pot?.urgencia_fecha && (pot.factor ?? 1) > 1 ? `ventana ${dia(pot.urgencia_fecha)}` : null;
   const dueno = equipo && f.cabecera_id ? miembros?.find((m) => m.id === f.cabecera_id)?.nombre?.split(' ')[0] : null;
   return (
-    <li className={`grid grid-cols-1 items-center gap-3 border-t border-line py-3 ${izquierda ? 'md:grid-cols-[24px_150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]' : 'md:grid-cols-[150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]'} ${atenuada ? 'opacity-70' : ''}`}>
+    <li className={`grid grid-cols-1 items-center gap-3 border-t border-line py-3 ${izquierda ? 'md:grid-cols-[24px_150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]' : 'md:grid-cols-[150px_190px_96px_minmax(220px,1fr)_minmax(0,330px)]'} ${atenuada ? 'opacity-70' : ''} ${gesto ? 'opacity-60' : ''}`}>
       {izquierda}
       <div className="flex flex-wrap gap-1">
         {conCarril ? <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${PILL[f.carril] ?? PILL.frios}`}>{({ favoritos: 'Favorito', calientes: 'Caliente', tibios: 'Tibio', frios: 'Frío', descartado: 'Descartado' } as Record<string, string>)[f.carril] ?? f.carril}</span> : null}
@@ -135,7 +146,13 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
         </div>
         <Senales f={f} />
       </div>
-      <CarrilAcciones fila={f} takoUrl={takoUrl(f.telefono)} libres={libres} alcance={alcance} esAdmin={esAdmin} miembros={miembros} equipo={equipo} />
+      <div>
+        {gesto ? <div role="status" className="text-right text-[11px] font-semibold text-green-700">{gesto.estado === 'enviando' ? 'Guardando… ' : ''}{gesto.texto}</div> : null}
+        <div className={gesto ? 'hidden' : ''}>
+          <CarrilAcciones fila={f} takoUrl={takoUrl(f.telefono)} libres={libres} alcance={alcance} esAdmin={esAdmin} miembros={miembros} equipo={equipo}
+            onGesto={(g) => setGesto(g.estado === 'error' ? null : { estado: g.estado, texto: g.texto })} />
+        </div>
+      </div>
     </li>
   );
 }

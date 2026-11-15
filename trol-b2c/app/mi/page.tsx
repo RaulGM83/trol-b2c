@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getPersonaMia, getMiembro, t3, fmtMXN, fmtNum, fmtFecha, type Any } from '@/lib/trol3/server';
 import { MiAcciones, ChatTrol, type ActualizacionImss, CompletarDatos, MisionCta, CanjearBoton, HablarBoton, AhorrarPuntos, SolicitarDoc, DesbloquearDoc, SubirDoc, CurpAcciones, type Identidad } from '@/components/trol3/MiAcciones';
@@ -58,6 +59,13 @@ export default async function MiExpediente({ searchParams }: { searchParams: { t
   // 147: sella que está adentro. El nudge y la cola de campañas lo respetan
   // media hora: no se interrumpe a quien ya está prestando atención.
   await db.rpc('marcar_visto_en_app');
+  // 308 · La IP con la que entra a su cuenta (acaba de aceptar el Aviso de Privacidad en el login):
+  // es la que el Buró de Ingresos pide como consentimiento. Una fila por IP cada 30 días; nunca rompe la página.
+  try {
+    const h = headers();
+    const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip')?.trim() || null;
+    if (ip) await db.rpc('registrar_aceptacion_aviso', { p_ip: ip, p_user_agent: h.get('user-agent')?.slice(0, 300) ?? null, p_origen: 'mi' });
+  } catch {}
   const [{ data: x, error }, { data: mis }, { data: jugada }, { data: expl }, { data: leidas }, { data: ident }, { data: pidActual }, { data: actualizacion }, { data: paradaData }] = await Promise.all([db.rpc('mi_expediente'), db.rpc('mi_misiones'), db.rpc('mi_mejor_jugada'), db.from('explicaciones').select('*').order('orden'), db.rpc('mis_explicaciones_leidas'), db.rpc('mi_identidad'), db.rpc('current_persona_id'), db.rpc('mi_actualizacion_imss'), db.rpc('mi_parada')]);
   const { data: linkCitas } = pidActual ? await db.rpc('link_citas_para', { p_persona: pidActual }) : { data: null };
   // 192 · Patrocinio (FIP) y Millas: sólo para quien llegó por un código con aliado.

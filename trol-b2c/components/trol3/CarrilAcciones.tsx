@@ -41,8 +41,12 @@ const isoEn = (dias: number) => { const d = new Date(); d.setDate(d.getDate() + 
  * que antes no se registraba: Contestó alimenta el pulso; Enfriar/Favorito/Descartar liberan el
  * tope con motivo; No aplica cierra sólo esa oportunidad; Asignar/Despertar para son de admin.
  */
-export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', esAdmin = false, miembros = [], equipo = false }: {
+export type GestoFila = { estado: 'enviando' | 'ok' | 'error'; texto?: string };
+
+export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', esAdmin = false, miembros = [], equipo = false, onGesto }: {
   fila: FilaCarril; takoUrl: string | null; libres?: number; alcance?: 'mios' | 'pozo'; esAdmin?: boolean; miembros?: Miembro[]; equipo?: boolean;
+  /** Cartera B · si la fila lo pasa, el gesto se pinta al instante y el servidor trabaja atrás. */
+  onGesto?: (g: GestoFila) => void;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
@@ -51,11 +55,24 @@ export function CarrilAcciones({ fila, takoUrl, libres = 99, alcance = 'mios', e
   const [nota, setNota] = useState('');
   const [fecha, setFecha] = useState('');
   const [pending, start] = useTransition();
-  const run = (fn: () => Promise<{ ok: boolean; error?: string; texto?: string }>, exito: string) => start(async () => {
-    const r = await fn();
-    setMsg(r.ok ? { ok: true, texto: r.texto ?? exito } : { ok: false, texto: r.error ?? 'No se pudo.' });
-    if (r.ok) { setHoja(null); setPick(''); setNota(''); router.refresh(); }
-  });
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; texto?: string }>, exito: string) => {
+    if (onGesto) {
+      // Cartera B · la fila se marca de inmediato; si el servidor dice que no, regresa con el error.
+      setHoja(null); setMsg(null); onGesto({ estado: 'enviando', texto: exito });
+      void (async () => {
+        let r: { ok: boolean; error?: string; texto?: string };
+        try { r = await fn(); } catch { r = { ok: false, error: 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.' }; }
+        if (r.ok) { setPick(''); setNota(''); onGesto({ estado: 'ok', texto: r.texto ?? exito }); start(() => router.refresh()); }
+        else { setMsg({ ok: false, texto: r.error ?? 'No se pudo.' }); onGesto({ estado: 'error' }); }
+      })();
+      return;
+    }
+    start(async () => {
+      const r = await fn();
+      setMsg(r.ok ? { ok: true, texto: r.texto ?? exito } : { ok: false, texto: r.error ?? 'No se pudo.' });
+      if (r.ok) { setHoja(null); setPick(''); setNota(''); router.refresh(); }
+    });
+  };
   const abrir = (h: Hoja) => { setHoja(hoja === h ? null : h); setPick(''); setNota(''); setFecha(''); setMsg(null); };
 
   const opAbierta = !!fila.oportunidad_id && !fila.no_contactar && ['detectada', 'presentada', 'interesada', undefined, null].includes(fila.oportunidad_estado as never);

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pedirConsulta, type OrigenPersona } from '@/app/trabajo/actions';
 import { Copiable, describirOrigen } from '@/components/trol3/RelacionExtras';
+import { registrarUso } from '@/components/trol3/RegistroUso';
 import type { FichaConsulta, FichaPreviaData } from '@/lib/trol3/ficha';
 
 const mxn0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -62,7 +63,8 @@ export function FichaPrevia({ f, personaId, enviar, hrefDocs, hrefCapturar, href
   hrefDocs: string; hrefCapturar: string; hrefOps: string;
 }) {
   const router = useRouter();
-  const [panel, setPanel] = useState(false);
+  const [panel, setPanelRaw] = useState(false);
+  const setPanel = (abierto: boolean) => { if (abierto) registrarUso(`/trabajo/p/${personaId}`, 'relacion', 'panel_actualizar'); setPanelRaw(abierto); };
   const enCurso = f.consultas.filter((c) => EN_CURSO.includes(c.estado));
 
   // Mientras haya una consulta en curso, la ficha se vuelve a leer sola (cada 15 s, 12 veces).
@@ -243,7 +245,7 @@ function PanelActualizar({ f, personaId, hrefDocs, hrefCapturar, cerrar }: { f: 
     else if (!res?.ok) {
       if (res?.motivo === 'validado_vigente') { texto = 'Ya hay un resultado reciente. Si de verdad hace falta, pídela de todos modos.'; setForzable(s.tipo); }
       else texto = `No se pidió: ${MOTIVO[res?.motivo ?? ''] ?? res?.motivo ?? 'sin motivo'}.`;
-    } else { texto = `Pedida${res.error ? ` · ${res.error}` : ''}. La ficha se actualiza sola cuando llegue.`; setForzable(null); }
+    } else { texto = `Pedida${res.error ? ` · ${res.error}` : ''}. La ficha se actualiza sola cuando llegue.`; setForzable(null); registrarUso(`/trabajo/p/${personaId}`, s.tipo, 'consulta_pedida'); }
     setMsg((m) => ({ ...m, [s.tipo]: texto }));
     setConfirmar(null);
     router.refresh();

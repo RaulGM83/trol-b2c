@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { RegistroUso } from '@/components/trol3/RegistroUso';
 import { getMiembro } from '@/lib/trol3/server';
 import { createClient } from '@/lib/supabase/server';
 import { Toaster } from '@/components/ui/sonner';
@@ -33,6 +35,7 @@ export default async function TrabajoLayout({ children }: { children: React.Reac
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       <Toaster richColors position="top-right" />
+      <Suspense fallback={null}><RegistroUso /></Suspense>
     </div>
   );
 }
