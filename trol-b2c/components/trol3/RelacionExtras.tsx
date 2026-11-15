@@ -62,7 +62,9 @@ export function CarrilCard({ fila, takoUrl, esAdmin, miembros }: { fila: FilaCar
 // ── Datos clave ────────────────────────────────────────────────────────────
 export type OpinionAfore = { afore: string; atencion: number | null; asesoria: number | null; recomendaria: number | null; comentario: string | null; actualizado_en: string };
 
-export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn, costoConsulta, origen, aliados, miembros, personaNombre, opinion = null }: {
+export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn, costoConsulta, origen, aliados, miembros, personaNombre, opinion = null, soloOrigen = false }: {
+  /** 307 · con la ficha previa arriba, aquí solo queda el origen, el registro y la opinión de su AFORE. */
+  soloOrigen?: boolean;
   personaId: string; curp: string | null; nss: string | null; fechaSisec: string | null; registradoEn: string | null; costoConsulta: number | null;
   origen: OrigenPersona | null; aliados: { id: string; nombre: string }[]; miembros: Miembro[]; personaNombre: string;
   /** 216 · lo que opina de su AFORE (trol3.opiniones_afore). */
@@ -75,7 +77,8 @@ export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn,
   const dias = diasDesde(fechaSisec);
   return (
     <section className="rounded-2xl border border-line bg-white p-5">
-      <H>Datos clave</H>
+      <H>{soloOrigen ? 'Origen y registro' : 'Datos clave'}</H>
+      {soloOrigen ? null : (<>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1"><Copiable label="CURP" valor={curp} /><Copiable label="NSS" valor={nss} /></div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
         <span>Información del IMSS: <b>{fechaSisec ? fmtDia(fechaSisec) : 'sin consulta'}</b>{dias != null ? <span className={dias > 90 ? 'ml-1 text-xs font-semibold text-amber-700' : 'ml-1 text-xs text-muted'}>({dias} días)</span> : null}</span>
@@ -93,6 +96,7 @@ export function DatosClaveCard({ personaId, curp, nss, fechaSisec, registradoEn,
         )}
       </div>
       {msg ? <p className="mt-1 text-xs text-muted">{msg}</p> : null}
+      </>)}
       {opinion ? (
         <p className="mt-3 text-sm" title={opinion.comentario ? `«${opinion.comentario}»` : undefined}>
           Su AFORE <b>{opinion.afore}</b>: la recomendaría <b className={opinion.recomendaria != null && opinion.recomendaria <= 6 ? 'text-red-700' : ''}>{opinion.recomendaria ?? '—'}/10</b>

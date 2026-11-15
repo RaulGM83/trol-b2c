@@ -72,7 +72,24 @@ function RutaMini({ parada }: { parada: number | null }) {
 export type FilaCompleta = FilaCarril & {
   edad?: number | null; ley?: string | null; semanas?: number | null; parada?: number | null; sigue?: string | null; toca?: string | null; sub?: string | null;
   ultimo_contacto?: { fecha: string; canal?: string; actor?: string; texto?: string } | null; cita?: string | null;
+  /** 307 · de cuándo es su información del IMSS y su precalificación Infonavit (null = no hay). */
+  imss_al?: string | null; infonavit_al?: string | null;
 };
+
+const diasDe = (iso: string) => Math.floor((Date.now() - new Date(`${iso}T12:00:00`).getTime()) / 86400000);
+const SENAL = 'inline-block rounded-md px-1.5 py-0.5 text-[10px] font-semibold';
+/** 307 · Las tres señales de la fila: IMSS (60 días), Infonavit y las preguntas del paso 0. */
+function Senales({ f }: { f: FilaCompleta }) {
+  if (f.imss_al === undefined && f.infonavit_al === undefined) return null;
+  const d = f.imss_al ? diasDe(f.imss_al) : null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      <span className={`${SENAL} ${d == null ? 'bg-red-100 text-red-900' : d > 60 ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-900'}`}>{d == null ? 'Sin IMSS' : `IMSS ${dia(f.imss_al)} · ${d} d`}</span>
+      <span className={`${SENAL} ${f.infonavit_al ? 'bg-green-100 text-green-900' : 'border border-line bg-white text-muted'}`}>{f.infonavit_al ? `Infonavit ${dia(f.infonavit_al)}` : 'Sin Infonavit'}</span>
+      {f.base_listos != null ? <span title="Las cinco preguntas del paso 0 (AFORE, saldo, Infonavit, expectativa, otros ahorros)" className={`${SENAL} ${f.base_listos >= 5 ? 'bg-green-100 text-green-900' : 'border border-line bg-white text-muted'}`}>Preguntas {f.base_listos}/5</span> : null}
+    </div>
+  );
+}
 
 /**
  * 187 · Un renglón de Mi cartera, igual en las cuatro pestañas: etiqueta del carril · cliente ·
@@ -113,9 +130,10 @@ export function CarrilFila({ f, libres, alcance, esAdmin, miembros, equipo, izqu
         <div className="text-xs text-muted">
           {uc ? `Último contacto: ${quien}, ${uc.canal === 'wa' || uc.canal === 'bot' ? 'WhatsApp' : uc.canal} · ${hace(uc.fecha)}` : 'Sin contacto humano todavía'}
           {' · '}<span className={f.chat_abierto ? 'font-semibold text-green-700' : ''}>{f.chat_abierto ? 'chat abierto' : 'chat cerrado'}</span>
-          {f.base_listos != null && f.base_listos < 5 ? <>{' · '}<span title="Las cinco preguntas del paso 0 (AFORE, saldo, Infonavit, expectativa, otros ahorros)">base {f.base_listos}/5</span></> : null}
+          {f.imss_al === undefined && f.infonavit_al === undefined && f.base_listos != null && f.base_listos < 5 ? <>{' · '}<span title="Las cinco preguntas del paso 0 (AFORE, saldo, Infonavit, expectativa, otros ahorros)">base {f.base_listos}/5</span></> : null}
           {f.no_contactar ? <span className="font-semibold text-red-600"> · NO CONTACTAR</span> : null}
         </div>
+        <Senales f={f} />
       </div>
       <CarrilAcciones fila={f} takoUrl={takoUrl(f.telefono)} libres={libres} alcance={alcance} esAdmin={esAdmin} miembros={miembros} equipo={equipo} />
     </li>

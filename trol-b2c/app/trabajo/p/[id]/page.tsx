@@ -27,12 +27,14 @@ import { AsesoriaSesion } from '@/components/trol3/AsesoriaSesion';
 import { CarrilCard, DatosClaveCard, SesionCard, AgregarOportunidad, type CitaMini, type OpinionAfore } from '@/components/trol3/RelacionExtras';
 import type { FilaCarril } from '@/components/trol3/CarrilAcciones';
 import type { OrigenPersona } from '@/app/trabajo/actions';
-import type { VistaAsesoria, BaseAsesoria } from '@/lib/trol3/asesoria';
+import type { VistaAsesoria } from '@/lib/trol3/asesoria';
 import { CalculadoraClient, type SaldosCorregidos } from '@/components/portal/calculadora-client';
 import { AsesoriaInfonavit, type Proyecto, type SupuestosGlobales, type AsesoriaGuardada } from '@/components/trol3/AsesoriaInfonavit';
 import { titularDesdeExpediente, extrasInfonavit, cotizaParaInfonavit } from '@/lib/infonavit/prefill';
 import { cargarCotizacionInicial } from '@/lib/infonavit/cotizacion-inicial-server';
 import { CotizacionInicialCard } from '@/components/trol3/CotizacionInicialCard';
+import { FichaPrevia } from '@/components/trol3/FichaPrevia';
+import type { FichaPreviaData } from '@/lib/trol3/ficha';
 import { EtapaInfonavit } from '@/components/trol3/EtapaInfonavit';
 import { TareasPanel, type Tarea } from '@/components/trol3/TareasPanel';
 import { DiagnosticoPanel, type AsesoriaOpcion, type DiagnosticoRow, type EscenarioCerradoOpcion } from '@/components/trol3/DiagnosticoPanel';
@@ -329,7 +331,11 @@ export default async function Expediente({ params, searchParams }: { params: { i
   // 168 · La asesoría en cinco pasos: una sola lectura, la misma que usa /presentar.
   const vistaAsesoria = tab === 'asesoria' ? (((await db.rpc('asesoria_vista', { p_persona: params.id })).data ?? null) as VistaAsesoria | null) : null;
   // 189 · Relación enseña si está listo para asesorar (los cinco del paso 0).
-  const baseRel = tab === 'relacion' ? (((await db.rpc('base_asesoria', { p_persona: params.id })).data ?? null) as BaseAsesoria | null) : null;
+  // 307 · Ficha previa: una sola llamada trae todo lo de la portada de Relación (incluye el n/5 del paso 0).
+  const fichaRel = tab === 'relacion' ? (((await db.rpc('ficha_previa', { p_persona: params.id })).data ?? null) as FichaPreviaData | null) : null;
+  const baseRel = fichaRel ? { listos: fichaRel.afore.listos, total: fichaRel.afore.total } : null;
+  // La propuesta inicial Infonavit solo se arma si ya hay precalificación.
+  const cotRel = fichaRel?.infonavit?.al ? await cargarCotizacionInicial(params.id) : null;
   const pasoInicial = searchParams.paso != null && /^[0-5]$/.test(searchParams.paso) ? Number(searchParams.paso) : null;
   const chatAbierto = !!(perRel as Any)?.tako_visto_en && Date.now() - new Date((perRel as Any).tako_visto_en).getTime() < 24 * 3600e3;
 
@@ -616,6 +622,14 @@ export default async function Expediente({ params, searchParams }: { params: { i
         const takoChat = tel ? `https://portal.takohub.com/trol-financiero/pas/chats?line=m2MS9fYJb1EhjJQykLUz&number=521${tel.normalizado}` : null;
         const QUIEN: Record<string, string> = { cliente: 'Él/ella', bot: 'Lukas', asesor: 'Equipo', sistema: 'Trol', aliado: 'Aliado' };
         return (
+          <div className="space-y-4">
+          {fichaRel ? (
+            <FichaPrevia f={fichaRel} personaId={e.persona_id} hrefDocs={href('documentos')} hrefCapturar={`${href('asesoria')}&paso=0`} hrefOps={href('oportunidades')}
+              enviar={<>
+                <DiagnosticoBasico personaId={e.persona_id} nombre={e.nombre ?? null} />
+                {cotRel ? <CotizacionInicialCard personaId={e.persona_id} cot={cotRel.ok ? cotRel.cot : null} texto={cotRel.ok ? cotRel.texto : null} motivo={cotRel.ok ? null : cotRel.motivo} /> : <section className="rounded-2xl border border-line bg-white p-4 text-xs text-muted"><b className="text-ink">Propuesta inicial Infonavit:</b> no aplica todavía; hace falta su precalificación.</section>}
+              </>} />
+          ) : null}
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
             <div className="space-y-4">
               <section className="rounded-2xl border border-line bg-white p-5">
@@ -684,28 +698,15 @@ export default async function Expediente({ params, searchParams }: { params: { i
               </section>
               {filaCarril ? <CarrilCard fila={filaCarril} takoUrl={takoChat} esAdmin={esAdmin || (m.roles ?? []).includes('coach')} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} /> : null}
               <DatosClaveCard personaId={e.persona_id} curp={e.curp ?? null} nss={nssHeader} fechaSisec={rawFechaSisec ?? null} registradoEn={personaMeta?.created_at ? String(personaMeta.created_at) : null}
-                costoConsulta={costoProv('jordan') ?? costoProv('belvo')} origen={origenPersona} aliados={aliadosLista} opinion={opinionAfore} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} personaNombre={e.nombre ?? 'el cliente'} />
+                soloOrigen={!!fichaRel} costoConsulta={costoProv('jordan') ?? costoProv('belvo')} origen={origenPersona} aliados={aliadosLista} opinion={opinionAfore} miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} personaNombre={e.nombre ?? 'el cliente'} />
               <SesionCard personaId={e.persona_id} citas={((citas ?? []) as Any[]).map((c) => ({ id: c.id, inicio: c.inicio, estado: c.estado, origen: c.origen, notas: c.notas ?? null, miembro_id: c.miembro_id ?? null, fuente: c.fuente ?? null })) as CitaMini[]}
                 miembros={(miembros ?? []) as { id: string; nombre: string | null }[]} yo={m.id} agendarSlot={<AgendarBoton info={(linkCitas ?? null) as LinkCitas | null} />} />
-              <DiagnosticoBasico personaId={e.persona_id} nombre={e.nombre ?? null} />
-              {baseRel ? (
-                <section className="rounded-2xl border border-line bg-white p-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Listo para asesorar</div>
-                    <span className={baseRel.listos === baseRel.total ? 'rounded-full bg-lime px-2.5 py-1 text-[11px] font-bold' : 'rounded-full bg-cream px-2.5 py-1 text-[11px] font-bold'}>{baseRel.listos} de {baseRel.total}</span>
-                  </div>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {baseRel.preguntas.map((q) => <li key={q.n} className="flex items-start gap-2"><span className={q.estado === 'tenemos' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink' : q.estado === 'no_sabe' ? 'mt-1.5 h-2 w-2 shrink-0 rounded-full border-2 border-ink bg-white' : 'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-line'} /><span className={q.estado === 'falta' ? 'text-muted' : ''}>{q.titulo}{q.estado === 'no_sabe' ? <span className="text-muted"> · no sabe</span> : ''}</span></li>)}
-                  </ul>
-                  <p className="mt-2 text-[11px] text-muted">Lo que la calculadora no da y sí cambia la recomendación. “No sabe” cuenta: se sigue con el estimado.</p>
-                  <Link href={`${href('asesoria')}&paso=0`} className="mt-3 inline-block rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold">{baseRel.listos < baseRel.total ? 'Preparar (llamada corta o chat)' : 'Revisar la base'}</Link>
-                </section>
-              ) : null}
               <ActivarCard personaId={e.persona_id} chatAbierto={chatAbierto} takoUrl={takoChat} op={opTop} puede={(puedePl ?? null) as Puede | null} />
               <PropuestaForm personaId={e.persona_id} ops={opsProp} pensionBase={e.pension_base == null ? null : Number(e.pension_base)} />
               <AgregarOportunidad personaId={e.persona_id} catalogo={((cat ?? []) as Any[]).filter((c) => c.activo !== false).sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99)).map((c) => ({ codigo: c.codigo as string, nombre: c.nombre as string, nombre_cliente: c.nombre_cliente ?? null }))} abiertas={opsAbiertas.map((o: Any) => o.codigo as string)} />
               <CompartirLinks directo={(miLink as string | null) ?? null} expediente={urlExpediente} referido={urlReferido} personaId={e.persona_id} />
             </aside>
+          </div>
           </div>
         );
       })()}
