@@ -61,7 +61,6 @@ export function ContenidoEditor({ c, admin, urlPublica }: { c: Contenido; admin:
       </div>
       {c.notas ? <p className="mt-3 rounded-lg bg-cream p-3 text-sm"><span className="font-semibold">Notas de quien lo redactó:</span> {c.notas}</p> : null}
       {!admin ? <p className="mt-3 text-xs text-muted">Puedes corregir el borrador. Publicar le toca a un administrador.</p> : null}
-      {c.tipo === 'guia' ? <p className="mt-3 text-xs text-muted">Las guías se mostrarán dentro de su pilar; mientras el pilar no exista en el sitio, publicarla no la hace visible.</p> : null}
 
       <fieldset disabled={!puedeEditar || pend} className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="sm:col-span-2"><span className={etiqueta}>Título</span><input className={campo} value={titulo} onChange={(e) => cambia(setTitulo)(e.target.value)} /></label>

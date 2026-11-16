@@ -29,7 +29,7 @@ const CTA: Record<string, { titulo: string; texto: string; boton: string; codigo
     titulo: '¿Cuánto te presta Infonavit y qué puedes comprar?',
     texto: 'Te armamos tu cotización por WhatsApp, sin costo.',
     boton: 'Pide tu cotización',
-    codigo: 'blog',
+    codigo: 'sitio_inf',
   },
 };
 
@@ -41,7 +41,12 @@ export function CuerpoContenido({ c }: { c: Contenido }) {
   return (
     <article className="mx-auto max-w-3xl overflow-x-hidden px-5 py-10">
       <p className="text-sm text-muted">
-        Por <span className="font-semibold text-ink">{c.autor}</span>
+        Por{' '}
+        {/^Raúl Gallego/i.test(c.autor) ? (
+          <a href="/equipo/raul-gallego-muller" className="font-semibold text-ink underline">{c.autor}</a>
+        ) : (
+          <span className="font-semibold text-ink">{c.autor}</span>
+        )}
         {publicado ? <> · Publicado el {publicado}</> : null}
         {actualizado && actualizado !== publicado ? <> · Actualizado el {actualizado}</> : null}
       </p>
@@ -64,7 +69,7 @@ export function CuerpoContenido({ c }: { c: Contenido }) {
         <h2 className="text-xl font-extrabold">{cta.titulo}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-white/70">{cta.texto}</p>
         <a
-          href={`/i/${c.codigo_atribucion || cta.codigo}`}
+          href={`/i/${c.codigo_atribucion || cta.codigo}${c.pilar === 'infonavit' ? '?l=inf' : ''}`}
           className="mt-4 inline-block rounded-full bg-lime px-6 py-3 font-semibold text-ink hover:opacity-90"
         >
           {cta.boton}

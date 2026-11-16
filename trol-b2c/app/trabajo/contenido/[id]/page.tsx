@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireMiembro, t3 } from '@/lib/trol3/server';
-import { preguntasDe, type Contenido } from '@/lib/blog/contenido';
+import { preguntasDe, rutaDe, type Contenido } from '@/lib/blog/contenido';
 import { CuerpoContenido } from '@/components/sitio/CuerpoContenido';
 import { ContenidoEditor } from '@/components/trol3/ContenidoEditor';
 
@@ -14,8 +14,8 @@ export default async function ContenidoDetalle({ params }: { params: { id: strin
   if (!data) notFound();
   const c = { ...(data as Contenido), preguntas: preguntasDe(data as Contenido) };
   const admin = (m.roles ?? []).includes('admin');
-  // Las guías se verán dentro de su pilar; hoy sólo los artículos tienen página pública.
-  const urlPublica = c.tipo === 'articulo' ? `https://trol.mx/blog/${c.slug}` : null;
+  // Artículos en /blog; guías dentro de su pilar (/pensiones o /infonavit).
+  const urlPublica = `https://trol.mx${rutaDe(c)}`;
 
   return (
     <div className="space-y-6">

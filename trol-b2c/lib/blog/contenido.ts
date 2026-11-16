@@ -55,6 +55,38 @@ export async function articulosPublicados(): Promise<Contenido[]> {
   }
 }
 
+/** Guías publicadas de un pilar, por título. */
+export async function guiasPublicadas(pilar: 'pensiones' | 'infonavit'): Promise<Contenido[]> {
+  try {
+    const { data, error } = await anon()
+      .from('contenidos')
+      .select(CAMPOS_PUBLICOS)
+      .eq('estado', 'publicado')
+      .eq('tipo', 'guia')
+      .eq('pilar', pilar)
+      .order('titulo', { ascending: true });
+    if (error || !data) return [];
+    return data as unknown as Contenido[];
+  } catch {
+    return [];
+  }
+}
+
+/** Todo lo publicado (para el mapa del sitio). */
+export async function todoPublicado(): Promise<Pick<Contenido, 'tipo' | 'pilar' | 'slug' | 'actualizado_en' | 'publicado_en'>[]> {
+  try {
+    const { data, error } = await anon().from('contenidos').select('tipo,pilar,slug,actualizado_en,publicado_en').eq('estado', 'publicado');
+    if (error || !data) return [];
+    return data as unknown as Pick<Contenido, 'tipo' | 'pilar' | 'slug' | 'actualizado_en' | 'publicado_en'>[];
+  } catch {
+    return [];
+  }
+}
+
+/** Dirección pública de un contenido. */
+export const rutaDe = (c: Pick<Contenido, 'tipo' | 'pilar' | 'slug'>) =>
+  c.tipo === 'guia' && c.pilar !== 'marca' ? `/${c.pilar}/${c.slug}` : `/blog/${c.slug}`;
+
 export async function publicadoPorSlug(slug: string, tipo: 'articulo' | 'guia' = 'articulo'): Promise<Contenido | null> {
   try {
     const { data, error } = await anon()

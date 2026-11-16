@@ -71,6 +71,19 @@ export function waInvitacionBot(codigo: string): string {
   return `https://wa.me/${WHATSAPP_TROL}?text=${encodeURIComponent(msg)}`;
 }
 
+// Línea de Infonavit (Frans en Tako): número aparte del de pensiones.
+const WHATSAPP_INFONAVIT = process.env.NEXT_PUBLIC_WHATSAPP_INFONAVIT || '5215671254193';
+
+/** Un código es de la línea de Infonavit si lleva el segmento "inf" (fb_inf_a1, sitio_inf) o empieza con "inm". */
+export function esCodigoInfonavit(codigo: string): boolean {
+  return /(^|[_-])inf([_-]|$)/i.test(codigo) || /^inm([_-]|$)/i.test(codigo);
+}
+
+export function waInvitacionInfonavit(codigo: string): string {
+  const msg = `Hola, quiero saber cómo invertir con mi Infonavit 🏠 ref:${codigo}`;
+  return `https://wa.me/${WHATSAPP_INFONAVIT}?text=${encodeURIComponent(msg)}`;
+}
+
 // Mensaje para que el cliente comparta su invitación por WhatsApp. `invitacion`
 // es el link waInvitacionBot (abre el bot con el código).
 export function waCompartirReferido(invitacion: string): string {

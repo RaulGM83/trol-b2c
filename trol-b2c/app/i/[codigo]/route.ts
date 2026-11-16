@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { waInvitacionBot } from '@/lib/whatsapp';
+import { waInvitacionBot, waInvitacionInfonavit, esCodigoInfonavit } from '@/lib/whatsapp';
 
 // Link corto de invitación con marca: app.trol.mx/i/<codigo>.
 // Redirige al WhatsApp del bot (Tako) con el mensaje prellenado que trae el
@@ -54,5 +54,7 @@ export async function GET(req: Request, { params }: { params: { codigo: string }
   const codigo = (params.codigo ?? '').slice(0, 64);
   if (LANDING_WEB[codigo]) return NextResponse.redirect(new URL(LANDING_WEB[codigo], req.url));
   await registrarClic(codigo, req);
-  return NextResponse.redirect(waInvitacionBot(codigo));
+  // Línea de Infonavit (Frans): por el código (segmento "inf" o prefijo "inm") o con ?l=inf.
+  const infonavit = new URL(req.url).searchParams.get('l') === 'inf' || esCodigoInfonavit(codigo);
+  return NextResponse.redirect(infonavit ? waInvitacionInfonavit(codigo) : waInvitacionBot(codigo));
 }

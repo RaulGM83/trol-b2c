@@ -12,8 +12,11 @@ export function SitioHeader() {
           <img src="/marca/logo-trol-blanco.svg" alt="El Trol Financiero" className="h-9 w-auto" />
         </Link>
         <nav className="flex items-center gap-5 text-sm text-white/90">
-          <Link href="/asesorias" className="hidden hover:text-lime sm:block">
-            Asesorías
+          <Link href="/pensiones" className="hidden hover:text-lime sm:block">
+            Pensiones
+          </Link>
+          <Link href="/infonavit" className="hidden hover:text-lime sm:block">
+            Infonavit
           </Link>
           <Link href="/blog" className="hidden hover:text-lime sm:block">
             Blog
@@ -34,7 +37,8 @@ export function SitioHeader() {
       </div>
       {/* En móvil los links de arriba van ocultos: segunda fila propia. */}
       <nav className="mx-auto flex max-w-5xl items-center gap-5 overflow-x-auto px-5 pb-3 text-sm text-white/90 sm:hidden">
-        <Link href="/asesorias" className="shrink-0 hover:text-lime">Asesorías</Link>
+        <Link href="/pensiones" className="shrink-0 hover:text-lime">Pensiones</Link>
+        <Link href="/infonavit" className="shrink-0 hover:text-lime">Infonavit</Link>
         <Link href="/blog" className="shrink-0 hover:text-lime">Blog</Link>
         <Link href="/calcula" className="shrink-0 hover:text-lime">Calculadora</Link>
         <a href="https://app.trol.mx/login?next=/mi" className="shrink-0 font-semibold text-lime">Mi expediente</a>
@@ -51,6 +55,12 @@ export function SitioFooter() {
         <img src="/marca/logo-trol-blanco.svg" alt="El Trol Financiero" className="h-8 w-auto" />
         <div className="mt-6 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link href="/pensiones" className="hover:text-lime">
+              Pensiones
+            </Link>
+            <Link href="/infonavit" className="hover:text-lime">
+              Infonavit
+            </Link>
             <Link href="/asesorias" className="hover:text-lime">
               Asesorías
             </Link>

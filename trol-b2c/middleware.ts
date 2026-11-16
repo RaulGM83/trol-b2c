@@ -54,6 +54,16 @@ function sitioPublico(request: NextRequest, host: string): NextResponse | null {
   if (pathname === '/blog' || pathname.startsWith('/blog/')) {
     return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
   }
+  // Pilares (pensiones, Infonavit con sus inmuebles), autores, y lo que leen
+  // buscadores y LLM: robots.txt, sitemap.xml y llms.txt del sitio público.
+  for (const base of ['/pensiones', '/infonavit', '/equipo']) {
+    if (pathname === base || pathname.startsWith(base + '/')) {
+      return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
+    }
+  }
+  if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
+    return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
+  }
 
   return null; // resto de rutas: comportamiento normal de la app
 }

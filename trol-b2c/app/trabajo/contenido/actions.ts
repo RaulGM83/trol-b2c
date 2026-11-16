@@ -16,8 +16,9 @@ const fail = (e: unknown) => {
 
 function refrescar(slug?: string | null) {
   revalidatePath('/trabajo/contenido');
-  revalidatePath('/sitio/blog');
-  if (slug) revalidatePath(`/sitio/blog/${slug}`);
+  // El contenido sale en el blog, en los pilares y en la portada.
+  revalidatePath('/sitio', 'layout');
+  void slug;
 }
 
 export type CamposContenido = {
