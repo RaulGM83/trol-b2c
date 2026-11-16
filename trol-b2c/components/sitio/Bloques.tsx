@@ -89,7 +89,7 @@ export function TarjetaInmueble({ i }: { i: Inmueble }) {
       <dl className="mt-4 grid grid-cols-3 gap-2 text-sm">
         <div><dt className="text-xs text-muted">Precio</dt><dd className="font-bold">{pesos(i.precio)}</dd></div>
         <div><dt className="text-xs text-muted">Renta estimada</dt><dd className="font-bold">{i.renta ? `${pesos(i.renta)}/mes` : '—'}</dd></div>
-        <div><dt className="text-xs text-muted">Rendimiento bruto</dt><dd className="font-bold">{rend ?? '—'}</dd></div>
+        <div><dt className="text-xs text-muted">Rendimiento bruto estimado</dt><dd className="font-bold">{rend ?? '—'}</dd></div>
       </dl>
     </Link>
   );

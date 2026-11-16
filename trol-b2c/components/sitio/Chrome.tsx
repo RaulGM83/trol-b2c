@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redesActivas } from '@/lib/sitio/redes';
 
 // Header y footer del sitio público (trol.mx). Se comparten entre las páginas
 // de marketing (app/sitio) y la calculadora pública (/calcula) para que toda
@@ -78,6 +79,11 @@ export function SitioFooter() {
             </Link>
           </div>
           <p className="text-white/60">© 2026 El Trol Financiero</p>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          {redesActivas().map((r) => (
+            <a key={r.nombre} href={r.url} target="_blank" rel="noopener" className="hover:text-lime">{r.nombre}</a>
+          ))}
         </div>
       </div>
     </footer>

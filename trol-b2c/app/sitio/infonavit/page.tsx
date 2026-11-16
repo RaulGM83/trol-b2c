@@ -1,24 +1,25 @@
 import type { Metadata } from 'next';
+import { metaSitio } from '@/lib/sitio/meta';
 import { guiasPublicadas } from '@/lib/blog/contenido';
-import { inmueblesSitio } from '@/lib/sitio/inmuebles';
+import { inmueblesSitio, fechaPrecios } from '@/lib/sitio/inmuebles';
 import { Hero, Seccion, Preguntas, TarjetaGuia, TarjetaInmueble, CierreWhatsApp, JsonLd, botonLima, botonClaro, type Faq } from '@/components/sitio/Bloques';
 
 // Pilar de Infonavit: el inmueble como activo para el retiro. Los inmuebles salen
 // del catálogo (trol3.inmuebles_sitio) y las guías de trol3.contenidos.
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: 'Invierte con tu Infonavit: un inmueble para tu retiro · El Trol Financiero',
-  description:
+export const metadata: Metadata = metaSitio({
+  titulo: 'Invierte con tu Infonavit: un inmueble para tu retiro · El Trol Financiero',
+  descripcion:
     'Cómo usar tu saldo y tu crédito Infonavit para comprar un inmueble que se renta y complementa tu pensión. Requisitos, riesgos, inmuebles disponibles y guías.',
-  alternates: { canonical: 'https://trol.mx/infonavit' },
-};
+  ruta: '/infonavit',
+});
 
 const WA = '/i/sitio_inf';
 
 const PASOS = [
   { t: 'Vemos cuánto te presta Infonavit', d: 'Con tu NSS consultamos tu saldo de vivienda y tu crédito. Te mandamos una cotización por WhatsApp, sin costo.' },
-  { t: 'Eliges un inmueble', d: 'Proyectos nuevos a precio preferencial. Se compra con tu saldo y tu crédito, sin poner enganche de tu bolsa.' },
+  { t: 'Eliges un inmueble', d: 'Proyectos nuevos, con el precio y la renta estimada a la vista. Se compra con tu saldo y tu crédito, sin poner enganche de tu bolsa.' },
   { t: 'Se renta y se paga', d: 'Tus aportaciones patronales abonan al crédito y la renta ayuda a pagarlo. Si quieres, administramos la renta por ti.' },
 ];
 
@@ -29,7 +30,7 @@ const NO = ['No estás cotizando hoy: el crédito necesita una relación laboral
 // cuando está publicada; las de fondo legal o fiscal no salen sin revisión.
 const ACTIVO = [
   { slug: 'renta-que-complementa-tu-pension', titulo: 'Renta que complementa tu pensión', texto: 'Un ingreso mensual aparte de lo que te pague el IMSS.' },
-  { slug: 'apalancamiento-con-credito-infonavit', titulo: 'Apalancamiento', texto: 'Compras con el crédito, no con tu ahorro: el inmueble completo trabaja para ti desde el primer día.' },
+  { slug: 'apalancamiento-con-credito-infonavit', titulo: 'Apalancamiento', texto: 'Compras con el crédito, no con tu ahorro. Qué significa, cuánto cuesta y cuándo conviene.' },
   { slug: 'beneficios-fiscales-de-un-inmueble', titulo: 'Beneficios fiscales', texto: 'Qué se puede deducir y cómo se declara la renta.' },
   { slug: 'la-hipoteca-como-seguro-de-vida', titulo: 'La hipoteca como seguro de vida', texto: 'Qué pasa con el crédito y con el inmueble si faltas.' },
   { slug: 'sucesion-de-un-inmueble', titulo: 'Sucesión', texto: 'A quién le queda el inmueble y cómo dejarlo en orden.' },
@@ -57,6 +58,7 @@ export default async function PilarInfonavit() {
   const [guias, inmuebles] = await Promise.all([guiasPublicadas('infonavit'), inmueblesSitio()]);
   const publicadas = new Map(guias.map((g) => [g.slug, g]));
   const extras = guias.filter((g) => !ACTIVO.some((t) => t.slug === g.slug));
+  const alDia = fechaPrecios(inmuebles);
   return (
     <>
       <JsonLd data={{ '@context': 'https://schema.org', '@type': 'WebPage', name: 'Invierte con tu Infonavit', url: 'https://trol.mx/infonavit', inLanguage: 'es-MX', publisher: { '@type': 'Organization', name: 'El Trol Financiero', url: 'https://trol.mx' } }} />
@@ -109,7 +111,9 @@ export default async function PilarInfonavit() {
       <section id="inmuebles" className="border-y border-line bg-white">
         <div className="mx-auto max-w-5xl px-5 py-14">
           <h2 className="text-2xl font-extrabold sm:text-3xl">Inmuebles</h2>
-          <p className="mt-3 max-w-2xl text-muted">Trol paga los gastos notariales. La renta es una estimación con base en la zona; no es una garantía.</p>
+          <p className="mt-3 max-w-2xl text-muted">
+            {alDia ? <>Precios al {alDia}. </> : null}Trol paga los gastos notariales. La renta es una estimación con base en la zona, no una garantía, y el rendimiento es bruto estimado: antes de gastos, impuestos y meses sin renta.
+          </p>
           {inmuebles.length === 0 ? (
             <p className="mt-8 rounded-2xl bg-cream p-6 text-sm">Estamos actualizando el catálogo. Escríbenos y te mandamos las opciones de hoy.</p>
           ) : (

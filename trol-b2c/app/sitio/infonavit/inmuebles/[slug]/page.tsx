@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { inmueblesSitio, pesos, rendimientoBruto } from '@/lib/sitio/inmuebles';
+import { inmueblesSitio, pesos, rendimientoBruto, fechaPrecios } from '@/lib/sitio/inmuebles';
+import { metaSitio } from '@/lib/sitio/meta';
 import { JsonLd, botonLima } from '@/components/sitio/Bloques';
 
 // Una página por inmueble del catálogo. Si cambia el precio, la renta o la ficha
@@ -17,17 +18,18 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const i = await cargar(params.slug);
   if (!i) return {};
   const lugar = i.ubicacion.split('·')[0].trim();
-  return {
-    title: `${i.nombre} en ${lugar} con Infonavit · El Trol Financiero`,
-    description: `${i.nombre} en ${i.ubicacion}. Precio ${pesos(i.precio)}${i.renta ? `, renta estimada ${pesos(i.renta)} al mes` : ''}. Se compra con tu saldo y tu crédito Infonavit.`,
-    alternates: { canonical: `https://trol.mx/infonavit/inmuebles/${i.slug}` },
-  };
+  return metaSitio({
+    titulo: `${i.nombre} en ${lugar} con Infonavit · El Trol Financiero`,
+    descripcion: `${i.nombre} en ${i.ubicacion}. Precio ${pesos(i.precio)}${i.renta ? `, renta estimada ${pesos(i.renta)} al mes` : ''}. Se compra con tu saldo y tu crédito Infonavit.`,
+    ruta: `/infonavit/inmuebles/${i.slug}`,
+  });
 }
 
 export default async function PaginaInmueble({ params }: { params: { slug: string } }) {
   const i = await cargar(params.slug);
   if (!i) notFound();
   const rend = rendimientoBruto(i);
+  const alDia = fechaPrecios([i]);
   const wa = `/i/inm_${i.clave}`;
   return (
     <>
@@ -52,9 +54,9 @@ export default async function PaginaInmueble({ params }: { params: { slug: strin
         <dl className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-line bg-white p-5"><dt className="text-xs text-muted">Precio</dt><dd className="mt-1 text-2xl font-extrabold">{pesos(i.precio)}</dd><p className="mt-1 text-xs text-muted">Trol paga los gastos notariales</p></div>
           <div className="rounded-2xl border border-line bg-white p-5"><dt className="text-xs text-muted">Renta estimada</dt><dd className="mt-1 text-2xl font-extrabold">{i.renta ? pesos(i.renta) : '—'}</dd><p className="mt-1 text-xs text-muted">Al mes, {i.renta_estimada ? 'estimada con base en la zona' : 'observada en la zona'}</p></div>
-          <div className="rounded-2xl border border-line bg-white p-5"><dt className="text-xs text-muted">Rendimiento bruto</dt><dd className="mt-1 text-2xl font-extrabold">{rend ?? '—'}</dd><p className="mt-1 text-xs text-muted">Renta de un año entre el precio</p></div>
+          <div className="rounded-2xl border border-line bg-white p-5"><dt className="text-xs text-muted">Rendimiento bruto estimado</dt><dd className="mt-1 text-2xl font-extrabold">{rend ?? '—'}</dd><p className="mt-1 text-xs text-muted">Antes de gastos, impuestos y meses sin renta</p></div>
         </dl>
-        <p className="mt-4 text-sm text-muted">Las cifras son iniciales y estimadas: la renta y la plusvalía no están garantizadas. El rendimiento es antes de gastos, vacancia e impuestos.</p>
+        <p className="mt-4 text-sm text-muted">{alDia ? `Precio al ${alDia}. ` : ''}Las cifras son iniciales y estimadas: la renta y la plusvalía no están garantizadas. El rendimiento es la renta de un año entre el precio, antes de gastos, impuestos y meses sin renta.</p>
 
         <h2 className="mt-10 text-xl font-extrabold">Cómo se compra</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5">

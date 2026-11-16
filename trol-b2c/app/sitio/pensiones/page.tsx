@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { metaSitio } from '@/lib/sitio/meta';
 import Link from 'next/link';
 import { guiasPublicadas } from '@/lib/blog/contenido';
 import { Hero, Seccion, Preguntas, TarjetaGuia, CierreWhatsApp, JsonLd, botonLima, botonClaro, type Faq } from '@/components/sitio/Bloques';
@@ -7,25 +8,25 @@ import { Hero, Seccion, Preguntas, TarjetaGuia, CierreWhatsApp, JsonLd, botonLim
 // pensiones) y aparecen solas al publicarse (ISR 5 min).
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: 'Tu pensión del IMSS: cuánto te toca y cómo mejorarla · El Trol Financiero',
-  description:
+export const metadata: Metadata = metaSitio({
+  titulo: 'Tu pensión del IMSS: cuánto te toca y cómo mejorarla · El Trol Financiero',
+  descripcion:
     'Qué determina tu pensión del IMSS (ley, semanas, salario y edad), qué puedes mover hoy y guías claras de Ley 73, Ley 97, Modalidad 40 y AFORE.',
-  alternates: { canonical: 'https://trol.mx/pensiones' },
-};
+  ruta: '/pensiones',
+});
 
 const DATOS = [
   { t: 'Tu ley', d: 'Ley 73 si empezaste a cotizar antes del 1 de julio de 1997; Ley 97 si empezaste después. Cambia por completo cómo se calcula tu pensión.' },
-  { t: 'Tus semanas', d: 'Las semanas cotizadas que el IMSS te reconoce. Definen si ya tienes derecho y, en Ley 73, cuánto sube tu pensión.' },
+  { t: 'Tus semanas', d: 'Las semanas cotizadas que el IMSS te reconoce. En Ley 73 necesitas al menos 500. En Ley 97 son 875 en 2026 y suben 25 cada año hasta llegar a 1,000 en 2031.' },
   { t: 'Tu salario', d: 'En Ley 73 cuenta el promedio de tus últimos cinco años cotizados. En Ley 97 cuenta lo que acumulaste en tu AFORE.' },
   { t: 'Tu edad', d: 'Puedes pensionarte desde los 60 años. Cada año que esperas hasta los 65 mejora el monto.' },
 ];
 
 const PALANCAS = [
   { t: 'Edad de retiro', d: 'En Ley 73, a los 60 recibes 75% de tu pensión y sube 5 puntos por año hasta 100% a los 65.' },
-  { t: 'Modalidad 40', d: 'Sigue existiendo, pero cambió el 21 de octubre de 2026: ya no se pagan periodos hacia atrás y el salario con el que puedes cotizar tiene un tope ligado a tu último salario.' },
+  { t: 'Modalidad 40', d: 'Sigue existiendo, pero cambió desde el 22 de octubre de 2026: ya no se pagan periodos hacia atrás y el salario con el que puedes cotizar tiene un tope ligado a tu último salario.' },
   { t: 'Modalidad 10', d: 'Para quien trabaja por su cuenta: cotizas de forma voluntaria y sumas semanas con servicio médico.' },
-  { t: 'Conservación de derechos', d: 'Si dejaste de cotizar, tus derechos no duran para siempre. Saber cuándo vencen evita perder la pensión.' },
+  { t: 'Conservación de derechos', d: 'Si dejaste de cotizar, conservas tus derechos por un tiempo igual a la cuarta parte de lo que cotizaste, y nunca menos de 12 meses. Si ya vencieron, se recuperan volviendo a cotizar: 26 semanas si pasaron entre 3 y 6 años sin cotizar, 52 si pasaron más de 6.' },
   { t: 'Tu AFORE', d: 'En Ley 97 es tu pensión. En Ley 73 es dinero que puedes recuperar al pensionarte. En ambos casos conviene revisarla.' },
 ];
 
@@ -34,7 +35,7 @@ const TEMAS = [
   { slug: 'ley-73-o-ley-97', grupo: 'Entender', titulo: '¿Soy Ley 73 o Ley 97?', texto: 'Cómo saberlo y qué cambia en tu pensión.' },
   { slug: 'como-leer-tu-constancia-de-semanas', grupo: 'Entender', titulo: 'Cómo leer tu constancia de semanas', texto: 'Qué significa cada dato y qué errores buscar.' },
   { slug: 'pension-minima-garantizada', grupo: 'Entender', titulo: 'Pensión mínima garantizada', texto: 'Cuánto es y quién tiene derecho.' },
-  { slug: 'modalidad-40-regla-nueva', grupo: 'Mejorar', titulo: 'Modalidad 40 con la regla nueva', texto: 'Qué cambió el 21 de octubre de 2026 y a quién le sigue conviniendo.' },
+  { slug: 'modalidad-40-regla-nueva', grupo: 'Mejorar', titulo: 'Modalidad 40 con la regla nueva', texto: 'Qué cambió desde el 22 de octubre de 2026 y a quién le sigue conviniendo.' },
   { slug: 'edad-de-retiro-60-a-65', grupo: 'Mejorar', titulo: 'Retirarte a los 60, 63 o 65', texto: 'Cuánto cambia tu pensión con cada año.' },
   { slug: 'conservacion-de-derechos', grupo: 'Tramitar', titulo: 'Conservación de derechos', texto: 'Cuánto dura y cómo recuperarla si ya venció.' },
 ];
@@ -42,7 +43,9 @@ const TEMAS = [
 const FAQS: Faq[] = [
   { pregunta: '¿Cómo sé si soy Ley 73 o Ley 97?', respuesta: 'Por la fecha en que empezaste a cotizar al IMSS: antes del 1 de julio de 1997 eres Ley 73; a partir de esa fecha, Ley 97. Lo confirmamos con tu historial de semanas.' },
   { pregunta: '¿A qué edad me puedo pensionar?', respuesta: 'Desde los 60 años por cesantía en edad avanzada, si ya no trabajas y cumples las semanas. A los 65 es pensión por vejez.' },
-  { pregunta: '¿Todavía sirve la Modalidad 40?', respuesta: 'Sí existe, pero desde el 21 de octubre de 2026 no se pueden pagar periodos hacia atrás y el salario con el que cotizas tiene un tope ligado a tu último salario. A algunas personas les sigue conviniendo; hay que hacer la cuenta con tus datos.' },
+  { pregunta: '¿Todavía sirve la Modalidad 40?', respuesta: 'Sí existe, pero desde el 22 de octubre de 2026 no se pueden pagar periodos hacia atrás y el salario con el que cotizas tiene un tope ligado a tu último salario. A algunas personas les sigue conviniendo; hay que hacer la cuenta con tus datos.' },
+  { pregunta: '¿Cuántas semanas necesito para pensionarme?', respuesta: 'En Ley 73, al menos 500 semanas cotizadas. En Ley 97, 875 semanas en 2026; el requisito sube 25 semanas cada año hasta llegar a 1,000 en 2031.' },
+  { pregunta: '¿Cuánto duran mis derechos si dejo de cotizar?', respuesta: 'Un periodo igual a la cuarta parte del tiempo que cotizaste, contado desde tu baja, y nunca menos de 12 meses. Si ya vencieron, se recuperan al volver a cotizar: de inmediato si la interrupción fue de hasta 3 años, con 26 semanas si fue de 3 a 6 años y con 52 semanas si fue de más de 6.' },
   { pregunta: '¿Qué necesito para saber cuánto me toca?', respuesta: 'Tu CURP. Con ella consultamos tu historial de semanas y salarios en el IMSS y armamos tu diagnóstico. Es gratis y llega a tu WhatsApp.' },
   { pregunta: '¿Cuánto cuesta el diagnóstico?', respuesta: 'El diagnóstico es gratis. Si después quieres una asesoría para ejecutar tu estrategia, te decimos antes qué incluye.' },
 ];

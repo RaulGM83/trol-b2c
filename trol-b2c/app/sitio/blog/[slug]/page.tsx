@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { POSTS, porSlug } from '@/lib/blog/posts';
 import { publicadoPorSlug, datosEstructurados } from '@/lib/blog/contenido';
 import { CuerpoContenido } from '@/components/sitio/CuerpoContenido';
@@ -9,6 +9,19 @@ import { CuerpoContenido } from '@/components/sitio/CuerpoContenido';
 // si existe) o de los artículos anteriores en POSTS. Los de la base se generan a
 // demanda y se refrescan cada 5 minutos.
 export const revalidate = 300;
+
+// Artículos que una guía sustituye: en cuanto la guía está publicada, el artículo
+// redirige a ella (301). Mientras no lo esté, el artículo sigue visible.
+const SUSTITUIDO_POR_GUIA: Record<string, { pilar: 'pensiones' | 'infonavit'; slug: string }> = {
+  'modalidad-40-imss-2026-todo-lo-que-necesitas-saber': { pilar: 'pensiones', slug: 'modalidad-40-regla-nueva' },
+};
+
+async function guiaQueSustituye(slug: string): Promise<string | null> {
+  const g = SUSTITUIDO_POR_GUIA[slug];
+  if (!g) return null;
+  const c = await publicadoPorSlug(g.slug, 'guia');
+  return c && c.pilar === g.pilar ? `/${g.pilar}/${g.slug}` : null;
+}
 
 export function generateStaticParams() {
   return POSTS.map((p) => ({ slug: p.slug }));
@@ -48,6 +61,8 @@ const PROSA =
   '[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2';
 
 export default async function BlogPost({ params }: { params: { slug: string } }) {
+  const destino = await guiaQueSustituye(params.slug);
+  if (destino) permanentRedirect(destino);
   const c = await publicadoPorSlug(params.slug);
   if (c) {
     return (

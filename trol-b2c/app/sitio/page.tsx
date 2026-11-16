@@ -3,17 +3,19 @@ import Link from 'next/link';
 import { POSTS } from '@/lib/blog/posts';
 import { articulosPublicados } from '@/lib/blog/contenido';
 import { JsonLd, botonLima } from '@/components/sitio/Bloques';
+import { metaSitio } from '@/lib/sitio/meta';
+import { redesActivas } from '@/lib/sitio/redes';
 
 // Portada de trol.mx: dos pilares (pensiones e Infonavit) con la misma promesa:
 // asesoría independiente con tus datos reales, por WhatsApp.
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: 'El Trol Financiero · Tu pensión y tu Infonavit, trabajando para tu retiro',
-  description:
+export const metadata: Metadata = metaSitio({
+  titulo: 'El Trol Financiero · Tu pensión y tu Infonavit, trabajando para tu retiro',
+  descripcion:
     'Asesoría independiente para tu retiro: cuánto te toca de pensión del IMSS y cómo mejorarla, y cómo convertir tu Infonavit en un inmueble que se renta. Diagnóstico gratis por WhatsApp.',
-  alternates: { canonical: 'https://trol.mx' },
-};
+  ruta: '/',
+});
 
 const PUERTAS = [
   {
@@ -69,6 +71,7 @@ export default async function SitioHome() {
           logo: 'https://trol.mx/marca/logo-trol.svg',
           description: 'Asesoría independiente en pensiones del IMSS, AFORE e inversión inmobiliaria con crédito Infonavit.',
           areaServed: 'MX',
+          sameAs: redesActivas().map((r) => r.url),
         }}
       />
       <section className="bg-ink text-white">
@@ -128,7 +131,7 @@ export default async function SitioHome() {
             <p className="text-xs font-bold uppercase tracking-wide text-muted">Informe Trol</p>
             <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">Hablamos con datos</h2>
             <p className="mt-3 text-muted">
-              Cuando el IMSS cambió la Modalidad 40 en octubre de 2026, pasamos más de 8,800 historiales reales por la regla de antes y la de ahora para saber quién pierde y cuánto.
+              Cuando el IMSS cambió la Modalidad 40 (aplica desde el 22 de octubre de 2026), pasamos más de 8,800 historiales reales por la regla de antes y la de ahora para saber quién pierde y cuánto.
             </p>
             <div className="mt-5 flex flex-col gap-2 text-sm font-semibold">
               <Link href="/blog/informe-trol-1-cierre-modalidad-40" className="underline">Informe Trol #1: el día que el IMSS cerró la Modalidad 40</Link>
@@ -136,7 +139,7 @@ export default async function SitioHome() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-6">
-            <div><p className="text-3xl font-extrabold">15,000+</p><p className="text-sm text-muted">personas con diagnóstico Trol</p></div>
+            <div><p className="text-3xl font-extrabold">14,400+</p><p className="text-sm text-muted">personas registradas con Trol, al 15 de noviembre de 2026</p></div>
             <div><p className="text-3xl font-extrabold">8,800+</p><p className="text-sm text-muted">historiales analizados en el Informe Trol</p></div>
           </div>
         </div>
@@ -165,6 +168,14 @@ export default async function SitioHome() {
           <p className="mt-3 max-w-xl text-muted">
             Más de 20 años de experiencia acompañando a personas a entender y mejorar su retiro, por WhatsApp y videollamada en todo México.
           </p>
+          {redesActivas().length > 0 && (
+            <p className="mt-4 text-sm">
+              Síguenos en{' '}
+              {redesActivas().map((r, i) => (
+                <span key={r.nombre}>{i > 0 ? ' · ' : ''}<a href={r.url} target="_blank" rel="noopener" className="font-semibold underline">{r.nombre}</a></span>
+              ))}
+            </p>
+          )}
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {EQUIPO.map((m) => (
               <div key={m.nombre} className="rounded-2xl border border-line p-6">

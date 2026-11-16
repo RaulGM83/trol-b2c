@@ -61,9 +61,10 @@ function sitioPublico(request: NextRequest, host: string): NextResponse | null {
       return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
     }
   }
-  if (pathname === '/robots.txt' || pathname === '/sitemap.xml') {
-    return NextResponse.rewrite(new URL('/sitio' + pathname, request.url));
-  }
+  // Las carpetas no se llaman robots.txt ni sitemap.xml: Next reserva esos nombres
+  // para sus rutas de metadatos y la reescritura no llegaba al manejador.
+  if (pathname === '/robots.txt') return NextResponse.rewrite(new URL('/sitio/robots', request.url));
+  if (pathname === '/sitemap.xml') return NextResponse.rewrite(new URL('/sitio/mapa-del-sitio', request.url));
 
   return null; // resto de rutas: comportamiento normal de la app
 }

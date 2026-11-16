@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { POSTS } from '@/lib/blog/posts';
-import { articulosPublicados } from '@/lib/blog/contenido';
+import { articulosPublicados, fechaLarga } from '@/lib/blog/contenido';
 
 // Los artículos nuevos viven en trol3.contenidos y se publican desde
 // /trabajo/contenido; aparecen aquí solos (ISR 5 min). Los anteriores siguen en POSTS.
@@ -18,8 +18,8 @@ export default async function BlogIndex() {
   const nuevos = await articulosPublicados();
   const enBase = new Set(nuevos.map((c) => c.slug));
   const tarjetas = [
-    ...nuevos.map((c) => ({ slug: c.slug, titulo: c.titulo, descripcion: c.resumen })),
-    ...POSTS.filter((p) => !enBase.has(p.slug)),
+    ...nuevos.map((c) => ({ slug: c.slug, titulo: c.titulo, descripcion: c.resumen, fecha: fechaLarga(c.publicado_en) })),
+    ...POSTS.filter((p) => !enBase.has(p.slug)).map((p) => ({ slug: p.slug, titulo: p.titulo, descripcion: p.descripcion, fecha: p.fecha ? fechaLarga(`${p.fecha}T12:00:00-06:00`) : '' })),
   ];
   return (
     <>
@@ -41,6 +41,7 @@ export default async function BlogIndex() {
               href={`/blog/${p.slug}`}
               className="rounded-2xl border border-line bg-white p-6 transition hover:border-ink"
             >
+              {p.fecha ? <p className="mb-1 text-xs text-muted">{p.fecha}</p> : null}
               <h2 className="font-bold leading-snug">{p.titulo}</h2>
               <p className="mt-2 text-sm text-muted">{p.descripcion}</p>
               <span className="mt-4 inline-block text-sm font-semibold text-ink underline">

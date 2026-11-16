@@ -47,3 +47,10 @@ export const pesos = (n: number | null | undefined) =>
 /** Rendimiento bruto anual: renta de 12 meses entre el precio. */
 export const rendimientoBruto = (i: Pick<Inmueble, 'renta' | 'precio'>) =>
   i.renta && i.precio ? `${((i.renta * 12 * 100) / i.precio).toFixed(1)}%` : null;
+
+/** Fecha de los precios: la última actualización del catálogo entre los inmuebles mostrados. */
+export function fechaPrecios(items: Pick<Inmueble, 'actualizado'>[]): string | null {
+  const t = items.map((i) => (i.actualizado ? new Date(i.actualizado).getTime() : 0)).filter(Boolean);
+  if (!t.length) return null;
+  return new Date(Math.max(...t)).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' });
+}

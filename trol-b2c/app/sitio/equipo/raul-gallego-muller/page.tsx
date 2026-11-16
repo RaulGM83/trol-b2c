@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { JsonLd } from '@/components/sitio/Bloques';
+import { metaSitio } from '@/lib/sitio/meta';
 
 // Página de autor: da respaldo a los artículos y guías que firma.
-export const metadata: Metadata = {
-  title: 'Raúl Gallego Müller, CFA · El Trol Financiero',
-  description: 'Director general de El Trol Financiero. Especialista en pensiones del IMSS, Modalidad 40, AFORE e Infonavit. Autor del Informe Trol.',
-  alternates: { canonical: 'https://trol.mx/equipo/raul-gallego-muller' },
-};
+export const metadata: Metadata = metaSitio({
+  titulo: 'Raúl Gallego Müller, CFA · El Trol Financiero',
+  descripcion: 'Director general de El Trol Financiero. Especialista en pensiones del IMSS, Modalidad 40, AFORE e Infonavit. Autor del Informe Trol.',
+  ruta: '/equipo/raul-gallego-muller',
+});
 
 export default function Autor() {
   return (
