@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { POSTS } from '@/lib/blog/posts';
+import { articulosPublicados } from '@/lib/blog/contenido';
+
+// Los artículos nuevos viven en trol3.contenidos y se publican desde
+// /trabajo/contenido; aparecen aquí solos (ISR 5 min). Los anteriores siguen en POSTS.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: 'Blog · El Trol Financiero',
@@ -9,7 +14,13 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://trol.mx/blog' },
 };
 
-export default function BlogIndex() {
+export default async function BlogIndex() {
+  const nuevos = await articulosPublicados();
+  const enBase = new Set(nuevos.map((c) => c.slug));
+  const tarjetas = [
+    ...nuevos.map((c) => ({ slug: c.slug, titulo: c.titulo, descripcion: c.resumen })),
+    ...POSTS.filter((p) => !enBase.has(p.slug)),
+  ];
   return (
     <>
       <section className="bg-ink text-white">
@@ -24,7 +35,7 @@ export default function BlogIndex() {
       </section>
       <section className="mx-auto max-w-5xl px-5 py-12">
         <div className="grid gap-6 sm:grid-cols-2">
-          {POSTS.map((p) => (
+          {tarjetas.map((p) => (
             <Link
               key={p.slug}
               href={`/blog/${p.slug}`}

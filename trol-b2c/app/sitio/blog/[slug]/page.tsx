@@ -2,12 +2,28 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { POSTS, porSlug } from '@/lib/blog/posts';
+import { publicadoPorSlug, datosEstructurados } from '@/lib/blog/contenido';
+import { CuerpoContenido } from '@/components/sitio/CuerpoContenido';
+
+// Un slug puede venir de trol3.contenidos (publicado desde /trabajo/contenido, manda
+// si existe) o de los artículos anteriores en POSTS. Los de la base se generan a
+// demanda y se refrescan cada 5 minutos.
+export const revalidate = 300;
 
 export function generateStaticParams() {
   return POSTS.map((p) => ({ slug: p.slug }));
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const c = await publicadoPorSlug(params.slug);
+  if (c) {
+    return {
+      title: `${c.titulo} · El Trol Financiero`,
+      description: c.resumen,
+      alternates: { canonical: `https://trol.mx/blog/${c.slug}` },
+      openGraph: { type: 'article', title: c.titulo, description: c.resumen, url: `https://trol.mx/blog/${c.slug}`, publishedTime: c.publicado_en ?? undefined, modifiedTime: c.actualizado_en ?? c.publicado_en ?? undefined },
+    };
+  }
   const post = porSlug(params.slug);
   if (!post) return {};
   return {
@@ -31,7 +47,26 @@ const PROSA =
   '[&_th]:border [&_th]:border-line [&_th]:bg-cream [&_th]:px-3 [&_th]:py-2 [&_th]:text-left ' +
   '[&_td]:border [&_td]:border-line [&_td]:px-3 [&_td]:py-2';
 
-export default function BlogPost({ params }: { params: { slug: string } }) {
+export default async function BlogPost({ params }: { params: { slug: string } }) {
+  const c = await publicadoPorSlug(params.slug);
+  if (c) {
+    return (
+      <>
+        {datosEstructurados(c, `https://trol.mx/blog/${c.slug}`).map((d, i) => (
+          <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(d).replace(/</g, '\\u003c') }} />
+        ))}
+        <section className="bg-ink text-white">
+          <div className="mx-auto max-w-3xl px-5 py-12">
+            <Link href="/blog" className="text-sm text-white/70 hover:text-lime">
+              ← Todas las guías
+            </Link>
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight">{c.titulo}</h1>
+          </div>
+        </section>
+        <CuerpoContenido c={c} />
+      </>
+    );
+  }
   const post = porSlug(params.slug);
   if (!post) notFound();
   return (

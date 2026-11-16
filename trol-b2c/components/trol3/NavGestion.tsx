@@ -9,6 +9,7 @@ const ITEMS: [string, string][] = [
   ['/trabajo/proyectos', 'Inmuebles'],
   ['/trabajo/duplicados', 'Duplicados'],
   ['/trabajo/atribucion', 'Atribución'],
+  ['/trabajo/contenido', 'Contenido del sitio'],
 ];
 
 // El taller del redactor le cambia el texto a todos los diagnósticos que se
