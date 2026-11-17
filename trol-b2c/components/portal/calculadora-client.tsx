@@ -113,6 +113,9 @@ const mdp = (n: number | null | undefined) =>
 const NOTA_PESOS = `Todas las cifras están en pesos de ${ANIO}: es lo que esa pensión compraría hoy, no el número nominal que verá en su estado de cuenta.`
 const SAL_MIN = SALARIO_MINIMO[ANIO] ?? 315.04
 const SAL_TOPE = (UMA[ANIO] ?? 117.35) * 25
+// Corte de régimen que nunca llega: con él el motor calcula con la regla
+// anterior al 22-oct-2026 (interruptor «regla anterior» de la calculadora 73).
+const CORTE_SIN_EFECTO = "2999-12-31"
 const PCTS = [0, 0.25, 0.5, 0.75, 1] as const
 
 // Cómo se nombra cada bolsa de dinero frente al cliente. El motor devuelve
@@ -869,6 +872,14 @@ function Calc73Panel({
   const [fechaBajaIso, setFechaBajaIso] = useState<string | null>(camino?.c.fechaBajaIso ?? null)
   const fechaBaja = useMemo(() => (fechaBajaIso ? parseFechaTramite(fechaBajaIso) ?? undefined : undefined), [fechaBajaIso])
 
+  // Regla anterior al 22-oct-2026, para quien quiere ampararse y ver qué le
+  // aplicaría: el motor corre el caso como si tramitara hoy y el corte no
+  // existiera (pago hacia atrás, salario hasta 25 UMA, Mod 10 seguida de Mod 40).
+  // Sólo en sesión con el asesor: no se descarga, no se cierra como camino y no
+  // toca el expediente ni las oportunidades.
+  const [reglaAnterior, setReglaAnterior] = useState(false)
+  const amparo = reglaAnterior && !ver && perfil.ley === "Ley73"
+
   const entrada = useMemo(
     () => ({
       perfil,
@@ -878,8 +889,15 @@ function Calc73Panel({
       fechaTramite,
       ...(empleado && fechaBaja ? { fechaBaja } : {}),
       ultimaModalidad: regHistorial.ultimaModalidad,
+      ...(amparo ? { corteRegimen: CORTE_SIN_EFECTO } : {}),
     }),
-    [perfil, saldos, salario_60m, palancas, fechaTramite, empleado, fechaBaja, regHistorial.ultimaModalidad],
+    [perfil, saldos, salario_60m, palancas, fechaTramite, empleado, fechaBaja, regHistorial.ultimaModalidad, amparo],
+  )
+  // Lo que dan esas mismas palancas con la regla vigente (el motor recorta el
+  // salario al tope y no cobra nada hacia atrás): es contra lo que se compara.
+  const rReglaNueva = useMemo(
+    () => (amparo ? computeLey73({ ...entrada, corteRegimen: undefined }) : null),
+    [amparo, entrada],
   )
   const rCalc = useMemo(() => computeLey73(entrada), [entrada])
   // 209 · "Ver" no recalcula: pinta el resultado que se guardó al cerrar.
@@ -1296,7 +1314,12 @@ function Calc73Panel({
               )}
             </div>
           )}
-          <DescargarEscenario
+          {amparo && (
+            <p className="rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-xs leading-snug text-violet-900">
+              Con la regla anterior activa no se descarga ni se guarda el escenario: es sólo para verlo en sesión.
+            </p>
+          )}
+          {!amparo && <DescargarEscenario
             pdfCtx={pdfCtx}
             idSuffix="73"
             buildPayload={buildPdf}
@@ -1330,11 +1353,40 @@ function Calc73Panel({
               },
               resultado: r as unknown as Record<string, unknown>,
             })}
-          />
+          />}
         </fieldset>
       }
     >
       <AvisosCamino avisos={avisos} />
+      {!ver && perfil.ley === "Ley73" && (
+        <div className={`rounded-lg border px-4 py-3 flex flex-col gap-3 ${amparo ? "border-violet-400 bg-violet-50" : "border-line bg-white"}`}>
+          <Toggle
+            label="Comparar con la regla anterior al 22-oct-2026 (para quien quiere ampararse)"
+            checked={reglaAnterior}
+            onChange={setReglaAnterior}
+          />
+          {amparo && (
+            <>
+              <p className="text-sm font-semibold text-violet-900">
+                Estás viendo la regla anterior: pago hacia atrás, salario hasta 25 UMA y Mod 10 seguida de Mod 40, como si se tramitara hoy.
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Stat label="Pensión con la regla anterior" value={r.pensionMensual !== null ? fmt(r.pensionMensual) : "—"} />
+                <Stat label="Pensión con la regla vigente" value={rReglaNueva && rReglaNueva.pensionMensual !== null ? fmt(rReglaNueva.pensionMensual) : "—"} />
+                <Stat
+                  label="Diferencia al mes"
+                  value={r.pensionMensual !== null && rReglaNueva && rReglaNueva.pensionMensual !== null ? fmt(r.pensionMensual - rReglaNueva.pensionMensual) : "—"}
+                />
+                <Stat label="Costo con la regla anterior" value={fmt(r.costoTotal)} />
+              </div>
+              <p className="text-xs leading-snug text-violet-900">
+                La regla vigente se calcula con las mismas palancas; el motor recorta el salario al tope y no cobra nada hacia atrás. Esto sólo aplicaría con un amparo
+                favorable y no es una promesa de resultado. Trol no tramita amparos: orientamos a quien quiera documentar su caso.
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {nuevo && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex flex-col gap-1">
           <p className="text-sm font-semibold text-amber-900">
