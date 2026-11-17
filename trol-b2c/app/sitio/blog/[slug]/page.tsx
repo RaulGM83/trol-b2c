@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { POSTS, porSlug } from '@/lib/blog/posts';
-import { publicadoPorSlug, datosEstructurados } from '@/lib/blog/contenido';
+import { publicadoPorSlug, datosEstructurados, fechaLarga } from '@/lib/blog/contenido';
 import { CuerpoContenido } from '@/components/sitio/CuerpoContenido';
 
 // Un slug puede venir de trol3.contenidos (publicado desde /trabajo/contenido, manda
@@ -14,7 +14,15 @@ export const revalidate = 300;
 // redirige a ella (301). Mientras no lo esté, el artículo sigue visible.
 const SUSTITUIDO_POR_GUIA: Record<string, { pilar: 'pensiones' | 'infonavit'; slug: string }> = {
   'modalidad-40-imss-2026-todo-lo-que-necesitas-saber': { pilar: 'pensiones', slug: 'modalidad-40-regla-nueva' },
+  'pension-minima-garantizada-del-imss-alcanzara-10-636-54': { pilar: 'pensiones', slug: 'pension-minima-garantizada' },
 };
+
+// Los artículos anteriores no guardan autor: los firma Raúl, que revisa el fondo.
+const AUTOR = 'Raúl Gallego Müller, CFA';
+const AUTOR_URL = '/equipo/raul-gallego-muller';
+// Artículos que no hablan del IMSS: su llamado a la acción no lo menciona.
+const SIN_IMSS = new Set(['simulador-de-pensiones-sinavid-estima-tu-monto-mensual']);
+const dia = (iso: string) => fechaLarga(`${iso}T12:00:00-06:00`);
 
 async function guiaQueSustituye(slug: string): Promise<string | null> {
   const g = SUSTITUIDO_POR_GUIA[slug];
@@ -39,10 +47,20 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   }
   const post = porSlug(params.slug);
   if (!post) return {};
+  // Cada artículo lleva su propio título y resumen para redes; sin esto hereda
+  // los de la calculadora de pensiones.
+  const titulo = `${post.titulo} · El Trol Financiero`;
+  const url = `https://trol.mx/blog/${post.slug}`;
   return {
-    title: `${post.titulo} · El Trol Financiero`,
+    title: titulo,
     description: post.descripcion,
-    alternates: { canonical: `https://trol.mx/blog/${post.slug}` },
+    alternates: { canonical: url },
+    authors: [{ name: AUTOR, url: `https://trol.mx${AUTOR_URL}` }],
+    openGraph: {
+      type: 'article', siteName: 'El Trol Financiero', locale: 'es_MX', url, title: titulo, description: post.descripcion,
+      publishedTime: post.fecha, modifiedTime: post.actualizado ?? post.fecha, authors: [AUTOR],
+    },
+    twitter: { card: 'summary', title: titulo, description: post.descripcion },
   };
 }
 
@@ -86,12 +104,34 @@ export default async function BlogPost({ params }: { params: { slug: string } })
   if (!post) notFound();
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: post.titulo,
+            description: post.descripcion,
+            mainEntityOfPage: `https://trol.mx/blog/${post.slug}`,
+            ...(post.fecha ? { datePublished: post.fecha } : {}),
+            ...(post.actualizado || post.fecha ? { dateModified: post.actualizado ?? post.fecha } : {}),
+            author: { '@type': 'Person', name: 'Raúl Gallego Müller', honorificSuffix: 'CFA', url: `https://trol.mx${AUTOR_URL}` },
+            publisher: { '@type': 'Organization', name: 'El Trol Financiero', url: 'https://trol.mx' },
+            inLanguage: 'es-MX',
+          }).replace(/</g, '\\u003c'),
+        }}
+      />
       <section className="bg-ink text-white">
         <div className="mx-auto max-w-3xl px-5 py-12">
           <Link href="/blog" className="text-sm text-white/70 hover:text-lime">
             ← Todas las guías
           </Link>
           <h1 className="mt-3 text-3xl font-extrabold leading-tight">{post.titulo}</h1>
+          <p className="mt-3 text-sm text-white/70">
+            Por <Link href={AUTOR_URL} className="font-semibold text-white underline">{AUTOR}</Link>
+            {post.fecha ? ` · Publicado el ${dia(post.fecha)}` : post.anio ? ` · Publicado en ${post.anio}` : ''}
+            {post.actualizado ? ` · Actualizado el ${dia(post.actualizado)}` : ''}
+          </p>
         </div>
       </section>
       <article className="mx-auto max-w-3xl overflow-x-hidden px-5 py-10">
@@ -99,7 +139,7 @@ export default async function BlogPost({ params }: { params: { slug: string } })
         <div className="mt-12 rounded-2xl bg-ink p-6 text-center text-white">
           <h2 className="text-xl font-extrabold">¿Quieres saber cómo aplica en tu caso?</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-white/70">
-            Tu diagnóstico con datos oficiales del IMSS es gratis y llega a tu WhatsApp.
+            {SIN_IMSS.has(post.slug) ? 'Tu diagnóstico es gratis y llega a tu WhatsApp.' : 'Tu diagnóstico con tus datos del IMSS es gratis y llega a tu WhatsApp.'}
           </p>
           <a
             href="/i/blog"

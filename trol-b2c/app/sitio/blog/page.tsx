@@ -19,7 +19,18 @@ export default async function BlogIndex() {
   const enBase = new Set(nuevos.map((c) => c.slug));
   const tarjetas = [
     ...nuevos.map((c) => ({ slug: c.slug, titulo: c.titulo, descripcion: c.resumen, fecha: fechaLarga(c.publicado_en) })),
-    ...POSTS.filter((p) => !enBase.has(p.slug)).map((p) => ({ slug: p.slug, titulo: p.titulo, descripcion: p.descripcion, fecha: p.fecha ? fechaLarga(`${p.fecha}T12:00:00-06:00`) : '' })),
+    ...POSTS.filter((p) => !enBase.has(p.slug)).map((p) => ({
+      slug: p.slug,
+      titulo: p.titulo,
+      descripcion: p.descripcion,
+      fecha: p.fecha
+        ? fechaLarga(`${p.fecha}T12:00:00-06:00`)
+        : p.actualizado
+          ? `Actualizado el ${fechaLarga(`${p.actualizado}T12:00:00-06:00`)}`
+          : p.anio
+            ? `Publicado en ${p.anio}`
+            : '',
+    })),
   ];
   return (
     <>

@@ -14,7 +14,7 @@ const PASOS = [
   {
     n: '1',
     titulo: 'Regístrate con tu CURP',
-    texto: 'Por WhatsApp, en un par de minutos. Con ella consultamos tu información oficial del IMSS.',
+    texto: 'Por WhatsApp, en un par de minutos. Con ella consultamos tu información del IMSS.',
   },
   {
     n: '2',
