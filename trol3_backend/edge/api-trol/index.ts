@@ -21,6 +21,8 @@
 //   /avisar          {persona_id|telefono, evento, payload?, plantilla?, componentes?, resumen?}
 //                    (144: intenta inyectar el evento en su chat con Tako; si la ventana
 //                     de 24 h está cerrada, cae a la plantilla que se indique)
+//                    (315: la ventana la decide trol3.wa_ventana_abierta —actividad del
+//                     cliente en las últimas 23 h—, no la respuesta de Tako; en duda, plantilla)
 //                    (145: `resumen` es la frase que el cliente ve en el historial de su
 //                     cuenta Trol; si no viene, se usa la de RESUMEN_EVENTO)
 //                    (149: si cae a plantilla y no se pasan `componentes`, genera el
@@ -209,9 +211,23 @@ async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<R
   const { data: per } = await db.from("personas").select("tako_conversacion_id").eq("id", pid).maybeSingle();
   const conv = (per as { tako_conversacion_id?: string } | null)?.tako_conversacion_id ?? null;
 
-  let fallo: string | null = null;
+  // 315 · Tako acepta el evento aunque la ventana de 24 h esté cerrada: contesta 200 y el
+  // mensaje del bot se pierde. Por eso ya no se «intenta y se cae»: sólo se usa el hilo si
+  // hay actividad del cliente en las últimas 23 h (personas.tako_cliente_en). En duda, plantilla.
+  let abierta = false;
   if (conv && TAKO_API_KEY) {
     try {
+      const { data: v } = await db.rpc("wa_ventana_abierta", { p_persona: pid });
+      abierta = v === true;
+    } catch { abierta = false; }
+  }
+
+  let fallo: string | null = null;
+  if (conv && TAKO_API_KEY && abierta) {
+    try {
+      // Se marca ANTES de inyectar: lo que el bot haga en los segundos siguientes (herramientas,
+      // handoff) es reacción a este evento, no actividad del cliente.
+      try { await db.rpc("marcar_evento_tako", { p_persona: pid }); } catch { /* no bloquea el aviso */ }
       const r = await fetch(`${TAKO_BASE}/conversations/${encodeURIComponent(conv)}/system-events`, {
         method: "POST",
         headers: { "x-ib-api-key": TAKO_API_KEY, "content-type": "application/json" },
@@ -231,7 +247,11 @@ async function avisarCliente(pid: string, b: Record<string, unknown>): Promise<R
       fallo = `system-events: ${(e as Error).message}`;
     }
   } else {
-    fallo = conv ? "sin TAKO_API_KEY" : "la persona no tiene conversación abierta con el bot";
+    fallo = !conv
+      ? "la persona no tiene conversación abierta con el bot"
+      : !TAKO_API_KEY
+        ? "sin TAKO_API_KEY"
+        : "sin actividad del cliente en las últimas 23 h: ventana cerrada o en duda";
   }
 
   // El chat está cerrado (o nunca existió): sólo queda reabrir con plantilla.
