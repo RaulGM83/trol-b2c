@@ -36,10 +36,20 @@ export default async function PaginaInmueble({ params }: { params: { slug: strin
       <JsonLd
         data={{
           '@context': 'https://schema.org',
-          '@type': 'Product',
+          // Anuncio inmobiliario, no «Product»: con Product, Google lo evalúa como artículo
+          // de tienda y pide envío, devoluciones, código de barras y reseñas (Search Console, 20-nov-2026).
+          '@type': 'RealEstateListing',
           name: `${i.nombre} · ${i.ubicacion}`,
-          category: 'Inmueble',
-          offers: { '@type': 'Offer', price: i.precio, priceCurrency: 'MXN', availability: i.disponible ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut', url: `https://trol.mx/infonavit/inmuebles/${i.slug}` },
+          url: `https://trol.mx/infonavit/inmuebles/${i.slug}`,
+          description: `${i.nombre} en ${i.ubicacion}. Se compra con tu saldo y tu crédito Infonavit.`,
+          ...(i.actualizado ? { dateModified: i.actualizado } : {}),
+          about: {
+            '@type': 'Accommodation',
+            name: i.nombre,
+            address: i.ubicacion,
+            ...(i.m2 ? { floorSize: { '@type': 'QuantitativeValue', value: i.m2, unitCode: 'MTK' } } : {}),
+          },
+          offers: { '@type': 'Offer', price: i.precio, priceCurrency: 'MXN', availability: i.disponible ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut' },
         }}
       />
       <section className="bg-ink text-white">
